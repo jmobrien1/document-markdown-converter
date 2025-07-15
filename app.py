@@ -16,8 +16,17 @@ app.config['APP_VERSION'] = '1.0.0'
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Allowed file extensions
-ALLOWED_EXTENSIONS = {'pdf', 'docx'}
+# Allowed file extensions - markitdown supports many formats
+ALLOWED_EXTENSIONS = {
+    # Office Documents
+    'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx',
+    # Text & Data Formats
+    'txt', 'html', 'htm', 'csv', 'json', 'xml', 'epub',
+    # Multimedia
+    'mp3', 'wav', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff',
+    # Archives
+    'zip'
+}
 
 def allowed_file(filename):
     """Check if file extension is allowed"""
@@ -58,7 +67,7 @@ def convert_file():
         return jsonify({'error': 'No file selected'}), 400
     
     if not allowed_file(file.filename):
-        return jsonify({'error': 'File type not allowed. Please upload PDF or DOCX files only.'}), 400
+        return jsonify({'error': 'File type not allowed. Please upload supported formats: PDF, DOCX, XLSX, PPTX, TXT, HTML, CSV, JSON, XML, MP3, Images, ZIP, and more.'}), 400
     
     try:
         # Generate unique filename to avoid conflicts
@@ -122,4 +131,11 @@ def too_large(e):
     return jsonify({'error': 'File too large. Maximum size is 16MB.'}), 413
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    import os
+    # Railway provides PORT environment variable
+    port = int(os.environ.get('PORT', 5000))
+    # Ensure we bind to all interfaces for Railway
+    app.run(debug=False, host='0.0.0.0', port=port)
+else:
+    # For production WSGI servers like gunicorn
+    application = app

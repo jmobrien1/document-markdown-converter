@@ -220,6 +220,57 @@
             margin-top: 10px;
         }
 
+        .supported-formats {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .supported-formats h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .format-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .format-category {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .format-category h4 {
+            margin-bottom: 8px;
+            color: #495057;
+            font-size: 0.9em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .format-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .format-tag {
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 500;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 20px;
@@ -232,6 +283,10 @@
             .action-buttons {
                 flex-direction: column;
             }
+
+            .format-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -243,14 +298,52 @@
             <form id="uploadForm" enctype="multipart/form-data">
                 <div class="file-input-wrapper">
                     <div class="file-input">
-                        <input type="file" name="file" id="fileInput" accept=".pdf,.docx">
-                        <span id="fileLabel">Click to select a PDF or DOCX file</span>
+                        <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.txt,.html,.htm,.csv,.json,.xml,.epub,.mp3,.wav,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.zip">
+                        <span id="fileLabel">Click to select a file to convert to Markdown</span>
                     </div>
                 </div>
                 <button type="submit" class="convert-btn" id="convertBtn">Convert with mdraft</button>
             </form>
             
             <div class="file-info" id="fileInfo"></div>
+        </div>
+
+        <div class="supported-formats">
+            <h3>✨ Supported File Formats</h3>
+            <div class="format-grid">
+                <div class="format-category">
+                    <h4>📄 Documents</h4>
+                    <div class="format-list">
+                        <span class="format-tag">PDF</span>
+                        <span class="format-tag">DOCX</span>
+                        <span class="format-tag">DOC</span>
+                        <span class="format-tag">TXT</span>
+                        <span class="format-tag">HTML</span>
+                        <span class="format-tag">EPUB</span>
+                    </div>
+                </div>
+                <div class="format-category">
+                    <h4>📊 Spreadsheets & Presentations</h4>
+                    <div class="format-list">
+                        <span class="format-tag">XLSX</span>
+                        <span class="format-tag">XLS</span>
+                        <span class="format-tag">PPTX</span>
+                        <span class="format-tag">CSV</span>
+                    </div>
+                </div>
+                <div class="format-category">
+                    <h4>🎵 Media & Data</h4>
+                    <div class="format-list">
+                        <span class="format-tag">MP3</span>
+                        <span class="format-tag">WAV</span>
+                        <span class="format-tag">JPG</span>
+                        <span class="format-tag">PNG</span>
+                        <span class="format-tag">JSON</span>
+                        <span class="format-tag">XML</span>
+                        <span class="format-tag">ZIP</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="loading" id="loading">
@@ -301,7 +394,7 @@
                 `;
                 convertBtn.disabled = false;
             } else {
-                fileLabel.textContent = 'Click to select a PDF or DOCX file';
+                fileLabel.textContent = 'Click to select a file to convert to Markdown';
                 fileInfo.innerHTML = '';
                 convertBtn.disabled = false;
             }
@@ -320,7 +413,7 @@
             // Show loading state
             loading.style.display = 'block';
             convertBtn.disabled = true;
-            convertBtn.textContent = 'Converting with mdraft...';
+                            convertBtn.textContent = 'Converting with mdraft...';
             hideMessages();
             resultSection.style.display = 'none';
 
