@@ -71,18 +71,22 @@ def init_database():
 
 def get_user_by_email(email):
     """Get user by email address"""
-    conn = sqlite3.connect(app.config['DATABASE'])
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
-    user = cursor.fetchone()
-    conn.close()
-    return user
+    try:
+        conn = sqlite3.connect(app.config['DATABASE'])
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+        user = cursor.fetchone()
+        conn.close()
+        return user
+    except Exception as e:
+        print(f"Database error in get_user_by_email: {e}")
+        return None
 
 def create_user(email):
     """Create a new user account"""
-    conn = sqlite3.connect(app.config['DATABASE'])
-    cursor = conn.cursor()
     try:
+        conn = sqlite3.connect(app.config['DATABASE'])
+        cursor = conn.cursor()
         cursor.execute('INSERT INTO users (email) VALUES (?)', (email,))
         user_id = cursor.lastrowid
         conn.commit()
@@ -91,62 +95,71 @@ def create_user(email):
     except sqlite3.IntegrityError:
         conn.close()
         return None  # User already exists
+    except Exception as e:
+        print(f"Database error in create_user: {e}")
+        return None
 
 def get_daily_usage(user_id=None, session_id=None):
     """Get today's usage count for user or session"""
-    conn = sqlite3.connect(app.config['DATABASE'])
-    cursor = conn.cursor()
-    today = datetime.now().date()
-    
-    if user_id:
-        cursor.execute(
-            'SELECT conversions_count FROM daily_usage WHERE user_id = ? AND date = ?',
-            (user_id, today)
-        )
-    else:
-        cursor.execute(
-            'SELECT conversions_count FROM daily_usage WHERE session_id = ? AND date = ?',
-            (session_id, today)
-        )
-    
-    result = cursor.fetchone()
-    conn.close()
-    return result[0] if result else 0
+    try:
+        conn = sqlite3.connect(app.config['DATABASE'])
+        cursor = conn.cursor()
+        today = datetime.now().date()
+        
+        if user_id:
+            cursor.execute(
+                'SELECT conversions_count FROM daily_usage WHERE user_id = ? AND date = ?',
+                (user_id, today)
+            )
+        else:
+            cursor.execute(
+                'SELECT conversions_count FROM daily_usage WHERE session_id = ? AND date = ?',
+                (session_id, today)
+            )
+        
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else 0
+    except Exception as e:
+        print(f"Database error in get_daily_usage: {e}")
+        return 0
 
 def increment_usage(user_id=None, session_id=None):
     """Increment today's usage count"""
-    conn = sqlite3.connect(app.config['DATABASE'])
-    cursor = conn.cursor()
-    today = datetime.now().date()
-    
-    if user_id:
-        cursor.execute('''
-            INSERT INTO daily_usage (user_id, date, conversions_count)
-            VALUES (?, ?, 1)
-            ON CONFLICT(user_id, date) DO UPDATE SET
-            conversions_count = conversions_count + 1
-        ''', (user_id, today))
-    else:
-        cursor.execute('''
-            INSERT INTO daily_usage (session_id, date, conversions_count)
-            VALUES (?, ?, 1)
-            ON CONFLICT(session_id, date) DO UPDATE SET
-            conversions_count = conversions_count + 1
-        ''', (session_id, today))
-    
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(app.config['DATABASE'])
+        cursor = conn.cursor()
+        today = datetime.now().date()
+        
+        if user_id:
+            cursor.execute('''
+                INSERT OR REPLACE INTO daily_usage (user_id, date, conversions_count)
+                VALUES (?, ?, COALESCE((SELECT conversions_count FROM daily_usage WHERE user_id = ? AND date = ?), 0) + 1)
+            ''', (user_id, today, user_id, today))
+        else:
+            cursor.execute('''
+                INSERT OR REPLACE INTO daily_usage (session_id, date, conversions_count)
+                VALUES (?, ?, COALESCE((SELECT conversions_count FROM daily_usage WHERE session_id = ? AND date = ?), 0) + 1)
+            ''', (session_id, today, session_id, today))
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Database error in increment_usage: {e}")
 
 def log_conversion(user_id, session_id, filename, file_type, file_size, status):
     """Log conversion attempt"""
-    conn = sqlite3.connect(app.config['DATABASE'])
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO conversions (user_id, session_id, filename, file_type, file_size, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (user_id, session_id, filename, file_type, file_size, status))
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(app.config['DATABASE'])
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO conversions (user_id, session_id, filename, file_type, file_size, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (user_id, session_id, filename, file_type, file_size, status))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Database error in log_conversion: {e}")
 
 def check_usage_limit(user_id=None, session_id=None):
     """Check if user/session has reached daily limit"""
@@ -236,30 +249,50 @@ def logout():
 @app.route('/user-status')
 def user_status():
     """Get current user status and usage"""
-    session_id = session.get('session_id', str(uuid.uuid4()))
-    session['session_id'] = session_id
-    
-    user_id = session.get('user_id')
-    
-    if user_id:
-        # Logged in user
-        user = get_user_by_email(session.get('user_email'))
-        usage = get_daily_usage(user_id=user_id)
-        return jsonify({
-            'logged_in': True,
-            'user': {'email': user[1], 'plan': user[3]},
-            'daily_usage': usage,
-            'daily_limit': 'unlimited',
-            'remaining': 'unlimited'
-        })
-    else:
-        # Anonymous user
+    try:
+        # Initialize database if it doesn't exist
+        init_database()
+        
+        session_id = session.get('session_id', str(uuid.uuid4()))
+        session['session_id'] = session_id
+        
+        user_id = session.get('user_id')
+        
+        if user_id:
+            # Logged in user
+            user = get_user_by_email(session.get('user_email'))
+            if user:
+                usage = get_daily_usage(user_id=user_id)
+                return jsonify({
+                    'logged_in': True,
+                    'user': {'email': user[1], 'plan': user[3]},
+                    'daily_usage': usage,
+                    'daily_limit': 'unlimited',
+                    'remaining': 'unlimited'
+                })
+            else:
+                # User not found, clear session
+                session.clear()
+        
+        # Anonymous user or cleared session
+        session_id = session.get('session_id', str(uuid.uuid4()))
+        session['session_id'] = session_id
         usage = get_daily_usage(session_id=session_id)
         return jsonify({
             'logged_in': False,
             'daily_usage': usage,
             'daily_limit': 5,
             'remaining': max(0, 5 - usage)
+        })
+        
+    except Exception as e:
+        print(f"Error in user_status: {e}")
+        # Return safe defaults
+        return jsonify({
+            'logged_in': False,
+            'daily_usage': 0,
+            'daily_limit': 5,
+            'remaining': 5
         })
 
 def get_session_id():
@@ -274,23 +307,42 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def convert_to_markdown(file_path):
-    """Convert file to markdown using markitdown CLI"""
+    """Convert file to markdown using markitdown CLI with optimizations"""
     try:
-        # Run markitdown command with timeout
+        # Get file size and extension for optimization decisions
+        file_size = os.path.getsize(file_path)
+        file_ext = file_path.rsplit('.', 1)[1].lower() if '.' in file_path else ''
+        
+        # Adjust timeout based on file size and type
+        if file_ext == 'pdf':
+            if file_size > 5 * 1024 * 1024:  # 5MB+
+                timeout = 240  # 4 minutes for large PDFs
+            elif file_size > 2 * 1024 * 1024:  # 2MB+
+                timeout = 180  # 3 minutes for medium PDFs
+            else:
+                timeout = 120  # 2 minutes for small PDFs
+        else:
+            timeout = 60  # 1 minute for other formats
+            
+        # Run markitdown command with dynamic timeout
         result = subprocess.run(
             ['markitdown', file_path],
             capture_output=True,
             text=True,
             check=True,
-            timeout=120  # 2 minute timeout
+            timeout=timeout
         )
         return result.stdout, None
+        
     except subprocess.TimeoutExpired:
-        return None, "Conversion timed out. Please try with a smaller file or simpler format."
+        return None, f"Conversion timed out after {timeout} seconds. Large PDFs may take several minutes to process. Please try a smaller file or contact support."
     except subprocess.CalledProcessError as e:
-        return None, f"Conversion error: {e.stderr}"
+        error_msg = e.stderr or str(e)
+        if "pdf" in error_msg.lower() and "dependency" in error_msg.lower():
+            return None, "PDF processing dependencies are loading. Please try again in 30 seconds."
+        return None, f"Conversion error: {error_msg}"
     except FileNotFoundError:
-        return None, "markitdown not found. Please install it with: pip install markitdown"
+        return None, "markitdown not found. Please install it with: pip install markitdown[all]"
     except Exception as e:
         return None, f"Unexpected error: {str(e)}"
 
@@ -419,7 +471,3 @@ if __name__ == '__main__':
 else:
     # For production WSGI servers like gunicorn
     application = app
-
-@app.route('/test')
-def test_page():
-    return '<h1>Flask is working!</h1><p>If you see this, your app is running correctly.</p>'
