@@ -54,8 +54,9 @@
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             padding: 40px;
+            margin: 0 auto;
         }
 
         h1 {
@@ -622,6 +623,7 @@
                 showError('Network error. Please try again.');
             }
         });
+        // File input change handler
         // File input change handler
         fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];

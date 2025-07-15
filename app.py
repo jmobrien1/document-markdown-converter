@@ -419,3 +419,7 @@ if __name__ == '__main__':
 else:
     # For production WSGI servers like gunicorn
     application = app
+
+@app.route('/test')
+def test_page():
+    return '<h1>Flask is working!</h1><p>If you see this, your app is running correctly.</p>'
