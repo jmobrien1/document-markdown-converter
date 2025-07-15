@@ -629,6 +629,43 @@
             hideMessages();
             resultSection.style.display = 'none';
 
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const file = fileInput.files[0];
+            if (!file) {
+                showError('Please select a file first.');
+                return;
+            }
+
+            if (currentUsage && !currentUsage.logged_in && currentUsage.remaining <= 0) {
+                showError('Daily limit reached! Please sign up for unlimited conversions.');
+                return;
+            }
+
+            // Show file-specific loading message
+            const loadingDetails = document.getElementById('loadingDetails');
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+            const fileSizeMB = (file.size / 1024 / 1024).toFixed(1);
+            
+            if (fileExtension === 'pdf') {
+                if (fileSizeMB > 5) {
+                    loadingDetails.textContent = 'Large PDF (' + fileSizeMB + 'MB) - may take up to 4 minutes';
+                } else if (fileSizeMB > 2) {
+                    loadingDetails.textContent = 'Medium PDF (' + fileSizeMB + 'MB) - may take up to 3 minutes';
+                } else {
+                    loadingDetails.textContent = 'PDF (' + fileSizeMB + 'MB) - may take up to 2 minutes';
+                }
+            } else {
+                loadingDetails.textContent = 'Processing ' + fileExtension.toUpperCase() + ' file (' + fileSizeMB + 'MB)';
+            }
+
+            loading.style.display = 'block';
+            convertBtn.disabled = true;
+            convertBtn.textContent = 'Converting with mdraft...';
+            hideMessages();
+            resultSection.style.display = 'none';
+
             try {
                 const formData = new FormData();
                 formData.append('file', file);
@@ -671,7 +708,7 @@
             const maxAttempts = 150; // 5 minutes max (150 * 2 seconds)
             let attempts = 0;
 
-            const poll = async () => {
+            const poll = async function() {
                 try {
                     attempts++;
                     const response = await fetch('/job-status/' + jobId);
