@@ -255,6 +255,7 @@
         
         <!-- Debug Button -->
         <button type="button" class="debug-btn" id="debugBtn">🔧 TEST FILE UPLOAD (Debug)</button>
+        <button type="button" class="debug-btn" id="debugConvertBtn" style="background: #fd7e14;">🔍 DEBUG CONVERSION (Step-by-step)</button>
         
         <div class="upload-section">
             <form id="uploadForm" enctype="multipart/form-data">
@@ -307,6 +308,7 @@
         const copyBtn = document.getElementById('copyBtn');
         const downloadBtn = document.getElementById('downloadBtn');
         const debugBtn = document.getElementById('debugBtn');
+        const debugConvertBtn = document.getElementById('debugConvertBtn');
 
         console.log('✅ All elements found');
 
@@ -324,6 +326,60 @@
             
             // Test basic file info
             alert(`✅ File Selected Successfully!\n\nName: ${file.name}\nSize: ${(file.size / 1024).toFixed(2)} KB\nType: ${file.type || 'Unknown'}\n\nThis proves file selection is working!`);
+        });
+
+        // Debug conversion - step by step processing
+        debugConvertBtn.addEventListener('click', async function() {
+            console.log('🔍 Debug conversion clicked');
+            
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('❌ Please select a file first!');
+                return;
+            }
+            
+            console.log('🔄 Starting debug conversion for:', file.name);
+            
+            // Show loading
+            loading.style.display = 'block';
+            debugConvertBtn.disabled = true;
+            debugConvertBtn.textContent = 'Running Debug...';
+            hideMessages();
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                console.log('📡 Sending debug request...');
+                const response = await fetch('/debug-convert', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                console.log('📡 Debug response status:', response.status);
+                const result = await response.json();
+                console.log('📄 Debug result:', result);
+
+                if (result.success) {
+                    let message = `✅ Debug Successful!\n\nStep ${result.step}: ${result.message}`;
+                    if (result.content_preview) {
+                        message += `\n\nPreview:\n${result.content_preview}`;
+                    }
+                    if (result.full_length) {
+                        message += `\n\nTotal length: ${result.full_length} characters`;
+                    }
+                    alert(message);
+                } else {
+                    alert(`❌ Debug Failed at Step ${result.step}:\n\n${result.error}`);
+                }
+            } catch (error) {
+                console.error('💥 Debug error:', error);
+                alert('❌ Debug Network Error: ' + error.message);
+            } finally {
+                loading.style.display = 'none';
+                debugConvertBtn.disabled = false;
+                debugConvertBtn.textContent = '🔍 DEBUG CONVERSION (Step-by-step)';
+            }
         });
 
         // File input change handler

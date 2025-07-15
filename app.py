@@ -30,7 +30,163 @@ def test_route():
     """Simple test to verify Flask is working"""
     return '<h1>Flask is working!</h1><p>Routes are accessible.</p>'
 
+@app.route('/debug-convert', methods=['POST'])
+def debug_convert():
+    """Step-by-step debug conversion with status reporting"""
+    print("=== DEBUG CONVERT STARTED ===")
+    
+    status = {"step": 1, "message": "Starting debug conversion", "success": True}
+    
+    try:
+        # Step 1: Check file upload
+        if 'file' not in request.files:
+            return jsonify({"step": 1, "error": "No file in request", "success": False})
+        
+        file = request.files['file']
+        file_size = len(file.read())
+        file.seek(0)
+        
+        status.update({"step": 2, "message": f"File received: {file.filename} ({file_size} bytes)"})
+        print(f"DEBUG: {status['message']}")
+        
+        # Step 2: Validate file
+        if file.filename == '':
+            return jsonify({"step": 2, "error": "Empty filename", "success": False})
+        
+        if not allowed_file(file.filename):
+            return jsonify({"step": 2, "error": f"File type not allowed: {file.filename}", "success": False})
+        
+        status.update({"step": 3, "message": "File validation passed"})
+        print(f"DEBUG: {status['message']}")
+        
+        # Step 3: Save file
+        filename = secure_filename(file.filename)
+        unique_filename = f"debug_{uuid.uuid4()}_{filename}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        
+        file.save(file_path)
+        
+        status.update({"step": 4, "message": f"File saved to: {file_path}"})
+        print(f"DEBUG: {status['message']}")
+        
+        # Step 4: Test markitdown import
+        try:
+            from markitdown import MarkItDown
+            status.update({"step": 5, "message": "MarkItDown imported successfully"})
+            print(f"DEBUG: {status['message']}")
+        except Exception as e:
+            os.remove(file_path)
+            return jsonify({"step": 5, "error": f"Import failed: {str(e)}", "success": False})
+        
+        # Step 5: Create MarkItDown instance
+        try:
+            md = MarkItDown()
+            status.update({"step": 6, "message": "MarkItDown instance created"})
+            print(f"DEBUG: {status['message']}")
+        except Exception as e:
+            os.remove(file_path)
+            return jsonify({"step": 6, "error": f"Instance creation failed: {str(e)}", "success": False})
+        
+        # Step 6: Try conversion with very short timeout
+        status.update({"step": 7, "message": "Starting conversion (10 second timeout)..."})
+        print(f"DEBUG: {status['message']}")
+        
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Debug conversion timed out")
+        
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(10)  # Very short timeout for debugging
+        
+        try:
+            result = md.convert(file_path)
+            signal.alarm(0)  # Cancel alarm
+            
+            if result and result.text_content:
+                content_length = len(result.text_content)
+                status.update({
+                    "step": 8, 
+                    "message": f"Conversion successful! Generated {content_length} characters",
+                    "content_preview": result.text_content[:200] + "..." if content_length > 200 else result.text_content,
+                    "full_length": content_length
+                })
+            else:
+                status.update({"step": 8, "message": "Conversion completed but no content generated"})
+                
+        except TimeoutError:
+            signal.alarm(0)
+            os.remove(file_path)
+            return jsonify({"step": 7, "error": "Conversion timed out after 10 seconds", "success": False})
+        except Exception as e:
+            signal.alarm(0)
+            os.remove(file_path)
+            return jsonify({"step": 7, "error": f"Conversion failed: {str(e)}", "success": False})
+        
+        # Step 7: Cleanup
+        os.remove(file_path)
+        status.update({"step": 9, "message": "Debug conversion completed successfully"})
+        print(f"DEBUG: {status['message']}")
+        
 @app.route('/convert', methods=['POST'])
+def convert_file():
+    """Simple convert route for working conversions"""
+    print("=== CONVERT ROUTE CALLED ===")
+    
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file selected'}), 400
+        
+        file = request.files['file']
+        file_size = len(file.read())
+        file.seek(0)
+        
+        if file.filename == '' or not allowed_file(file.filename):
+            return jsonify({'error': 'Invalid file'}), 400
+        
+        # Only process small files for now
+        if file_size > 500 * 1024:  # 500KB limit for regular conversion
+            return jsonify({'error': 'File too large for regular conversion. Try the debug conversion or use a smaller file.'}), 400
+        
+        filename = secure_filename(file.filename)
+        unique_filename = f"{uuid.uuid4()}_{filename}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        
+        file.save(file_path)
+        
+        from markitdown import MarkItDown
+        md = MarkItDown()
+        result = md.convert(file_path)
+        
+        os.remove(file_path)
+        
+        if result and result.text_content:
+            download_id = str(uuid.uuid4())
+            temp_file_path = os.path.join(tempfile.gettempdir(), f"converted_{download_id}.ml")
+            
+            with open(temp_file_path, 'w', encoding='utf-8') as f:
+                f.write(result.text_content)
+            
+            return jsonify({
+                'success': True,
+                'markdown': result.text_content[:1500] + "..." if len(result.text_content) > 1500 else result.text_content,
+                'download_id': download_id,
+                'original_filename': filename,
+                'full_length': len(result.text_content)
+            })
+        else:
+            return jsonify({'error': 'No content extracted'}), 500
+            
+    except Exception as e:
+        if 'file_path' in locals() and os.path.exists(file_path):
+            os.remove(file_path)
+        return jsonify({'error': f'Conversion failed: {str(e)}'}), 500
+        
+    except Exception as e:
+        print(f"DEBUG ERROR: {str(e)}")
+        if 'file_path' in locals() and os.path.exists(file_path):
+            os.remove(file_path)
+        return jsonify({"step": status.get("step", 0), "error": f"Unexpected error: {str(e)}", "success": False})
 def convert_file():
     """Handle file upload and conversion using Python API"""
     print("=== CONVERT ROUTE CALLED ===")
