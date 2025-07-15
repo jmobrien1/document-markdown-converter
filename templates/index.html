@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mdraft - Document to Markdown Converter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 800px;
+            padding: 40px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 3em;
+            font-weight: 700;
+            letter-spacing: -2px;
+        }
+
+        .brand {
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: inline-block;
+        }
+
+        .upload-section {
+            margin-bottom: 30px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .file-input {
+            width: 100%;
+            padding: 15px;
+            border: 3px dashed #ccc;
+            border-radius: 10px;
+            background: #f9f9f9;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .file-input:hover {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+
+        .file-input input[type="file"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .convert-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .convert-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .convert-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            color: #2563eb;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #2563eb;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result-section {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .result-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .copy-btn {
+            background: #28a745;
+            color: white;
+        }
+
+        .copy-btn:hover {
+            background: #218838;
+        }
+
+        .download-btn {
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .download-btn:hover {
+            background: #0056b3;
+        }
+
+        .markdown-output {
+            width: 100%;
+            min-height: 300px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            background: #f8f9fa;
+            resize: vertical;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid #c3e6cb;
+        }
+
+        .file-info {
+            font-size: 14px;
+            color: #666;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><span class="brand">mdraft</span></h1>
+        
+        <div class="upload-section">
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="file-input-wrapper">
+                    <div class="file-input">
+                        <input type="file" name="file" id="fileInput" accept=".pdf,.docx">
+                        <span id="fileLabel">Click to select a PDF or DOCX file</span>
+                    </div>
+                </div>
+                <button type="submit" class="convert-btn" id="convertBtn">Convert with mdraft</button>
+            </form>
+            
+            <div class="file-info" id="fileInfo"></div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>mdraft is converting your document...</p>
+        </div>
+
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+        <div id="successMessage" class="success-message" style="display: none;"></div>
+
+        <div class="result-section" id="resultSection">
+            <div class="result-header">
+                <h2 class="result-title">Converted Markdown</h2>
+                <div class="action-buttons">
+                    <button class="action-btn copy-btn" id="copyBtn">📋 Copy to Clipboard</button>
+                    <a href="#" class="action-btn download-btn" id="downloadBtn">💾 Download .ml</a>
+                </div>
+            </div>
+            <textarea class="markdown-output" id="markdownOutput" readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileLabel = document.getElementById('fileLabel');
+        const fileInfo = document.getElementById('fileInfo');
+        const uploadForm = document.getElementById('uploadForm');
+        const convertBtn = document.getElementById('convertBtn');
+        const loading = document.getElementById('loading');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const resultSection = document.getElementById('resultSection');
+        const markdownOutput = document.getElementById('markdownOutput');
+        const copyBtn = document.getElementById('copyBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let currentDownloadId = null;
+
+        // File input change handler
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                fileLabel.textContent = file.name;
+                fileInfo.innerHTML = `
+                    <strong>Selected:</strong> ${file.name}<br>
+                    <strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB<br>
+                    <strong>Type:</strong> ${file.type || 'Unknown'}
+                `;
+                convertBtn.disabled = false;
+            } else {
+                fileLabel.textContent = 'Click to select a PDF or DOCX file';
+                fileInfo.innerHTML = '';
+                convertBtn.disabled = false;
+            }
+        });
+
+        // Form submission handler
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const file = fileInput.files[0];
+            if (!file) {
+                showError('Please select a file first.');
+                return;
+            }
+
+            // Show loading state
+            loading.style.display = 'block';
+            convertBtn.disabled = true;
+            convertBtn.textContent = 'Converting with mdraft...';
+            hideMessages();
+            resultSection.style.display = 'none';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    markdownOutput.value = result.markdown;
+                    currentDownloadId = result.download_id;
+                    downloadBtn.href = `/download/${result.download_id}`;
+                    
+                    resultSection.style.display = 'block';
+                    showSuccess(`Successfully converted "${result.original_filename}" to Markdown!`);
+                } else {
+                    showError(result.error || 'An error occurred during conversion.');
+                }
+            } catch (error) {
+                showError('Network error. Please try again.');
+                console.error('Error:', error);
+            } finally {
+                // Hide loading state
+                loading.style.display = 'none';
+                convertBtn.disabled = false;
+                convertBtn.textContent = 'Convert with mdraft';
+            }
+        });
+
+        // Copy to clipboard functionality
+        copyBtn.addEventListener('click', async function() {
+            try {
+                await navigator.clipboard.writeText(markdownOutput.value);
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = '✅ Copied!';
+                copyBtn.style.background = '#28a745';
+                
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                    copyBtn.style.background = '#28a745';
+                }, 2000);
+            } catch (error) {
+                // Fallback for older browsers
+                markdownOutput.select();
+                document.execCommand('copy');
+                showSuccess('Copied to clipboard!');
+            }
+        });
+
+        // Utility functions
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            successMessage.style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+        }
+
+        function hideMessages() {
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        }
+
+        // Drag and drop functionality
+        const container = document.querySelector('.container');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            container.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            container.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            container.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            container.style.background = '#eff6ff';
+        }
+
+        function unhighlight(e) {
+            container.style.background = 'white';
+        }
+
+        container.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0) {
+                fileInput.files = files;
+                fileInput.dispatchEvent(new Event('change'));
+            }
+        }
+    </script>
+</body>
+</html>
