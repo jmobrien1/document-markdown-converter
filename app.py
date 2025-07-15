@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 import uuid
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # Reduce to 10MB for better performance
 app.config['UPLOAD_FOLDER'] = './uploads'
 
 # mdraft app configuration
@@ -36,14 +36,17 @@ def allowed_file(filename):
 def convert_to_markdown(file_path):
     """Convert file to markdown using markitdown CLI"""
     try:
-        # Run markitdown command and capture output
+        # Run markitdown command with timeout
         result = subprocess.run(
             ['markitdown', file_path],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=120  # 2 minute timeout
         )
         return result.stdout, None
+    except subprocess.TimeoutExpired:
+        return None, "Conversion timed out. Please try with a smaller file or simpler format."
     except subprocess.CalledProcessError as e:
         return None, f"Conversion error: {e.stderr}"
     except FileNotFoundError:
@@ -128,7 +131,7 @@ def download_file(download_id):
 
 @app.errorhandler(413)
 def too_large(e):
-    return jsonify({'error': 'File too large. Maximum size is 16MB.'}), 413
+    return jsonify({'error': 'File too large. Maximum size is 10MB.'}), 413
 
 if __name__ == '__main__':
     import os
