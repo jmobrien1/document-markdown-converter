@@ -9,6 +9,10 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = './uploads'
 
+# mdraft app configuration
+app.config['APP_NAME'] = 'mdraft'
+app.config['APP_VERSION'] = '1.0.0'
+
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -106,7 +110,7 @@ def download_file(download_id):
         return send_file(
             temp_file_path,
             as_attachment=True,
-            download_name='converted_output.ml',
+            download_name='mdraft_output.ml',
             mimetype='text/plain'
         )
         
