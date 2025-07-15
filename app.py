@@ -505,7 +505,36 @@ def convert_file():
     except Exception as e:
         return jsonify({'error': f'Processing error: {str(e)}'}), 500
 
-@app.route('/simple-convert', methods=['POST'])
+@app.route('/test-page')
+def test_page():
+    """Minimal test page"""
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head><title>mdraft Test</title></head>
+    <body style="background: red; color: white; padding: 20px;">
+        <h1>TEST PAGE WORKING</h1>
+        <p>If you see this, the new code deployed successfully.</p>
+        <form enctype="multipart/form-data" method="post" action="/simple-convert">
+            <input type="file" name="file" required>
+            <button type="submit">Test Upload</button>
+        </form>
+        <script>
+            console.log("Test page JavaScript is working");
+            alert("Test page loaded successfully!");
+        </script>
+    </body>
+    </html>
+    '''
+def health_check():
+    """Simple health check with timestamp"""
+    from datetime import datetime
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'version': 'debug-2025-07-15',
+        'routes_available': ['/convert', '/simple-convert', '/test-markitdown', '/debug-jobs']
+    })
 def simple_convert():
     """Ultra simple conversion for debugging"""
     try:
