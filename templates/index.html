@@ -1,32 +1,4 @@
-// Form submission handler
-        uploadForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const file = fileInput.files[0];
-            if (!file) {
-                showError('Please select a file first.');
-                return;
-            }
-
-            // Check usage limits for anonymous users
-            if (!currentUsage.logged_in && currentUsage.remaining <= 0) {
-                showError('Daily limit reached! Please sign up for unlimited conversions.');
-                return;
-            }
-
-            // Show loading state
-            loading.style.display = 'block';
-            convertBtn.disabled = true;
-            convertBtn.textContent = 'Converting with mdraft...';
-            hideMessages();
-            resultSection.style.display = 'none';
-
-            try {
-                const formData = new FormData();
-                formData.append('file', file);
-
-                const response = await fetch('/convert', {
-                    method: 'POST<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -57,6 +29,60 @@
             max-width: 900px;
             padding: 40px;
             margin: 0 auto;
+        }
+
+        .user-section {
+            background: rgba(248, 249, 250, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+            margin-bottom: 30px;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .user-info {
+            display: none;
+            text-align: center;
+        }
+
+        .auth-form {
+            display: block;
+        }
+
+        .auth-form input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .auth-btn {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+
+        .auth-btn:hover {
+            opacity: 0.9;
+        }
+
+        .usage-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 15px;
+            font-size: 12px;
+            text-align: center;
         }
 
         h1 {
@@ -232,6 +258,7 @@
             border-radius: 10px;
             margin: 20px 0;
             border: 1px solid #f5c6cb;
+            display: none;
         }
 
         .success-message {
@@ -241,6 +268,7 @@
             border-radius: 10px;
             margin: 20px 0;
             border: 1px solid #c3e6cb;
+            display: none;
         }
 
         .file-info {
@@ -300,88 +328,26 @@
             font-weight: 500;
         }
 
-        .user-section {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-            margin-bottom: 30px;
-            max-width: 400px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .user-info {
-            display: none;
-            text-align: center;
-        }
-
-        .auth-form {
-            display: block;
-        }
-
-        .auth-form input {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-
-        .auth-btn {
-            width: 100%;
-            padding: 10px;
-            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 14px;
-            cursor: pointer;
-            margin-bottom: 5px;
-        }
-
-        .auth-btn:hover {
-            opacity: 0.9;
-        }
-
-        .usage-info {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 15px;
-            font-size: 12px;
-            text-align: center;
-        }
-
-        .usage-warning {
-            background: #fff3cd;
-            color: #856404;
-            padding: 10px;
-            border-radius: 5px;
-            margin: 15px 0;
-            font-size: 14px;
-            text-align: center;
-            border: 1px solid #ffeaa7;
-        }
-
-        .limit-reached {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 15px 0;
-            text-align: center;
-            border: 1px solid #f5c6cb;
-        }
-
         @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .format-grid {
+                grid-template-columns: 1fr;
+            }
+            
             .user-section {
-                position: relative;
-                top: 0;
-                right: 0;
                 margin-bottom: 20px;
-                width: 100%;
+                max-width: 100%;
             }
         }
     </style>
@@ -389,21 +355,18 @@
 <body>
     <div class="container">
         <div class="user-section" id="userSection">
-            <!-- Auth Form -->
             <div class="auth-form" id="authForm">
                 <input type="email" id="emailInput" placeholder="Enter your email address" required>
                 <button class="auth-btn" id="signupBtn">Sign Up for Unlimited</button>
                 <button class="auth-btn" id="loginBtn" style="background: #6c757d;">Already have an account? Sign In</button>
             </div>
             
-            <!-- User Info -->
             <div class="user-info" id="userInfo">
                 <div id="userEmail"></div>
                 <div id="userPlan"></div>
                 <button class="auth-btn" id="logoutBtn" style="background: #6c757d; margin-top: 10px;">Sign Out</button>
             </div>
             
-            <!-- Usage Info -->
             <div class="usage-info" id="usageInfo"></div>
         </div>
 
@@ -421,6 +384,26 @@
             </form>
             
             <div class="file-info" id="fileInfo"></div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>mdraft is converting your document...</p>
+            <p style="font-size: 12px; margin-top: 10px; opacity: 0.8;">Large files may take up to 2 minutes to process</p>
+        </div>
+
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div>
+
+        <div class="result-section" id="resultSection">
+            <div class="result-header">
+                <h2 class="result-title">Converted Markdown</h2>
+                <div class="action-buttons">
+                    <button class="action-btn copy-btn" id="copyBtn">📋 Copy to Clipboard</button>
+                    <a href="#" class="action-btn download-btn" id="downloadBtn">💾 Download .ml</a>
+                </div>
+            </div>
+            <textarea class="markdown-output" id="markdownOutput" readonly></textarea>
         </div>
 
         <div class="supported-formats">
@@ -460,26 +443,6 @@
                 </div>
             </div>
         </div>
-
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p>mdraft is converting your document...</p>
-            <p style="font-size: 12px; margin-top: 10px; opacity: 0.8;">Large files may take up to 2 minutes to process</p>
-        </div>
-
-        <div id="errorMessage" class="error-message" style="display: none;"></div>
-        <div id="successMessage" class="success-message" style="display: none;"></div>
-
-        <div class="result-section" id="resultSection">
-            <div class="result-header">
-                <h2 class="result-title">Converted Markdown</h2>
-                <div class="action-buttons">
-                    <button class="action-btn copy-btn" id="copyBtn">📋 Copy to Clipboard</button>
-                    <a href="#" class="action-btn download-btn" id="downloadBtn">💾 Download .ml</a>
-                </div>
-            </div>
-            <textarea class="markdown-output" id="markdownOutput" readonly></textarea>
-        </div>
     </div>
 
     <script>
@@ -496,8 +459,6 @@
         const copyBtn = document.getElementById('copyBtn');
         const downloadBtn = document.getElementById('downloadBtn');
 
-        // User account elements
-        const userSection = document.getElementById('userSection');
         const authForm = document.getElementById('authForm');
         const userInfo = document.getElementById('userInfo');
         const emailInput = document.getElementById('emailInput');
@@ -509,15 +470,12 @@
         const usageInfo = document.getElementById('usageInfo');
 
         let currentDownloadId = null;
-        let currentUser = null;
         let currentUsage = null;
 
-        // Initialize user status on page load
         window.addEventListener('load', function() {
             checkUserStatus();
         });
 
-        // User account functions
         async function checkUserStatus() {
             try {
                 const response = await fetch('/user-status');
@@ -530,33 +488,30 @@
         }
 
         function updateUI() {
-            if (currentUsage.logged_in) {
-                // Show user info, hide auth form
+            if (currentUsage && currentUsage.logged_in) {
                 authForm.style.display = 'none';
                 userInfo.style.display = 'block';
-                userEmail.textContent = `📧 ${currentUsage.user.email}`;
-                userPlan.textContent = `📋 Plan: ${currentUsage.user.plan.toUpperCase()}`;
-                usageInfo.innerHTML = `<strong>Today's conversions:</strong> ${currentUsage.daily_usage} (Unlimited)`;
-            } else {
-                // Show auth form, hide user info
+                userEmail.textContent = '📧 ' + currentUsage.user.email;
+                userPlan.textContent = '📋 Plan: ' + currentUsage.user.plan.toUpperCase();
+                usageInfo.innerHTML = '<strong>Today\'s conversions:</strong> ' + currentUsage.daily_usage + ' (Unlimited)';
+            } else if (currentUsage) {
                 authForm.style.display = 'block';
                 userInfo.style.display = 'none';
                 
                 const remaining = currentUsage.remaining;
                 if (remaining <= 0) {
-                    usageInfo.innerHTML = `<strong style="color: #dc3545;">Daily limit reached!</strong><br>Sign up for unlimited conversions`;
+                    usageInfo.innerHTML = '<strong style="color: #dc3545;">Daily limit reached!</strong><br>Sign up for unlimited conversions';
                     usageInfo.style.background = '#f8d7da';
                 } else if (remaining <= 2) {
-                    usageInfo.innerHTML = `<strong style="color: #856404;">⚠️ ${remaining} conversions remaining today</strong><br>Sign up for unlimited!`;
+                    usageInfo.innerHTML = '<strong style="color: #856404;">⚠️ ' + remaining + ' conversions remaining today</strong><br>Sign up for unlimited!';
                     usageInfo.style.background = '#fff3cd';
                 } else {
-                    usageInfo.innerHTML = `<strong>${remaining} free conversions remaining today</strong><br>Sign up for unlimited conversions!`;
+                    usageInfo.innerHTML = '<strong>' + remaining + ' free conversions remaining today</strong><br>Sign up for unlimited conversions!';
                     usageInfo.style.background = '#f8f9fa';
                 }
             }
         }
 
-        // Auth event listeners
         signupBtn.addEventListener('click', async function() {
             const email = emailInput.value.trim();
             if (!email || !email.includes('@')) {
@@ -568,7 +523,7 @@
                 const response = await fetch('/signup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ email: email })
                 });
 
                 const data = await response.json();
@@ -595,7 +550,7 @@
                 const response = await fetch('/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ email: email })
                 });
 
                 const data = await response.json();
@@ -623,17 +578,12 @@
                 showError('Network error. Please try again.');
             }
         });
-        // File input change handler
-        // File input change handler
+
         fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
                 fileLabel.textContent = file.name;
-                fileInfo.innerHTML = `
-                    <strong>Selected:</strong> ${file.name}<br>
-                    <strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB<br>
-                    <strong>Type:</strong> ${file.type || 'Unknown'}
-                `;
+                fileInfo.innerHTML = '<strong>Selected:</strong> ' + file.name + '<br><strong>Size:</strong> ' + (file.size / 1024 / 1024).toFixed(2) + ' MB<br><strong>Type:</strong> ' + (file.type || 'Unknown');
                 convertBtn.disabled = false;
             } else {
                 fileLabel.textContent = 'Click to select a file to convert to Markdown';
@@ -642,7 +592,6 @@
             }
         });
 
-        // Form submission handler
         uploadForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -652,10 +601,14 @@
                 return;
             }
 
-            // Show loading state
+            if (currentUsage && !currentUsage.logged_in && currentUsage.remaining <= 0) {
+                showError('Daily limit reached! Please sign up for unlimited conversions.');
+                return;
+            }
+
             loading.style.display = 'block';
             convertBtn.disabled = true;
-                            convertBtn.textContent = 'Converting with mdraft...';
+            convertBtn.textContent = 'Converting with mdraft...';
             hideMessages();
             resultSection.style.display = 'none';
 
@@ -673,12 +626,11 @@
                 if (response.ok && result.success) {
                     markdownOutput.value = result.markdown;
                     currentDownloadId = result.download_id;
-                    downloadBtn.href = `/download/${result.download_id}`;
+                    downloadBtn.href = '/download/' + result.download_id;
                     
                     resultSection.style.display = 'block';
-                    showSuccess(`Successfully converted "${result.original_filename}" to Markdown!`);
+                    showSuccess('Successfully converted "' + result.original_filename + '" to Markdown!');
                     
-                    // Update usage info
                     if (result.usage_info) {
                         currentUsage.daily_usage = result.usage_info.daily_usage;
                         currentUsage.remaining = result.usage_info.remaining;
@@ -686,15 +638,6 @@
                     }
                 } else if (result.limit_reached) {
                     showError(result.error);
-                    // Show special limit reached message
-                    const limitMessage = document.createElement('div');
-                    limitMessage.className = 'limit-reached';
-                    limitMessage.innerHTML = `
-                        <h4>🚫 Daily Limit Reached!</h4>
-                        <p>You've used all 5 free conversions today.</p>
-                        <p><strong>Sign up now for unlimited conversions!</strong></p>
-                    `;
-                    errorMessage.appendChild(limitMessage);
                 } else {
                     showError(result.error || 'An error occurred during conversion.');
                 }
@@ -702,14 +645,12 @@
                 showError('Network error. Please try again.');
                 console.error('Error:', error);
             } finally {
-                // Hide loading state
                 loading.style.display = 'none';
                 convertBtn.disabled = false;
                 convertBtn.textContent = 'Convert with mdraft';
             }
         });
 
-        // Copy to clipboard functionality
         copyBtn.addEventListener('click', async function() {
             try {
                 await navigator.clipboard.writeText(markdownOutput.value);
@@ -717,19 +658,17 @@
                 copyBtn.textContent = '✅ Copied!';
                 copyBtn.style.background = '#28a745';
                 
-                setTimeout(() => {
+                setTimeout(function() {
                     copyBtn.textContent = originalText;
                     copyBtn.style.background = '#28a745';
                 }, 2000);
             } catch (error) {
-                // Fallback for older browsers
                 markdownOutput.select();
                 document.execCommand('copy');
                 showSuccess('Copied to clipboard!');
             }
         });
 
-        // Utility functions
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.style.display = 'block';
@@ -745,46 +684,6 @@
         function hideMessages() {
             errorMessage.style.display = 'none';
             successMessage.style.display = 'none';
-        }
-
-        // Drag and drop functionality
-        const container = document.querySelector('.container');
-        
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            container.addEventListener(eventName, preventDefaults, false);
-        });
-
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            container.addEventListener(eventName, highlight, false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            container.addEventListener(eventName, unhighlight, false);
-        });
-
-        function highlight(e) {
-            container.style.background = '#eff6ff';
-        }
-
-        function unhighlight(e) {
-            container.style.background = 'white';
-        }
-
-        container.addEventListener('drop', handleDrop, false);
-
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            
-            if (files.length > 0) {
-                fileInput.files = files;
-                fileInput.dispatchEvent(new Event('change'));
-            }
         }
     </script>
 </body>
