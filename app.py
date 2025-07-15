@@ -505,7 +505,29 @@ def convert_file():
     except Exception as e:
         return jsonify({'error': f'Processing error: {str(e)}'}), 500
 
-@app.route('/test-markitdown')
+@app.route('/simple-convert', methods=['POST'])
+def simple_convert():
+    """Ultra simple conversion for debugging"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file in request', 'debug': True}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'Empty filename', 'debug': True}), 400
+        
+        # Just return file info without processing
+        return jsonify({
+            'success': True,
+            'debug': True,
+            'filename': file.filename,
+            'size': len(file.read()),
+            'content_type': file.content_type,
+            'message': 'File received successfully (not processed)'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Exception: {str(e)}', 'debug': True}), 500
 def test_markitdown():
     """Test if markitdown is working"""
     try:
