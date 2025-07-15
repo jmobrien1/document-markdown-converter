@@ -1,3 +1,4 @@
 Flask==2.3.3
 markitdown>=0.0.1a2
 Werkzeug==2.3.7
+gunicorn==21.2.0
