@@ -678,12 +678,39 @@
                 const result = await response.json();
 
                 if (response.ok && result.success) {
-                    // Start polling for job status
-                    await pollJobStatus(result.job_id, result.filename);
+                    if (result.job_id) {
+                        // Async processing - start polling
+                        await pollJobStatus(result.job_id, result.filename);
+                    } else {
+                        // Sync processing - show result immediately
+                        markdownOutput.value = result.markdown;
+                        currentDownloadId = result.download_id;
+                        downloadBtn.href = '/download/' + result.download_id;
+                        
+                        resultSection.style.display = 'block';
+                        showSuccess('Successfully converted "' + result.original_filename + '" to Markdown!');
+                        
+                        if (result.usage_info) {
+                            currentUsage.daily_usage = result.usage_info.daily_usage;
+                            currentUsage.remaining = result.usage_info.remaining;
+                            updateUI();
+                        }
+                        
+                        // Hide loading
+                        loading.style.display = 'none';
+                        convertBtn.disabled = false;
+                        convertBtn.textContent = 'Convert with mdraft';
+                    }
                 } else if (result.limit_reached) {
                     showError(result.error);
+                    loading.style.display = 'none';
+                    convertBtn.disabled = false;
+                    convertBtn.textContent = 'Convert with mdraft';
                 } else {
                     showError(result.error || 'An error occurred during conversion.');
+                    loading.style.display = 'none';
+                    convertBtn.disabled = false;
+                    convertBtn.textContent = 'Convert with mdraft';
                 }
             } catch (error) {
                 if (error.name === 'TypeError' && error.message.includes('fetch')) {

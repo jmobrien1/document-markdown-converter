@@ -386,7 +386,7 @@ def index():
 
 @app.route('/convert', methods=['POST'])
 def convert_file():
-    """Handle file upload and start async conversion"""
+    """Handle file upload and conversion - simplified for debugging"""
     if 'file' not in request.files:
         return jsonify({'error': 'No file selected'}), 400
     
@@ -410,10 +410,9 @@ def convert_file():
         }), 429
     
     try:
-        # Generate unique filename and job ID
+        # Generate unique filename
         filename = secure_filename(file.filename)
-        job_id = str(uuid.uuid4())
-        unique_filename = f"{job_id}_{filename}"
+        unique_filename = f"{uuid.uuid4()}_{filename}"
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
         file_size = len(file.read())
         file.seek(0)  # Reset file pointer
@@ -424,26 +423,95 @@ def convert_file():
         # Get file type for logging
         file_type = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'unknown'
         
-        # Start async conversion
-        thread = threading.Thread(target=convert_to_markdown_async, args=(job_id, file_path))
-        thread.daemon = True
-        thread.start()
+        # For small PDFs (< 1MB), process synchronously for now
+        if file_type == 'pdf' and file_size < 1024 * 1024:
+            try:
+                # Direct conversion for small files
+                result = subprocess.run(
+                    ['markitdown', file_path],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=60  # 1 minute timeout for small files
+                )
+                
+                # Clean up uploaded file
+                os.remove(file_path)
+                
+                if result.stdout:
+                    # Success - log and return result
+                    log_conversion(user_id, session_id, filename, file_type, file_size, 'success')
+                    increment_usage(user_id, session_id)
+                    
+                    # Store markdown content for download
+                    download_id = str(uuid.uuid4())
+                    temp_file_path = os.path.join(tempfile.gettempdir(), f"converted_{download_id}.ml")
+                    
+                    with open(temp_file_path, 'w', encoding='utf-8') as f:
+                        f.write(result.stdout)
+                    
+                    # Get updated usage for response
+                    new_usage = get_daily_usage(user_id, session_id)
+                    remaining = 'unlimited' if user_id else max(0, 5 - new_usage)
+                    
+                    return jsonify({
+                        'success': True,
+                        'markdown': result.stdout,
+                        'download_id': download_id,
+                        'original_filename': filename,
+                        'usage_info': {
+                            'daily_usage': new_usage,
+                            'remaining': remaining,
+                            'is_logged_in': bool(user_id)
+                        }
+                    })
+                else:
+                    os.remove(file_path)
+                    return jsonify({'error': 'No content extracted from PDF'}), 500
+                    
+            except subprocess.TimeoutExpired:
+                os.remove(file_path)
+                return jsonify({'error': 'PDF conversion timed out. Please try a simpler PDF.'}), 500
+            except subprocess.CalledProcessError as e:
+                os.remove(file_path)
+                error_msg = e.stderr or str(e)
+                return jsonify({'error': f'PDF conversion failed: {error_msg}'}), 500
+            except Exception as e:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                return jsonify({'error': f'PDF processing error: {str(e)}'}), 500
         
-        # Log conversion start and increment usage
-        log_conversion(user_id, session_id, filename, file_type, file_size, 'started')
-        increment_usage(user_id, session_id)
-        
-        # Return job ID for polling
-        return jsonify({
-            'success': True,
-            'job_id': job_id,
-            'filename': filename,
-            'status': 'processing'
-        })
+        else:
+            # For larger files or other formats, use async processing
+            job_id = str(uuid.uuid4())
+            
+            # Start async conversion
+            thread = threading.Thread(target=convert_to_markdown_async, args=(job_id, file_path))
+            thread.daemon = True
+            thread.start()
+            
+            # Log conversion start and increment usage
+            log_conversion(user_id, session_id, filename, file_type, file_size, 'started')
+            increment_usage(user_id, session_id)
+            
+            # Return job ID for polling
+            return jsonify({
+                'success': True,
+                'job_id': job_id,
+                'filename': filename,
+                'status': 'processing'
+            })
         
     except Exception as e:
         return jsonify({'error': f'Processing error: {str(e)}'}), 500
 
+@app.route('/debug-jobs')
+def debug_jobs():
+    """Debug route to see active conversion jobs"""
+    return jsonify({
+        'active_jobs': list(conversion_jobs.keys()),
+        'job_details': {k: {'status': v['status'], 'progress': v['progress']} for k, v in conversion_jobs.items()}
+    })
 @app.route('/job-status/<job_id>')
 def job_status(job_id):
     """Check conversion job status"""
