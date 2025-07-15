@@ -505,7 +505,22 @@ def convert_file():
     except Exception as e:
         return jsonify({'error': f'Processing error: {str(e)}'}), 500
 
-@app.route('/debug-jobs')
+@app.route('/test-markitdown')
+def test_markitdown():
+    """Test if markitdown is working"""
+    try:
+        result = subprocess.run(['markitdown', '--help'], capture_output=True, text=True, timeout=10)
+        return jsonify({
+            'markitdown_available': True,
+            'help_output': result.stdout[:500],  # First 500 chars
+            'error': result.stderr[:200] if result.stderr else None
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({'markitdown_available': False, 'error': 'markitdown command timed out'})
+    except FileNotFoundError:
+        return jsonify({'markitdown_available': False, 'error': 'markitdown command not found'})
+    except Exception as e:
+        return jsonify({'markitdown_available': False, 'error': str(e)})
 def debug_jobs():
     """Debug route to see active conversion jobs"""
     return jsonify({
