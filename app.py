@@ -41,8 +41,10 @@ def convert_file():
             return jsonify({'error': 'No file selected'}), 400
         
         file = request.files['file']
-        print(f"File received: {file.filename}, size: {len(file.read())} bytes")
+        file_size = len(file.read())
         file.seek(0)  # Reset file pointer after reading size
+        
+        print(f"File received: {file.filename}, size: {file_size} bytes ({file_size/1024/1024:.2f} MB)")
         
         if file.filename == '':
             print("ERROR: Empty filename")
@@ -51,6 +53,11 @@ def convert_file():
         if not allowed_file(file.filename):
             print(f"ERROR: File type not allowed: {file.filename}")
             return jsonify({'error': 'File type not allowed'}), 400
+        
+        # Check file size limits
+        if file_size > 5 * 1024 * 1024:  # 5MB limit for now
+            print(f"ERROR: File too large: {file_size} bytes")
+            return jsonify({'error': 'File too large. Please use files under 5MB.'}), 400
         
         # Generate unique filename
         filename = secure_filename(file.filename)
@@ -63,8 +70,8 @@ def convert_file():
         file.save(file_path)
         print("File saved successfully")
         
-        # Try using markitdown Python API instead of CLI
-        print("Testing markitdown Python API...")
+        # Try using markitdown Python API with timeout handling
+        print("Starting markitdown conversion...")
         try:
             from markitdown import MarkItDown
             print("MarkItDown imported successfully")
@@ -72,8 +79,33 @@ def convert_file():
             md = MarkItDown()
             print("MarkItDown instance created")
             
-            result = md.convert(file_path)
-            print(f"Conversion completed. Text length: {len(result.text_content) if result.text_content else 0}")
+            # Set timeout based on file size
+            import signal
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Conversion timed out")
+            
+            # Calculate timeout: 30 seconds base + 10 seconds per MB
+            timeout_seconds = 30 + int(file_size / (1024 * 1024)) * 10
+            timeout_seconds = min(timeout_seconds, 120)  # Max 2 minutes
+            
+            print(f"Setting timeout to {timeout_seconds} seconds")
+            
+            # Set signal alarm for timeout
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(timeout_seconds)
+            
+            try:
+                result = md.convert(file_path)
+                signal.alarm(0)  # Cancel alarm
+                
+                print(f"Conversion completed. Text length: {len(result.text_content) if result.text_content else 0}")
+                
+            except TimeoutError:
+                signal.alarm(0)  # Cancel alarm
+                os.remove(file_path)
+                print("ERROR: Conversion timed out")
+                return jsonify({'error': f'Conversion timed out after {timeout_seconds} seconds. Try a smaller or simpler file.'}), 500
             
             # Clean up uploaded file
             os.remove(file_path)
@@ -91,13 +123,22 @@ def convert_file():
                 
                 print("Response prepared successfully")
                 
+                # For very large results, be more aggressive with truncation
+                content_length = len(result.text_content)
+                if content_length > 10000:
+                    preview = result.text_content[:1500] + f"\n\n[Content truncated - showing 1,500 of {content_length:,} characters. Download for full content.]"
+                elif content_length > 2000:
+                    preview = result.text_content[:2000] + f"\n\n[Content truncated - showing 2,000 of {content_length:,} characters. Download for full content.]"
+                else:
+                    preview = result.text_content
+                
                 return jsonify({
                     'success': True,
-                    'markdown': result.text_content[:2000] + "\n\n[Content truncated for display - full content available for download]" if len(result.text_content) > 2000 else result.text_content,
+                    'markdown': preview,
                     'download_id': download_id,
                     'original_filename': filename,
-                    'full_length': len(result.text_content),
-                    'is_truncated': len(result.text_content) > 2000
+                    'full_length': content_length,
+                    'is_truncated': content_length > 2000
                 })
             else:
                 print("ERROR: No content extracted from file")
@@ -109,7 +150,8 @@ def convert_file():
             return jsonify({'error': f'MarkItDown not available: {str(e)}'}), 500
             
         except Exception as e:
-            os.remove(file_path)
+            if os.path.exists(file_path):
+                os.remove(file_path)
             print(f"ERROR: MarkItDown processing failed: {str(e)}")
             return jsonify({'error': f'Conversion failed: {str(e)}'}), 500
             
