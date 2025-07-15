@@ -1,4 +1,4 @@
 Flask==3.0.0
 gunicorn==21.2.0
-markitdown[all]==0.0.1a2
+markitdown[all]
 Werkzeug==3.0.1
