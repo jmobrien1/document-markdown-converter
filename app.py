@@ -1,6 +1,8 @@
 import os
 import subprocess
 import tempfile
+import threading
+import time
 from flask import Flask, request, render_template, jsonify, send_file, session
 from werkzeug.utils import secure_filename
 import uuid
@@ -306,25 +308,35 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def convert_to_markdown(file_path):
-    """Convert file to markdown using markitdown CLI with optimizations"""
+# Global dict to track conversion jobs
+conversion_jobs = {}
+
+def convert_to_markdown_async(job_id, file_path):
+    """Convert file to markdown asynchronously"""
     try:
-        # Get file size and extension for optimization decisions
+        conversion_jobs[job_id] = {'status': 'processing', 'progress': 0, 'result': None, 'error': None}
+        
+        # Get file info
         file_size = os.path.getsize(file_path)
         file_ext = file_path.rsplit('.', 1)[1].lower() if '.' in file_path else ''
         
-        # Adjust timeout based on file size and type
+        # Update progress
+        conversion_jobs[job_id]['progress'] = 10
+        
+        # Determine timeout
         if file_ext == 'pdf':
             if file_size > 5 * 1024 * 1024:  # 5MB+
-                timeout = 240  # 4 minutes for large PDFs
+                timeout = 300  # 5 minutes for large PDFs
             elif file_size > 2 * 1024 * 1024:  # 2MB+
                 timeout = 180  # 3 minutes for medium PDFs
             else:
                 timeout = 120  # 2 minutes for small PDFs
         else:
             timeout = 60  # 1 minute for other formats
-            
-        # Run markitdown command with dynamic timeout
+        
+        conversion_jobs[job_id]['progress'] = 20
+        
+        # Run conversion
         result = subprocess.run(
             ['markitdown', file_path],
             capture_output=True,
@@ -332,19 +344,40 @@ def convert_to_markdown(file_path):
             check=True,
             timeout=timeout
         )
-        return result.stdout, None
+        
+        conversion_jobs[job_id]['progress'] = 90
+        
+        # Success
+        conversion_jobs[job_id].update({
+            'status': 'completed',
+            'progress': 100,
+            'result': result.stdout,
+            'error': None
+        })
         
     except subprocess.TimeoutExpired:
-        return None, f"Conversion timed out after {timeout} seconds. Large PDFs may take several minutes to process. Please try a smaller file or contact support."
+        conversion_jobs[job_id].update({
+            'status': 'failed',
+            'progress': 100,
+            'error': f"Conversion timed out after {timeout} seconds. Try a smaller file."
+        })
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr or str(e)
-        if "pdf" in error_msg.lower() and "dependency" in error_msg.lower():
-            return None, "PDF processing dependencies are loading. Please try again in 30 seconds."
-        return None, f"Conversion error: {error_msg}"
-    except FileNotFoundError:
-        return None, "markitdown not found. Please install it with: pip install markitdown[all]"
+        conversion_jobs[job_id].update({
+            'status': 'failed',
+            'progress': 100,
+            'error': f"Conversion error: {error_msg}"
+        })
     except Exception as e:
-        return None, f"Unexpected error: {str(e)}"
+        conversion_jobs[job_id].update({
+            'status': 'failed',
+            'progress': 100,
+            'error': f"Unexpected error: {str(e)}"
+        })
+    finally:
+        # Clean up file
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 @app.route('/')
 def index():
@@ -353,7 +386,7 @@ def index():
 
 @app.route('/convert', methods=['POST'])
 def convert_file():
-    """Handle file upload and conversion with usage tracking"""
+    """Handle file upload and start async conversion"""
     if 'file' not in request.files:
         return jsonify({'error': 'No file selected'}), 400
     
@@ -377,9 +410,10 @@ def convert_file():
         }), 429
     
     try:
-        # Generate unique filename to avoid conflicts
+        # Generate unique filename and job ID
         filename = secure_filename(file.filename)
-        unique_filename = f"{uuid.uuid4()}_{filename}"
+        job_id = str(uuid.uuid4())
+        unique_filename = f"{job_id}_{filename}"
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
         file_size = len(file.read())
         file.seek(0)  # Reset file pointer
@@ -390,54 +424,66 @@ def convert_file():
         # Get file type for logging
         file_type = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'unknown'
         
-        # Convert to markdown
-        markdown_content, error = convert_to_markdown(file_path)
+        # Start async conversion
+        thread = threading.Thread(target=convert_to_markdown_async, args=(job_id, file_path))
+        thread.daemon = True
+        thread.start()
         
-        # Clean up uploaded file
-        os.remove(file_path)
-        
-        if error:
-            # Log failed conversion
-            log_conversion(user_id, session_id, filename, file_type, file_size, 'failed')
-            return jsonify({'error': error}), 500
-        
-        # Log successful conversion and increment usage
-        log_conversion(user_id, session_id, filename, file_type, file_size, 'success')
+        # Log conversion start and increment usage
+        log_conversion(user_id, session_id, filename, file_type, file_size, 'started')
         increment_usage(user_id, session_id)
         
-        # Store markdown content in session or temporary file for download
-        download_id = str(uuid.uuid4())
-        temp_file_path = os.path.join(tempfile.gettempdir(), f"converted_{download_id}.ml")
-        
-        with open(temp_file_path, 'w', encoding='utf-8') as f:
-            f.write(markdown_content)
-        
-        # Get updated usage for response
-        new_usage = get_daily_usage(user_id, session_id)
-        remaining = 'unlimited' if user_id else max(0, 5 - new_usage)
-        
+        # Return job ID for polling
         return jsonify({
             'success': True,
-            'markdown': markdown_content,
-            'download_id': download_id,
-            'original_filename': filename,
-            'usage_info': {
-                'daily_usage': new_usage,
-                'remaining': remaining,
-                'is_logged_in': bool(user_id)
-            }
+            'job_id': job_id,
+            'filename': filename,
+            'status': 'processing'
         })
         
     except Exception as e:
-        # Clean up file if it exists
-        if 'file_path' in locals() and os.path.exists(file_path):
-            os.remove(file_path)
-        
-        # Log failed conversion
-        if 'filename' in locals():
-            log_conversion(user_id, session_id, filename, file_type, file_size, 'error')
-        
         return jsonify({'error': f'Processing error: {str(e)}'}), 500
+
+@app.route('/job-status/<job_id>')
+def job_status(job_id):
+    """Check conversion job status"""
+    if job_id not in conversion_jobs:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    job = conversion_jobs[job_id]
+    
+    if job['status'] == 'completed':
+        # Store result for download
+        temp_file_path = os.path.join(tempfile.gettempdir(), f"converted_{job_id}.ml")
+        with open(temp_file_path, 'w', encoding='utf-8') as f:
+            f.write(job['result'])
+        
+        # Clean up job
+        del conversion_jobs[job_id]
+        
+        return jsonify({
+            'status': 'completed',
+            'progress': 100,
+            'download_id': job_id,
+            'markdown': job['result']
+        })
+    
+    elif job['status'] == 'failed':
+        error = job['error']
+        # Clean up job
+        del conversion_jobs[job_id]
+        
+        return jsonify({
+            'status': 'failed',
+            'progress': 100,
+            'error': error
+        })
+    
+    else:
+        return jsonify({
+            'status': job['status'],
+            'progress': job['progress']
+        })
 
 @app.route('/download/<download_id>')
 def download_file(download_id):

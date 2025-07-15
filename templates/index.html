@@ -389,7 +389,7 @@
         <div class="loading" id="loading">
             <div class="spinner"></div>
             <p>mdraft is converting your document...</p>
-            <p style="font-size: 12px; margin-top: 10px; opacity: 0.8;">Large files may take up to 2 minutes to process</p>
+            <p style="font-size: 12px; margin-top: 10px; opacity: 0.8;" id="loadingDetails">Large PDFs may take up to 4 minutes to process</p>
         </div>
 
         <div id="errorMessage" class="error-message"></div>
@@ -606,6 +606,23 @@
                 return;
             }
 
+            // Show file-specific loading message
+            const loadingDetails = document.getElementById('loadingDetails');
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+            const fileSizeMB = (file.size / 1024 / 1024).toFixed(1);
+            
+            if (fileExtension === 'pdf') {
+                if (fileSizeMB > 5) {
+                    loadingDetails.textContent = `Large PDF (${fileSizeMB}MB) - may take up to 4 minutes`;
+                } else if (fileSizeMB > 2) {
+                    loadingDetails.textContent = `Medium PDF (${fileSizeMB}MB) - may take up to 3 minutes`;
+                } else {
+                    loadingDetails.textContent = `PDF (${fileSizeMB}MB) - may take up to 2 minutes`;
+                }
+            } else {
+                loadingDetails.textContent = `Processing ${fileExtension.toUpperCase()} file (${fileSizeMB}MB)`;
+            }
+
             loading.style.display = 'block';
             convertBtn.disabled = true;
             convertBtn.textContent = 'Converting with mdraft...';
@@ -624,31 +641,109 @@
                 const result = await response.json();
 
                 if (response.ok && result.success) {
-                    markdownOutput.value = result.markdown;
-                    currentDownloadId = result.download_id;
-                    downloadBtn.href = '/download/' + result.download_id;
-                    
-                    resultSection.style.display = 'block';
-                    showSuccess('Successfully converted "' + result.original_filename + '" to Markdown!');
-                    
-                    if (result.usage_info) {
-                        currentUsage.daily_usage = result.usage_info.daily_usage;
-                        currentUsage.remaining = result.usage_info.remaining;
-                        updateUI();
-                    }
+                    // Start polling for job status
+                    await pollJobStatus(result.job_id, result.filename);
                 } else if (result.limit_reached) {
                     showError(result.error);
                 } else {
                     showError(result.error || 'An error occurred during conversion.');
                 }
             } catch (error) {
-                showError('Network error. Please try again.');
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    showError('Request timed out. Large PDFs take 2-4 minutes to process. Please try again or use a smaller file.');
+                } else {
+                    showError('Network error. Please try again.');
+                }
                 console.error('Error:', error);
             } finally {
-                loading.style.display = 'none';
-                convertBtn.disabled = false;
-                convertBtn.textContent = 'Convert with mdraft';
+                // Only hide loading if we're not polling
+                if (!window.polling) {
+                    loading.style.display = 'none';
+                    convertBtn.disabled = false;
+                    convertBtn.textContent = 'Convert with mdraft';
+                }
             }
+        });
+
+        async function pollJobStatus(jobId, filename) {
+            window.polling = true;
+            const pollInterval = 2000; // Poll every 2 seconds
+            const maxAttempts = 150; // 5 minutes max (150 * 2 seconds)
+            let attempts = 0;
+
+            const poll = async () => {
+                try {
+                    attempts++;
+                    const response = await fetch('/job-status/' + jobId);
+                    const result = await response.json();
+
+                    if (result.status === 'completed') {
+                        // Success!
+                        markdownOutput.value = result.markdown;
+                        currentDownloadId = result.download_id;
+                        downloadBtn.href = '/download/' + result.download_id;
+                        
+                        resultSection.style.display = 'block';
+                        showSuccess('Successfully converted "' + filename + '" to Markdown!');
+                        
+                        // Update usage info
+                        await checkUserStatus();
+                        
+                        // Stop polling
+                        window.polling = false;
+                        loading.style.display = 'none';
+                        convertBtn.disabled = false;
+                        convertBtn.textContent = 'Convert with mdraft';
+                        
+                    } else if (result.status === 'failed') {
+                        // Failed
+                        showError(result.error || 'Conversion failed');
+                        
+                        // Stop polling
+                        window.polling = false;
+                        loading.style.display = 'none';
+                        convertBtn.disabled = false;
+                        convertBtn.textContent = 'Convert with mdraft';
+                        
+                    } else if (attempts >= maxAttempts) {
+                        // Timeout
+                        showError('Conversion timed out. Please try a smaller file.');
+                        
+                        // Stop polling
+                        window.polling = false;
+                        loading.style.display = 'none';
+                        convertBtn.disabled = false;
+                        convertBtn.textContent = 'Convert with mdraft';
+                        
+                    } else {
+                        // Still processing, update progress if available
+                        if (result.progress) {
+                            const progressText = document.getElementById('loadingDetails');
+                            progressText.textContent = 'Progress: ' + result.progress + '%';
+                        }
+                        
+                        // Continue polling
+                        setTimeout(poll, pollInterval);
+                    }
+                    
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    if (attempts >= maxAttempts) {
+                        showError('Connection error during conversion. Please try again.');
+                        window.polling = false;
+                        loading.style.display = 'none';
+                        convertBtn.disabled = false;
+                        convertBtn.textContent = 'Convert with mdraft';
+                    } else {
+                        // Retry polling
+                        setTimeout(poll, pollInterval);
+                    }
+                }
+            };
+
+            // Start polling
+            setTimeout(poll, 1000); // Start after 1 second
+        }
         });
 
         copyBtn.addEventListener('click', async function() {
