@@ -386,7 +386,13 @@
                     downloadBtn.href = '/download/' + result.download_id;
                     
                     resultSection.style.display = 'block';
-                    showSuccess('Successfully converted "' + result.original_filename + '" to Markdown!');
+                    
+                    let successMsg = 'Successfully converted "' + result.original_filename + '" to Markdown!';
+                    if (result.is_truncated) {
+                        successMsg += ` (${result.full_length} characters total - download for complete content)`;
+                    }
+                    
+                    showSuccess(successMsg);
                 } else {
                     console.log('❌ Conversion failed:', result.error);
                     showError(result.error || 'An error occurred during conversion.');

@@ -93,10 +93,11 @@ def convert_file():
                 
                 return jsonify({
                     'success': True,
-                    'markdown': result.text_content[:1000] + "..." if len(result.text_content) > 1000 else result.text_content,
+                    'markdown': result.text_content[:2000] + "\n\n[Content truncated for display - full content available for download]" if len(result.text_content) > 2000 else result.text_content,
                     'download_id': download_id,
                     'original_filename': filename,
-                    'full_length': len(result.text_content)
+                    'full_length': len(result.text_content),
+                    'is_truncated': len(result.text_content) > 2000
                 })
             else:
                 print("ERROR: No content extracted from file")
