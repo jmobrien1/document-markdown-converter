@@ -33,49 +33,76 @@ def test_route():
 @app.route('/convert', methods=['POST'])
 def convert_file():
     """Handle file upload and conversion"""
-    print("Convert route called")  # Debug log
-    
-    if 'file' not in request.files:
-        print("No file in request")  # Debug log
-        return jsonify({'error': 'No file selected'}), 400
-    
-    file = request.files['file']
-    print(f"File received: {file.filename}")  # Debug log
-    
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
-    
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'File type not allowed'}), 400
+    print("=== CONVERT ROUTE CALLED ===")  # Debug log
     
     try:
+        if 'file' not in request.files:
+            print("ERROR: No file in request")
+            return jsonify({'error': 'No file selected'}), 400
+        
+        file = request.files['file']
+        print(f"File received: {file.filename}, size: {len(file.read())} bytes")
+        file.seek(0)  # Reset file pointer after reading size
+        
+        if file.filename == '':
+            print("ERROR: Empty filename")
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            print(f"ERROR: File type not allowed: {file.filename}")
+            return jsonify({'error': 'File type not allowed'}), 400
+        
         # Generate unique filename
         filename = secure_filename(file.filename)
         unique_filename = f"{uuid.uuid4()}_{filename}"
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
         
-        print(f"Saving file to: {file_path}")  # Debug log
+        print(f"Saving file to: {file_path}")
         
         # Save uploaded file
         file.save(file_path)
+        print("File saved successfully")
         
-        print("File saved, starting conversion")  # Debug log
+        # Check if markitdown is available
+        print("Testing markitdown availability...")
+        try:
+            test_result = subprocess.run(['markitdown', '--help'], capture_output=True, text=True, timeout=5)
+            print(f"Markitdown test result: {test_result.returncode}")
+        except FileNotFoundError:
+            os.remove(file_path)
+            print("ERROR: markitdown command not found")
+            return jsonify({'error': 'markitdown is not installed on the server'}), 500
+        except Exception as e:
+            os.remove(file_path)
+            print(f"ERROR: markitdown test failed: {str(e)}")
+            return jsonify({'error': f'markitdown test failed: {str(e)}'}), 500
+        
+        print("Starting conversion...")
         
         # Convert using markitdown
         result = subprocess.run(
             ['markitdown', file_path],
             capture_output=True,
             text=True,
-            check=True,
             timeout=60
         )
         
-        print("Conversion completed")  # Debug log
+        print(f"Conversion completed. Return code: {result.returncode}")
+        print(f"STDOUT length: {len(result.stdout)}")
+        print(f"STDERR: {result.stderr}")
         
         # Clean up uploaded file
         os.remove(file_path)
+        print("Uploaded file cleaned up")
+        
+        if result.returncode != 0:
+            error_msg = result.stderr or "Unknown conversion error"
+            print(f"ERROR: Conversion failed: {error_msg}")
+            return jsonify({'error': f'Conversion failed: {error_msg}'}), 500
         
         if result.stdout:
+            print("Conversion successful, preparing response...")
+            
             # Store markdown content for download
             download_id = str(uuid.uuid4())
             temp_file_path = os.path.join(tempfile.gettempdir(), f"converted_{download_id}.ml")
@@ -83,30 +110,30 @@ def convert_file():
             with open(temp_file_path, 'w', encoding='utf-8') as f:
                 f.write(result.stdout)
             
+            print("Response prepared successfully")
+            
             return jsonify({
                 'success': True,
-                'markdown': result.stdout,
+                'markdown': result.stdout[:1000] + "..." if len(result.stdout) > 1000 else result.stdout,  # Truncate for response
                 'download_id': download_id,
-                'original_filename': filename
+                'original_filename': filename,
+                'full_length': len(result.stdout)
             })
         else:
+            print("ERROR: No content extracted from file")
             return jsonify({'error': 'No content extracted from file'}), 500
             
     except subprocess.TimeoutExpired:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        return jsonify({'error': 'Conversion timed out'}), 500
-    except subprocess.CalledProcessError as e:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        error_msg = e.stderr or str(e)
-        print(f"Conversion error: {error_msg}")  # Debug log
-        return jsonify({'error': f'Conversion failed: {error_msg}'}), 500
-    except Exception as e:
+        print("ERROR: Conversion timed out")
         if 'file_path' in locals() and os.path.exists(file_path):
             os.remove(file_path)
-        print(f"General error: {str(e)}")  # Debug log
-        return jsonify({'error': f'Processing error: {str(e)}'}), 500
+        return jsonify({'error': 'Conversion timed out (60 seconds)'}), 500
+        
+    except Exception as e:
+        print(f"ERROR: Unexpected error: {str(e)}")
+        if 'file_path' in locals() and os.path.exists(file_path):
+            os.remove(file_path)
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/download/<download_id>')
 def download_file(download_id):
