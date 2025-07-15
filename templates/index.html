@@ -472,50 +472,58 @@
         let currentDownloadId = null;
         let currentUsage = null;
 
-        // Add a simple test button for debugging
-        const container = document.querySelector('.container');
-        const testBtn = document.createElement('button');
-        testBtn.textContent = 'Test Upload (Debug)';
-        testBtn.style.cssText = 'background: red; color: white; padding: 10px; margin: 10px 0; border: none; border-radius: 5px; cursor: pointer;';
-        testBtn.addEventListener('click', async function() {
-            console.log('Debug test button clicked');
-            const file = fileInput.files[0];
-            if (!file) {
-                alert('Please select a file first');
-                return;
-            }
+        window.addEventListener('load', function() {
+            console.log('Page loaded, initializing...'); // Debug
+            checkUserStatus();
             
-            console.log('Testing with file:', file.name);
-            
-            try {
-                const formData = new FormData();
-                formData.append('file', file);
-                
-                console.log('Sending to /simple-convert');
-                const response = await fetch('/simple-convert', {
-                    method: 'POST',
-                    body: formData
+            // Add debug button after page loads
+            console.log('Adding debug button'); // Debug
+            const uploadSection = document.querySelector('.upload-section');
+            if (uploadSection) {
+                const debugBtn = document.createElement('button');
+                debugBtn.textContent = 'TEST UPLOAD (DEBUG)';
+                debugBtn.type = 'button';
+                debugBtn.style.cssText = 'width: 100%; background: #dc3545; color: white; padding: 10px; margin: 10px 0; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;';
+                debugBtn.addEventListener('click', function() {
+                    console.log('Debug button clicked');
+                    const file = fileInput.files[0];
+                    if (!file) {
+                        alert('Please select a file first');
+                        return;
+                    }
+                    
+                    console.log('Testing with file:', file.name, file.size);
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    fetch('/simple-convert', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        console.log('Response status:', response.status);
+                        return response.json();
+                    })
+                    .then(result => {
+                        console.log('Result:', result);
+                        if (result.success) {
+                            alert('SUCCESS! File: ' + result.filename + ', Size: ' + result.size + ' bytes');
+                        } else {
+                            alert('FAILED: ' + result.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('ERROR: ' + error.message);
+                    });
                 });
                 
-                console.log('Test response status:', response.status);
-                const result = await response.json();
-                console.log('Test result:', result);
-                
-                if (result.success) {
-                    alert('Test successful! File: ' + result.filename + ', Size: ' + result.size + ' bytes');
-                } else {
-                    alert('Test failed: ' + result.error);
-                }
-            } catch (error) {
-                console.error('Test error:', error);
-                alert('Test error: ' + error.message);
+                uploadSection.insertBefore(debugBtn, uploadSection.firstChild);
+                console.log('Debug button added'); // Debug
+            } else {
+                console.error('Upload section not found'); // Debug
             }
-        });
-        
-        container.insertBefore(testBtn, uploadForm);
-
-        window.addEventListener('load', function() {
-            checkUserStatus();
         });
             try {
                 const response = await fetch('/user-status');
@@ -620,15 +628,19 @@
         });
 
         fileInput.addEventListener('change', function(e) {
+            console.log('File input changed'); // Debug
             const file = e.target.files[0];
+            console.log('Selected file:', file); // Debug
             if (file) {
                 fileLabel.textContent = file.name;
                 fileInfo.innerHTML = '<strong>Selected:</strong> ' + file.name + '<br><strong>Size:</strong> ' + (file.size / 1024 / 1024).toFixed(2) + ' MB<br><strong>Type:</strong> ' + (file.type || 'Unknown');
                 convertBtn.disabled = false;
+                console.log('File info updated'); // Debug
             } else {
                 fileLabel.textContent = 'Click to select a file to convert to Markdown';
                 fileInfo.innerHTML = '';
                 convertBtn.disabled = false;
+                console.log('File cleared'); // Debug
             }
         });
 
