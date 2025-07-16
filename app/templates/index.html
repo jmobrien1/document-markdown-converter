@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mdraft - Document to Markdown Converter</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-start: #2563eb;
+            --primary-end: #7c3aed;
+            --background: #f8f9fa;
+            --surface: #ffffff;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--background); min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+        .header { width: 100%; background: var(--surface); padding: 15px 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #dee2e6; }
+        .header .brand { font-size: 1.5em; font-weight: 700; color: var(--text-primary); text-decoration: none; }
+        .header .nav-links { display: flex; align-items: center; gap: 20px; }
+        .header .nav-links a { text-decoration: none; color: var(--text-secondary); font-weight: 500; transition: color 0.2s; }
+        .header .nav-links a:hover { color: var(--primary-start); }
+        .header .nav-links .btn { background: var(--primary-start); color: white; padding: 8px 15px; border-radius: 8px; transition: background 0.2s; }
+        .header .nav-links .btn:hover { background: var(--primary-end); }
+        .container { width: 100%; max-width: 800px; padding: 40px; margin-top: 40px; }
+        .welcome-message { text-align: center; padding: 60px 40px; background-color: var(--surface); border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .welcome-message h1 { font-size: 2.5em; font-weight: 700; margin-bottom: 15px; }
+        .welcome-message p { font-size: 1.1em; color: var(--text-secondary); margin-bottom: 30px; }
+        .welcome-message .btn { font-size: 1.1em; padding: 12px 25px; }
+        .upload-section { background: var(--surface); padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .file-input-wrapper { position: relative; display: block; width: 100%; margin-bottom: 20px; }
+        .file-input { width: 100%; padding: 40px 20px; border: 2px dashed #dee2e6; border-radius: 12px; background: #f8f9fa; cursor: pointer; text-align: center; transition: all 0.3s ease; }
+        .file-input:hover { border-color: var(--primary-start); background: #e9ecef; }
+        .file-input input[type="file"] { position: absolute; opacity: 0; width: 100%; height: 100%; top: 0; left: 0; cursor: pointer; }
+        .convert-btn { width: 100%; padding: 15px; background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; }
+        .convert-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); }
+        .convert-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .loading { display: none; text-align: center; margin: 20px 0; color: var(--primary-start); }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid var(--primary-start); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .result-section { display: none; margin-top: 30px; background: var(--surface); padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .result-title { font-size: 1.2em; font-weight: 600; color: var(--text-primary); }
+        .action-buttons { display: flex; gap: 10px; }
+        .action-btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.3s ease; }
+        .copy-btn { background: #28a745; color: white; }
+        .copy-btn:hover { background: #218838; }
+        .download-btn { background: #007bff; color: white; text-decoration: none; display: none; }
+        .download-btn:hover { background: #0056b3; }
+        .markdown-output { width: 100%; min-height: 300px; padding: 20px; border: 1px solid #dee2e6; border-radius: 12px; font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.6; background: #f8f9fa; resize: vertical; }
+        .error-message, .success-message { padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid; display: none; }
+        .error-message { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+        .success-message { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+        .file-info { font-size: 14px; color: var(--text-secondary); margin-top: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <a href="{{ url_for('main.index') }}" class="brand">mdraft</a>
+        <nav class="nav-links">
+            {% if current_user.is_authenticated %}
+                <span>Logged in as: <strong>{{ current_user.email }}</strong></span>
+                <a href="{{ url_for('auth.logout') }}">Logout</a>
+            {% else %}
+                <a href="{{ url_for('auth.login') }}">Login</a>
+                <a href="{{ url_for('auth.signup') }}" class="btn">Sign Up</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    <main class="container">
+        {% if current_user.is_authenticated %}
+            <!-- Logged-in View -->
+            <section class="upload-section">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="file-input-wrapper">
+                        <div class="file-input">
+                            <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.txt,.html,.htm,.csv,.json,.xml,.epub">
+                            <span id="fileLabel"><strong>Click to select a file</strong> or drag and drop</span>
+                        </div>
+                    </div>
+
+                    <!-- New Pro Conversion Toggle -->
+                    <div class="pro-toggle" style="margin-bottom: 20px; text-align: center; padding: 10px; background: #eef2ff; border-radius: 8px;">
+                        <label for="pro_conversion" style="font-weight: 600; color: #4338ca; cursor: pointer;">
+                            <input type="checkbox" id="pro_conversion" name="pro_conversion" style="margin-right: 8px;">
+                            💎 Use Pro Converter (for complex PDFs)
+                        </label>
+                    </div>
+
+                    <button type="submit" class="convert-btn" id="convertBtn">Convert with mdraft</button>
+                </form>
+                <div class="file-info" id="fileInfo"></div>
+            </section>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p id="loadingText">mdraft is preparing your document...</p>
+            </div>
+
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message"></div>
+
+            <section class="result-section" id="resultSection">
+                <div class="result-header">
+                    <h2 class="result-title">Converted Markdown</h2>
+                    <div class="action-buttons">
+                        <button class="action-btn copy-btn" id="copyBtn">📋 Copy</button>
+                        <a href="#" class="action-btn download-btn" id="downloadBtn">💾 Download</a>
+                    </div>
+                </div>
+                <textarea class="markdown-output" id="markdownOutput" readonly></textarea>
+            </section>
+        {% else %}
+            <!-- Logged-out View -->
+            <section class="welcome-message">
+                <h1>The Smartest Document to Markdown Converter</h1>
+                <p>Upload PDFs, Word docs, and more. Get clean, readable Markdown in seconds.</p>
+                <a href="{{ url_for('auth.signup') }}" class="btn convert-btn">Get Started for Free</a>
+            </section>
+        {% endif %}
+    </main>
+
+    {% if current_user.is_authenticated %}
+    <script>
+        const uploadForm = document.getElementById('uploadForm');
+        const convertBtn = document.getElementById('convertBtn');
+        const fileInput = document.getElementById('fileInput');
+        const fileLabel = document.getElementById('fileLabel');
+        const fileInfo = document.getElementById('fileInfo');
+        const loading = document.getElementById('loading');
+        const loadingText = document.getElementById('loadingText');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const resultSection = document.getElementById('resultSection');
+        const markdownOutput = document.getElementById('markdownOutput');
+        const copyBtn = document.getElementById('copyBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let pollingInterval;
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                fileLabel.innerHTML = `<strong>Selected:</strong> ${file.name}`;
+                fileInfo.innerHTML = `<strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            } else {
+                fileLabel.innerHTML = '<strong>Click to select a file</strong> or drag and drop';
+                fileInfo.innerHTML = '';
+            }
+        });
+
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const file = fileInput.files[0];
+            if (!file) {
+                showError('Please select a file first.');
+                return;
+            }
+
+            hideMessages();
+            resultSection.style.display = 'none';
+            convertBtn.disabled = true;
+            convertBtn.textContent = 'CONVERTING...';
+            loading.style.display = 'block';
+            loadingText.textContent = 'Uploading and starting conversion...';
+
+            const formData = new FormData(uploadForm);
+
+            try {
+                const startResponse = await fetch("{{ url_for('main.convert') }}", { method: 'POST', body: formData });
+                
+                if (!startResponse.ok) {
+                    const errorData = await startResponse.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${startResponse.status}`);
+                }
+
+                const startData = await startResponse.json();
+                if (startResponse.status === 202) {
+                    loadingText.textContent = 'File conversion in progress...';
+                    pollForTaskStatus(startData.status_url);
+                } else {
+                    throw new Error(startData.error || 'Could not start conversion job.');
+                }
+            } catch (error) {
+                showError(`Error: ${error.message}`);
+                resetUI();
+            }
+        });
+
+        function pollForTaskStatus(statusUrl) {
+            pollingInterval = setInterval(async () => {
+                try {
+                    const statusResponse = await fetch(statusUrl);
+                    const data = await statusResponse.json();
+
+                    if (data.state === 'SUCCESS') {
+                        clearInterval(pollingInterval);
+                        handleSuccess(data.result);
+                    } else if (data.state === 'FAILURE') {
+                        clearInterval(pollingInterval);
+                        handleFailure(data.error);
+                    } else {
+                        loadingText.textContent = data.status || 'Conversion in progress...';
+                    }
+                } catch (error) {
+                    clearInterval(pollingInterval);
+                    showError('Network error while checking status.');
+                    resetUI();
+                }
+            }, 2500);
+        }
+
+        function handleSuccess(result) {
+            markdownOutput.value = result.markdown;
+            resultSection.style.display = 'block';
+            showSuccess(`Successfully converted "${result.original_filename}"!`);
+            
+            const blob = new Blob([result.markdown], { type: 'text/plain' });
+            downloadBtn.href = URL.createObjectURL(blob);
+            downloadBtn.download = 'mdraft_output.ml';
+            downloadBtn.style.display = 'inline-block';
+
+            resetUI();
+        }
+
+        function handleFailure(errorMsg) {
+            showError(`Conversion Failed: ${errorMsg}`);
+            resetUI();
+        }
+
+        function resetUI() {
+            loading.style.display = 'none';
+            convertBtn.disabled = false;
+            convertBtn.textContent = 'Convert with mdraft';
+        }
+
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(markdownOutput.value).then(() => {
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = '✅ Copied!';
+                setTimeout(() => { copyBtn.textContent = originalText; }, 2000);
+            }).catch(() => {
+                showError('Could not copy to clipboard.');
+            });
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            successMessage.style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+        }
+
+        function hideMessages() {
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        }
+    </script>
+    {% endif %}
+</body>
+</html>

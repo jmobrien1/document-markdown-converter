@@ -1,0 +1,71 @@
+services:
+  # A Redis instance for our Celery queue
+  - type: redis
+    name: redis-mdraft
+    plan: free
+    ipAllowList: [] # Allow all, or specify IPs if needed
+    maxmemoryPolicy: allkeys-lru
+
+  # The main Flask web application
+  - type: web
+    name: mdraft-web
+    env: python
+    plan: free
+    buildCommand: "./render_build.sh"
+    startCommand: "gunicorn run:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: FLASK_APP
+        value: run.py
+      - key: FLASK_CONFIG
+        value: production
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: redis-mdraft
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: redis-mdraft
+          property: connectionString
+      - fromGroup: mdraft-secrets
+
+  # The Celery background worker
+  - type: worker
+    name: mdraft-worker
+    env: python
+    plan: free
+    buildCommand: "./render_build.sh"
+    startCommand: "celery -A celery_worker.celery worker --loglevel=info"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: FLASK_APP
+        value: run.py
+      - key: FLASK_CONFIG
+        value: production
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: redis-mdraft
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: redis-mdraft
+          property: connectionString
+      - fromGroup: mdraft-secrets
+
+envVarGroups:
+  - name: mdraft-secrets
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true # Let Render generate a secure secret key
+      - key: GCS_BUCKET_NAME
+        value: your-gcs-bucket-name-here # <-- PASTE YOUR BUCKET NAME
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/gcs-credentials.json # Path on Render's server
+      - key: DOCAI_PROCESSOR_ID
+        value: your-docai-processor-id-here # <-- PASTE YOUR PROCESSOR ID
