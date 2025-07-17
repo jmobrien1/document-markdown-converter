@@ -6,10 +6,12 @@ import uuid
 import subprocess
 import threading
 import time
-import tempfile
+import json
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from flask import current_app, session
+from google.oauth2 import service_account
+from google.cloud import documentai_v1 as documentai
 from models import Conversion, AnonymousUsage, User
 from app import db
 
@@ -140,24 +142,28 @@ def convert_with_docai(file_path, timeout=120):
     try:
         current_app.logger.info(f"Starting Document AI conversion: {file_path}")
         
-        # Check if Google Cloud credentials are configured
+        # Check for required configuration
         if not current_app.config.get('GOOGLE_CLOUD_PROJECT'):
             return None, "Google Cloud Project not configured for Pro conversion"
-        
         if not current_app.config.get('DOCAI_PROCESSOR_ID'):
             return None, "Document AI Processor not configured"
-        
-        # Import Google Cloud libraries
-        try:
-            from google.cloud import documentai
-        except ImportError:
-            return None, "Google Cloud Document AI library not installed"
-        
-        # Initialize Document AI client
+
+        # *** START: NEW CREDENTIALS HANDLING ***
+        # Get credentials directly from the environment variable string
+        gcs_json_credentials_str = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        if not gcs_json_credentials_str:
+            return None, "Google Cloud JSON credentials not found in environment."
+
+        # Load the credentials from the JSON string
+        credentials_info = json.loads(gcs_json_credentials_str)
+        credentials = service_account.Credentials.from_service_account_info(credentials_info)
+        # *** END: NEW CREDENTIALS HANDLING ***
+
+        # Initialize Document AI client with credentials
         client_options = {
             "api_endpoint": f"{current_app.config['DOCAI_LOCATION']}-documentai.googleapis.com"
         }
-        client = documentai.DocumentProcessorServiceClient(client_options=client_options)
+        client = documentai.DocumentProcessorServiceClient(credentials=credentials, client_options=client_options)
         
         # Prepare the document
         with open(file_path, 'rb') as file:
