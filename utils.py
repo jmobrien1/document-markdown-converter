@@ -6,11 +6,10 @@ import uuid
 import subprocess
 import threading
 import time
-import json
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from flask import current_app, session
-from google.oauth2 import service_account
+# Google Cloud libraries will now find credentials automatically via the environment variable
 from google.cloud import storage, documentai_v1 as documentai
 from models import Conversion, AnonymousUsage, User
 from app import db
@@ -57,36 +56,23 @@ class ConversionJob:
             'completed_at': self.completed_at.isoformat() if self.completed_at else None
         }
 
-def _get_gcp_credentials():
-    """Loads Google Cloud credentials from the environment JSON string."""
-    gcs_json_credentials_str = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
-    if not gcs_json_credentials_str:
-        current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable not found.")
-        return None
-    try:
-        credentials_info = json.loads(gcs_json_credentials_str)
-        return service_account.Credentials.from_service_account_info(credentials_info)
-    except (json.JSONDecodeError, TypeError) as e:
-        current_app.logger.error(f"Failed to parse Google Cloud credentials: {e}")
-        return None
+# Simplified: No longer need the _get_gcp_credentials helper function
 
 def upload_file(file_to_upload, bucket_name, object_name):
-    """Uploads a file to the bucket, loading credentials just-in-time."""
+    """Uploads a file to the bucket. Credentials are found automatically."""
     try:
-        credentials = _get_gcp_credentials()
-        if not credentials:
-            raise Exception("Could not load GCP credentials.")
-
-        storage_client = storage.Client(credentials=credentials)
+        # Initialize client without arguments. It will use GOOGLE_APPLICATION_CREDENTIALS.
+        storage_client = storage.Client()
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(object_name)
         
-        file_to_upload.seek(0) # Ensure file pointer is at the beginning
+        file_to_upload.seek(0)
         blob.upload_from_file(file_to_upload)
         
         current_app.logger.info(f"File {object_name} uploaded to {bucket_name}.")
         return True
     except Exception as e:
+        # The exception will now be more specific if there's a problem
         current_app.logger.error(f"GCS Upload Failed: {e}")
         return False
 
@@ -103,12 +89,9 @@ def convert_with_docai(file_path, timeout=120):
     try:
         current_app.logger.info(f"Starting Document AI conversion: {file_path}")
         
-        credentials = _get_gcp_credentials()
-        if not credentials:
-            raise Exception("Could not load GCP credentials for DocAI.")
-
+        # Initialize client without arguments.
         client_options = {"api_endpoint": f"{current_app.config['DOCAI_LOCATION']}-documentai.googleapis.com"}
-        client = documentai.DocumentProcessorServiceClient(credentials=credentials, client_options=client_options)
+        client = documentai.DocumentProcessorServiceClient(client_options=client_options)
         
         with open(file_path, 'rb') as file:
             file_content = file.read()
@@ -117,7 +100,12 @@ def convert_with_docai(file_path, timeout=120):
         mime_type_map = {'.pdf': 'application/pdf', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.doc': 'application/msword'}
         mime_type = mime_type_map.get(file_ext, 'application/pdf')
         
-        name = client.processor_path(credentials.project_id, current_app.config['DOCAI_LOCATION'], current_app.config['DOCAI_PROCESSOR_ID'])
+        # The project_id will be discovered from the credentials file automatically
+        name = client.processor_path(
+            current_app.config['GOOGLE_CLOUD_PROJECT'], 
+            current_app.config['DOCAI_LOCATION'], 
+            current_app.config['DOCAI_PROCESSOR_ID']
+        )
         
         raw_document = documentai.RawDocument(content=file_content, mime_type=mime_type)
         request = documentai.ProcessRequest(name=name, raw_document=raw_document)
@@ -265,9 +253,6 @@ def start_conversion_job(file, use_pro=False, user_id=None, session_id=None):
     filename = secure_filename(file.filename)
     if not filename:
         filename = f"upload_{int(time.time())}"
-    
-    # NOTE: The logic for GCS upload should be in your routes, not here.
-    # This function now only handles the conversion part.
     
     file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], f"{job_id}_{filename}")
     file.seek(0)
