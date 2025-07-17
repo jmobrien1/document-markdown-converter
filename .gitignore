@@ -54,3 +54,7 @@ Thumbs.db
 
 # Temporary markdown files
 *.ml
+
+# Google Cloud credentials
+gcs-credentials.json
+*.json
