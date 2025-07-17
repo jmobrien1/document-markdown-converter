@@ -27,10 +27,10 @@ class Config:
     GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME')
     
     # Handle Google Cloud credentials for both local development and Render deployment
-    if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
+    if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
         # Render deployment - create temporary credentials file from environment variable
         try:
-            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
             temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
             temp_creds.write(credentials_json)
             temp_creds.close()
