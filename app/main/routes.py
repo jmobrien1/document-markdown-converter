@@ -3,6 +3,8 @@
 
 import os
 import uuid
+import tempfile
+import json
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 from flask import (
@@ -39,6 +41,33 @@ def check_conversion_limits():
         return False, f"Daily limit reached. Anonymous users can convert {daily_limit} files per day. Please sign up for unlimited conversions."
     
     return True, None
+
+def get_storage_client():
+    """Get Google Cloud Storage client with proper credential handling."""
+    try:
+        # Check for environment variable credentials (Render deployment)
+        if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+            # Create temporary credentials file from environment variable
+            temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+            temp_creds.write(credentials_json)
+            temp_creds.close()
+            current_app.logger.info(f"Using credentials from environment variable, temp file: {temp_creds.name}")
+            return storage.Client.from_service_account_json(temp_creds.name)
+        
+        # Check for local credentials file (local development)
+        local_creds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'gcs-credentials.json')
+        if os.path.exists(local_creds_path):
+            current_app.logger.info(f"Using local credentials file: {local_creds_path}")
+            return storage.Client.from_service_account_json(local_creds_path)
+        
+        # Try default credentials (if running on GCP)
+        current_app.logger.info("Attempting to use default credentials")
+        return storage.Client()
+        
+    except Exception as e:
+        current_app.logger.error(f"Failed to create storage client: {e}")
+        raise Exception(f"Could not authenticate with Google Cloud Storage: {e}")
 
 @main.route('/')
 def index():
@@ -89,22 +118,12 @@ def convert():
     current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {current_user.email if current_user.is_authenticated else 'Anonymous'}")
     
     try:
-        # *** START: DEFINITIVE CREDENTIALS FIX ***
-        # Explicitly load credentials from the Render Secret File path.
-        # This bypasses all environment variable and auto-discovery issues.
-        credentials_path = '/etc/secrets/gcs-credentials.json'
-
-        if not os.path.exists(credentials_path):
-            error_msg = "Critical Error: GCS credentials secret file not found."
-            current_app.logger.error(error_msg)
-            raise Exception(error_msg)
-
-        storage_client = storage.Client.from_service_account_json(credentials_path)
-        # *** END: DEFINITIVE CREDENTIALS FIX ***
-
+        # Get storage client with proper credential handling
+        storage_client = get_storage_client()
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
         blob.upload_from_file(file)
+        current_app.logger.info(f"Successfully uploaded {filename} to GCS bucket {bucket_name}")
 
     except Exception as e:
         current_app.logger.error(f"GCS Upload Failed: {e}")
