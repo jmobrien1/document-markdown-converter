@@ -89,10 +89,23 @@ def convert():
     current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {current_user.email if current_user.is_authenticated else 'Anonymous'}")
     
     try:
-        storage_client = storage.Client()
+        # *** START: DEFINITIVE CREDENTIALS FIX ***
+        # Explicitly load credentials from the Render Secret File path.
+        # This bypasses all environment variable and auto-discovery issues.
+        credentials_path = '/etc/secrets/gcs-credentials.json'
+
+        if not os.path.exists(credentials_path):
+            error_msg = "Critical Error: GCS credentials secret file not found."
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
+
+        storage_client = storage.Client.from_service_account_json(credentials_path)
+        # *** END: DEFINITIVE CREDENTIALS FIX ***
+
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
         blob.upload_from_file(file)
+
     except Exception as e:
         current_app.logger.error(f"GCS Upload Failed: {e}")
         return jsonify({'error': 'Could not upload file to cloud storage.'}), 500
