@@ -1,9 +1,11 @@
 # config.py
 import os
+import json
+import tempfile
 from dotenv import load_dotenv
 
 basedir = os.path.abspath(os.path.dirname(__file__))
-load_dotenv(os.path.join(basedir, '..', '.env'))
+load_dotenv(os.path.join(basedir, '.env'))
 
 class Config:
     """Base configuration class."""
@@ -24,16 +26,41 @@ class Config:
     # --- Google Cloud Storage Configuration ---
     GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME')
     
-    # --- THE FIX: Explicitly load the path to the credentials file ---
-    GCS_CREDENTIALS_PATH = os.path.join(basedir, '..', os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', ''))
+    # Handle Google Cloud credentials for both local development and Render deployment
+    if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
+        # Render deployment - create temporary credentials file from environment variable
+        try:
+            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+            temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+            temp_creds.write(credentials_json)
+            temp_creds.close()
+            GCS_CREDENTIALS_PATH = temp_creds.name
+        except Exception as e:
+            print(f"Error creating credentials file: {e}")
+            GCS_CREDENTIALS_PATH = None
+    else:
+        # Local development - use file path
+        GCS_CREDENTIALS_PATH = os.path.join(basedir, 'gcs-credentials.json')
+        if not os.path.exists(GCS_CREDENTIALS_PATH):
+            GCS_CREDENTIALS_PATH = None
 
     # --- Google Document AI Configuration ---
     DOCAI_PROCESSOR_REGION = os.environ.get('DOCAI_PROCESSOR_REGION', 'us-east4') 
     DOCAI_PROCESSOR_ID = os.environ.get('DOCAI_PROCESSOR_ID')
 
     # --- Database Configuration ---
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'sqlite:///' + os.path.join(basedir, '..', 'app.db')
+    # Use PostgreSQL in production (Render), SQLite in development
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    if DATABASE_URL:
+        # Production database (Render provides DATABASE_URL)
+        SQLALCHEMY_DATABASE_URI = DATABASE_URL
+        # Handle SQLAlchemy 1.4+ compatibility
+        if DATABASE_URL.startswith('postgres://'):
+            SQLALCHEMY_DATABASE_URI = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    else:
+        # Development database
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, '..', 'app.db')
+    
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     @staticmethod
@@ -43,8 +70,8 @@ class Config:
             app.logger.warning("GCS_BUCKET_NAME is not set. File uploads will fail.")
         if not app.config.get('DOCAI_PROCESSOR_ID'):
             app.logger.warning("DOCAI_PROCESSOR_ID is not set. Pro conversions will fail.")
-        if not app.config.get('GCS_CREDENTIALS_PATH') or not os.path.exists(app.config['GCS_CREDENTIALS_PATH']):
-            app.logger.warning("GCS credentials file not found. All GCS operations will fail.")
+        if not app.config.get('GCS_CREDENTIALS_PATH'):
+            app.logger.warning("GCS credentials not configured. All GCS operations will fail.")
 
 
 class DevelopmentConfig(Config):
@@ -55,9 +82,36 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     """Configuration settings for the production environment."""
     DEBUG = False
-    # In production, you would typically use a managed PostgreSQL or MySQL database
-    # and load its URL from the DATABASE_URL environment variable.
-    # SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    
+    # Production-specific settings
+    SQLALCHEMY_ECHO = False
+    
+    @classmethod
+    def init_app(cls, app):
+        Config.init_app(app)
+        
+        # Production-specific initialization
+        import logging
+        from logging.handlers import RotatingFileHandler
+        
+        # Create logs directory if it doesn't exist
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
+        
+        # File logging
+        file_handler = RotatingFileHandler(
+            'logs/mdraft.log',
+            maxBytes=10240000,
+            backupCount=10
+        )
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+        ))
+        file_handler.setLevel(logging.INFO)
+        app.logger.addHandler(file_handler)
+        
+        app.logger.setLevel(logging.INFO)
+        app.logger.info('mdraft startup')
 
 
 # A dictionary to easily access configuration classes by name.
