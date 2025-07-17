@@ -64,8 +64,8 @@ envVarGroups:
       - key: SECRET_KEY
         generateValue: true # Let Render generate a secure secret key
       - key: GCS_BUCKET_NAME
-        value: your-gcs-bucket-name-here # <-- PASTE YOUR BUCKET NAME
+        value: mdraft-uploads-1974 # <-- PASTE YOUR BUCKET NAME
       - key: GOOGLE_APPLICATION_CREDENTIALS
         value: /etc/secrets/gcs-credentials.json # Path on Render's server
       - key: DOCAI_PROCESSOR_ID
-        value: your-docai-processor-id-here # <-- PASTE YOUR PROCESSOR ID
+        value: mdraft-processor # <-- PASTE YOUR PROCESSOR ID

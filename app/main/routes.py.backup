@@ -6,14 +6,15 @@ import uuid
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 from flask import (
-    render_template, request, jsonify, url_for, current_app, session
+    Blueprint, render_template, request, jsonify, url_for, current_app, session
 )
 from werkzeug.utils import secure_filename
 from app.tasks import convert_file_task
-from flask_login import current_user
+from flask_login import login_required, current_user
 from ..models import User, AnonymousUsage, Conversion
 from .. import db
-from . import main
+
+main = Blueprint('main', __name__)
 
 def allowed_file(filename):
     """Check if the file's extension is in the allowed set."""
@@ -86,7 +87,8 @@ def convert():
     # Check if the user requested a pro conversion
     use_pro_converter = request.form.get('pro_conversion') == 'on'
     
-    current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {current_user.email if current_user.is_authenticated else 'Anonymous'}")
+    # --- ADDED FOR DEBUGGING ---
+    current_app.logger.info(f"'/convert' route called. Pro conversion requested: {use_pro_converter}")
     
     try:
         storage_client = storage.Client()
@@ -101,20 +103,16 @@ def convert():
     user_id = current_user.id if current_user.is_authenticated else None
     session_id = session.get('session_id') if not current_user.is_authenticated else None
     
-    # Get file size
-    file.seek(0, 2)  # Seek to end
-    file_size = file.tell()
-    file.seek(0)  # Reset to beginning
-    
     conversion = Conversion(
         user_id=user_id,
         session_id=session_id,
         original_filename=filename,
-        file_size=file_size,
+        file_size=len(file.read()),
         file_type=os.path.splitext(filename)[1].lower(),
         conversion_type='pro' if use_pro_converter else 'standard',
         status='pending'
     )
+    file.seek(0)  # Reset file pointer after reading size
     db.session.add(conversion)
     db.session.commit()
 
@@ -123,13 +121,13 @@ def convert():
         usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
         usage.increment_usage()
 
-    # Pass the conversion ID to the Celery task for status updates
+    # Pass the pro converter flag to the Celery task
     task = convert_file_task.delay(
         bucket_name,
         blob_name,
         filename,
         use_pro_converter,
-        conversion.id  # Pass conversion ID for status tracking
+        conversion.id  # Pass conversion ID to update status
     )
 
     return jsonify({
@@ -162,7 +160,7 @@ def task_status(job_id):
 
 @main.route('/stats')
 def conversion_stats():
-    """Get conversion statistics for dashboard."""
+    """Get conversion statistics."""
     try:
         if current_user.is_authenticated:
             # User-specific stats
@@ -209,44 +207,6 @@ def conversion_stats():
     except Exception as e:
         current_app.logger.error(f"Error getting stats: {str(e)}")
         return jsonify({'error': 'Error retrieving statistics'}), 500
-
-@main.route('/history')
-def conversion_history():
-    """Get conversion history for current user."""
-    if not current_user.is_authenticated:
-        return jsonify({'error': 'Authentication required'}), 401
-    
-    try:
-        # Get user's conversion history
-        conversions = current_user.conversions.order_by(
-            Conversion.created_at.desc()
-        ).limit(50).all()
-        
-        history = []
-        for conv in conversions:
-            history.append({
-                'id': conv.id,
-                'filename': conv.original_filename,
-                'file_type': conv.file_type,
-                'conversion_type': conv.conversion_type,
-                'status': conv.status,
-                'created_at': conv.created_at.isoformat(),
-                'completed_at': conv.completed_at.isoformat() if conv.completed_at else None,
-                'processing_time': conv.processing_time,
-                'file_size': conv.file_size,
-                'markdown_length': conv.markdown_length,
-                'error_message': conv.error_message
-            })
-        
-        return jsonify({
-            'history': history,
-            'total_conversions': current_user.conversions.count(),
-            'daily_conversions': current_user.get_daily_conversions()
-        })
-        
-    except Exception as e:
-        current_app.logger.error(f"Error getting conversion history: {str(e)}")
-        return jsonify({'error': 'Error retrieving history'}), 500
 
 @main.app_errorhandler(413)
 def request_entity_too_large(e):

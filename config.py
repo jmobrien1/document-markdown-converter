@@ -13,6 +13,9 @@ class Config:
         'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'txt', 'html', 
         'htm', 'csv', 'json', 'xml', 'epub'
     }
+    
+    # Anonymous user daily conversion limit
+    ANONYMOUS_DAILY_LIMIT = 5
 
     # --- Celery Configuration ---
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
@@ -23,7 +26,6 @@ class Config:
     
     # --- THE FIX: Explicitly load the path to the credentials file ---
     GCS_CREDENTIALS_PATH = os.path.join(basedir, '..', os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', ''))
-
 
     # --- Google Document AI Configuration ---
     DOCAI_PROCESSOR_REGION = os.environ.get('DOCAI_PROCESSOR_REGION', 'us-east4') 
@@ -44,9 +46,11 @@ class Config:
         if not app.config.get('GCS_CREDENTIALS_PATH') or not os.path.exists(app.config['GCS_CREDENTIALS_PATH']):
             app.logger.warning("GCS credentials file not found. All GCS operations will fail.")
 
+
 class DevelopmentConfig(Config):
     """Configuration settings for the development environment."""
     DEBUG = True
+
 
 class ProductionConfig(Config):
     """Configuration settings for the production environment."""
