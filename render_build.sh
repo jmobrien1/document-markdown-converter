@@ -2,9 +2,11 @@
 # exit on error
 set -o errexit
 
-# Install dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
+
+# Set the FLASK_APP environment variable
+export FLASK_APP=run.py
 
 # Apply database migrations
 flask db upgrade
