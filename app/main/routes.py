@@ -161,7 +161,6 @@ def convert():
         blob_name,
         filename,
         use_pro_converter,
-        conversion.id  # Pass conversion ID for status tracking
     )
 
     return jsonify({
