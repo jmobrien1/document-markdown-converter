@@ -1,5 +1,5 @@
 # app/tasks.py
-# Complete file with Document AI batch processing for large PDFs - FINAL VERSION
+# Complete file with Document AI batch processing - CORRECTED API CLASSES
 
 import os
 import time
@@ -76,25 +76,24 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
         # Prepare batch processing request
         processor_name = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
         
-        # Input and output configuration
-        input_config = documentai.BatchDocumentsInputConfig(
-            gcs_prefix=documentai.GcsPrefix(gcs_uri_prefix=input_gcs_uri)
-        )
-        
-        output_config = documentai.DocumentOutputConfig(
-            gcs_output_config=documentai.GcsOutputConfig(
-                gcs_uri=output_gcs_uri
-            )
-        )
-        
-        # Create batch process request
-        request = documentai.BatchProcessRequest(
-            name=processor_name,
-            input_documents=input_config,
-            document_output_config=output_config,
-        )
+        # Create the batch process request using correct structure
+        request = {
+            "name": processor_name,
+            "input_documents": {
+                "gcs_prefix": {
+                    "gcs_uri_prefix": input_gcs_uri
+                }
+            },
+            "document_output_config": {
+                "gcs_output_config": {
+                    "gcs_uri": output_gcs_uri
+                }
+            }
+        }
         
         print(f"--- [Celery Task] Submitting batch job for processor: {processor_name}")
+        print(f"--- [Celery Task] DEBUG: Input URI: {input_gcs_uri}")
+        print(f"--- [Celery Task] DEBUG: Output URI: {output_gcs_uri}")
         
         # Submit batch processing job
         operation = client.batch_process_documents(request=request)
