@@ -1,5 +1,5 @@
 # app/tasks.py
-# Complete file with Document AI batch processing - CORRECTED API CLASSES
+# Complete file with Document AI batch processing and enhanced debug logging
 
 import os
 import time
@@ -127,34 +127,67 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
         
         # Get the result
         result = operation.result()
+        print(f"--- [Celery Task] DEBUG: Operation result type: {type(result)}")
         
         # Download the processed results from GCS
         storage_client = storage.Client.from_service_account_json(credentials_path)
         
         # The output will be in the specified GCS output location
-        # Document AI creates JSON files with the extracted text
         bucket_name = output_gcs_uri.split('/')[2]
         output_prefix = '/'.join(output_gcs_uri.split('/')[3:])
         
+        print(f"--- [Celery Task] DEBUG: Looking for output files in bucket: {bucket_name}")
+        print(f"--- [Celery Task] DEBUG: Output prefix: {output_prefix}")
+        
         bucket = storage_client.bucket(bucket_name)
         
-        # List files in output directory
-        blobs = bucket.list_blobs(prefix=output_prefix)
+        # List ALL files in output directory
+        blobs = list(bucket.list_blobs(prefix=output_prefix))
+        print(f"--- [Celery Task] DEBUG: Found {len(blobs)} files in output directory")
+        
+        for blob in blobs:
+            print(f"--- [Celery Task] DEBUG: Found file: {blob.name} (size: {blob.size} bytes)")
         
         extracted_text = ""
+        json_files_found = 0
+        
         for blob in blobs:
             if blob.name.endswith('.json'):
-                # Download and parse the JSON result
-                json_content = blob.download_as_text()
-                doc_data = json.loads(json_content)
+                json_files_found += 1
+                print(f"--- [Celery Task] DEBUG: Processing JSON file: {blob.name}")
                 
-                # Extract text from Document AI response
-                if 'document' in doc_data and 'text' in doc_data['document']:
-                    extracted_text += doc_data['document']['text']
-                    extracted_text += "\n\n"
+                try:
+                    # Download and parse the JSON result
+                    json_content = blob.download_as_text()
+                    print(f"--- [Celery Task] DEBUG: Downloaded JSON content length: {len(json_content)}")
+                    
+                    doc_data = json.loads(json_content)
+                    print(f"--- [Celery Task] DEBUG: JSON keys: {list(doc_data.keys())}")
+                    
+                    # Extract text from Document AI response
+                    if 'document' in doc_data and 'text' in doc_data['document']:
+                        text_content = doc_data['document']['text']
+                        print(f"--- [Celery Task] DEBUG: Found text content, length: {len(text_content)}")
+                        extracted_text += text_content
+                        extracted_text += "\n\n"
+                    else:
+                        print(f"--- [Celery Task] DEBUG: No 'document.text' found in JSON structure")
+                        # Show what structure we do have
+                        if 'document' in doc_data:
+                            print(f"--- [Celery Task] DEBUG: Document keys: {list(doc_data['document'].keys())}")
+                        
+                except Exception as e:
+                    print(f"--- [Celery Task] DEBUG: Error processing JSON file {blob.name}: {e}")
+        
+        print(f"--- [Celery Task] DEBUG: Processed {json_files_found} JSON files")
+        print(f"--- [Celery Task] DEBUG: Total extracted text length: {len(extracted_text)}")
         
         if not extracted_text.strip():
-            raise Exception("No text extracted from batch processing results")
+            # More detailed error information
+            error_msg = f"No text extracted from batch processing results. Found {len(blobs)} files, {json_files_found} JSON files"
+            if blobs:
+                error_msg += f". Files found: {[blob.name for blob in blobs[:5]]}"  # Show first 5 files
+            raise Exception(error_msg)
         
         print(f"--- [Celery Task] Successfully extracted {len(extracted_text)} characters from batch processing")
         return extracted_text.strip()
