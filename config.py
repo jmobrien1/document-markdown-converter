@@ -12,10 +12,10 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'a-very-secret-dev-key-for-local-testing')
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024
     ALLOWED_EXTENSIONS = {
-        'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'txt', 'html', 
+        'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'txt', 'html',
         'htm', 'csv', 'json', 'xml', 'epub'
     }
-    
+
     # Anonymous user daily conversion limit
     ANONYMOUS_DAILY_LIMIT = 5
 
@@ -25,7 +25,7 @@ class Config:
 
     # --- Google Cloud Storage Configuration ---
     GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME')
-    
+
     # Handle Google Cloud credentials for both local development and Render deployment
     if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
         # Render deployment - create temporary credentials file from environment variable
@@ -45,8 +45,14 @@ class Config:
             GCS_CREDENTIALS_PATH = None
 
     # --- Google Document AI Configuration ---
-    DOCAI_PROCESSOR_REGION = os.environ.get('DOCAI_PROCESSOR_REGION', 'us-east4') 
+    DOCAI_PROCESSOR_REGION = os.environ.get('DOCAI_PROCESSOR_REGION', 'us-east4')
     DOCAI_PROCESSOR_ID = os.environ.get('DOCAI_PROCESSOR_ID')
+
+    # --- Stripe Configuration ---
+    STRIPE_PUBLIC_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY')
+    STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
+    STRIPE_PRICE_ID = os.environ.get('STRIPE_PRICE_ID')
+    STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET')
 
     # --- Database Configuration ---
     # Use PostgreSQL in production (Render), SQLite in development
@@ -60,7 +66,7 @@ class Config:
     else:
         # Development database
         SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, '..', 'app.db')
-    
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     @staticmethod
@@ -72,6 +78,8 @@ class Config:
             app.logger.warning("DOCAI_PROCESSOR_ID is not set. Pro conversions will fail.")
         if not app.config.get('GCS_CREDENTIALS_PATH'):
             app.logger.warning("GCS credentials not configured. All GCS operations will fail.")
+        if not app.config.get('STRIPE_SECRET_KEY'):
+            app.logger.warning("STRIPE_SECRET_KEY is not set. Payments will fail.")
 
 
 class DevelopmentConfig(Config):
@@ -82,22 +90,22 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     """Configuration settings for the production environment."""
     DEBUG = False
-    
+
     # Production-specific settings
     SQLALCHEMY_ECHO = False
-    
+
     @classmethod
     def init_app(cls, app):
         Config.init_app(app)
-        
+
         # Production-specific initialization
         import logging
         from logging.handlers import RotatingFileHandler
-        
+
         # Create logs directory if it doesn't exist
         if not os.path.exists('logs'):
             os.mkdir('logs')
-        
+
         # File logging
         file_handler = RotatingFileHandler(
             'logs/mdraft.log',
@@ -109,7 +117,7 @@ class ProductionConfig(Config):
         ))
         file_handler.setLevel(logging.INFO)
         app.logger.addHandler(file_handler)
-        
+
         app.logger.setLevel(logging.INFO)
         app.logger.info('mdraft startup')
 

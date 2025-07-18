@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upgrade to Pro - mdraft</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-dark: #2563eb;
+            --secondary-color: #6366f1;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --success-color: #10b981;
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .upgrade-container {
+            background: var(--surface);
+            border-radius: 1rem;
+            padding: 3rem;
+            box-shadow: var(--shadow-lg);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        .logo { font-size: 2rem; font-weight: 700; color: var(--primary-color); margin-bottom: 2rem; }
+        .upgrade-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .upgrade-subtitle { color: var(--text-secondary); margin-bottom: 2rem; font-size: 1.1rem; }
+        .features-list { list-style: none; margin: 2rem 0; text-align: left; }
+        .features-list li {
+            padding: 0.75rem 0;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+        }
+        .features-list li::before {
+            content: "✅";
+            margin-right: 0.75rem;
+            font-size: 1.2rem;
+            color: var(--success-color);
+        }
+        .pricing-preview {
+            background: #f1f5f9;
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+        .price { font-size: 2.5rem; font-weight: 700; color: var(--primary-color); }
+        .price-period { color: var(--text-secondary); font-size: 1rem; }
+        .btn {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin: 0.5rem;
+            font-size: 1.1rem;
+            width: 100%;
+        }
+        .btn:hover { background: var(--primary-dark); }
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            width: auto;
+        }
+        .btn-secondary:hover { background: var(--border); }
+        .flashes { list-style: none; padding: 0; margin-bottom: 20px; }
+        .flashes li { background: #f8d7da; color: #721c24; padding: 10px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="upgrade-container">
+        <div class="logo">mdraft</div>
+        <h1 class="upgrade-title">MDraft Pro</h1>
+        <p class="upgrade-subtitle">Unlock the full power of document conversion.</p>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul class="flashes">
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <div class="pricing-preview">
+            <div class="price">$9.99<span class="price-period">/month</span></div>
+        </div>
+
+        <ul class="features-list">
+            <li>Unlimited Standard Conversions</li>
+            <li>Unlimited Pro Conversions with Google Document AI</li>
+            <li>Full Conversion History & Analytics</li>
+            <li>Priority Support</li>
+        </ul>
+
+        <form action="{{ url_for('auth.create_checkout_session') }}" method="POST">
+            <button type="submit" class="btn">Upgrade Now</button>
+        </form>
+
+        <div>
+            <a href="{{ url_for('auth.account') }}" class="btn btn-secondary" style="margin-top: 1rem;">Back to Account</a>
+        </div>
+    </div>
+</body>
+</html>
