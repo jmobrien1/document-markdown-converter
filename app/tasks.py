@@ -1,10 +1,13 @@
 # app/tasks.py
-# Complete file with Document AI batch processing for large PDFs - DEBUG VERSION
+# Complete file with Document AI batch processing for large PDFs - FINAL VERSION
 
 import os
 import time
 import tempfile
+import json
+import uuid
 from google.cloud import storage, documentai
+from google.oauth2 import service_account
 from google.api_core import exceptions as google_exceptions
 from markitdown import MarkItDown
 from celery import current_task
@@ -28,9 +31,12 @@ def process_with_docai(credentials_path, project_id, location, processor_id, fil
     opts = {"api_endpoint": f"{location}-documentai.googleapis.com"}
     
     try:
+        # Load credentials from file for synchronous processing
+        credentials = service_account.Credentials.from_service_account_file(credentials_path)
+        
         client = documentai.DocumentProcessorServiceClient(
             client_options=opts,
-            credentials_path=credentials_path
+            credentials=credentials
         )
         
         with open(file_path, "rb") as image:
@@ -56,11 +62,15 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
     print("--- [Celery Task] Starting Document AI BATCH processing...")
     
     try:
-        # Initialize Document AI client
+        # Initialize Document AI client with proper credentials
         client_options = {"api_endpoint": f"{location}-documentai.googleapis.com"}
+        
+        # Load credentials from file
+        credentials = service_account.Credentials.from_service_account_file(credentials_path)
+        
         client = documentai.DocumentProcessorServiceClient(
             client_options=client_options,
-            credentials_path=credentials_path
+            credentials=credentials
         )
         
         # Prepare batch processing request
@@ -137,7 +147,6 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
             if blob.name.endswith('.json'):
                 # Download and parse the JSON result
                 json_content = blob.download_as_text()
-                import json
                 doc_data = json.loads(json_content)
                 
                 # Extract text from Document AI response
@@ -157,7 +166,7 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
 
 @celery.task(bind=True)
 def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False):
-    """Enhanced Celery task with batch processing for large documents - DEBUG VERSION."""
+    """Enhanced Celery task with batch processing for large documents."""
     print("\n\n--- [Celery Task] NEW TASK RECEIVED ---")
     print(f"    Filename: '{original_filename}' | Pro mode: {use_pro_converter}")
     
@@ -216,7 +225,6 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                 print("--- [Celery Task] Large document detected - using BATCH processing")
                 
                 # Create unique GCS paths for batch processing
-                import uuid
                 batch_id = str(uuid.uuid4())
                 print(f"--- [Celery Task] DEBUG: Generated batch ID: {batch_id}")
                 
@@ -239,10 +247,10 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                 
                 # Clean up batch files
                 try:
-                    for blob in bucket.list_blobs(prefix=f"batch-input/{batch_id}/"):
-                        blob.delete()
-                    for blob in bucket.list_blobs(prefix=f"batch-output/{batch_id}/"):
-                        blob.delete()
+                    for blob_cleanup in bucket.list_blobs(prefix=f"batch-input/{batch_id}/"):
+                        blob_cleanup.delete()
+                    for blob_cleanup in bucket.list_blobs(prefix=f"batch-output/{batch_id}/"):
+                        blob_cleanup.delete()
                 except:
                     pass  # Don't fail the task if cleanup fails
                 
