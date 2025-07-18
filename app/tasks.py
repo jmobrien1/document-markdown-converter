@@ -1,5 +1,5 @@
 # app/tasks.py
-# Complete file with Document AI batch processing and enhanced debug logging
+# Complete file with Document AI batch processing and fixed text extraction
 
 import os
 import time
@@ -164,17 +164,26 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
                     doc_data = json.loads(json_content)
                     print(f"--- [Celery Task] DEBUG: JSON keys: {list(doc_data.keys())}")
                     
-                    # Extract text from Document AI response
-                    if 'document' in doc_data and 'text' in doc_data['document']:
-                        text_content = doc_data['document']['text']
+                    # Extract text from Document AI batch response
+                    # The text is directly in the 'text' field for batch processing
+                    if 'text' in doc_data:
+                        text_content = doc_data['text']
                         print(f"--- [Celery Task] DEBUG: Found text content, length: {len(text_content)}")
                         extracted_text += text_content
                         extracted_text += "\n\n"
+                    elif 'document' in doc_data and 'text' in doc_data['document']:
+                        # Fallback for synchronous format
+                        text_content = doc_data['document']['text']
+                        print(f"--- [Celery Task] DEBUG: Found text content in document.text, length: {len(text_content)}")
+                        extracted_text += text_content
+                        extracted_text += "\n\n"
                     else:
-                        print(f"--- [Celery Task] DEBUG: No 'document.text' found in JSON structure")
+                        print(f"--- [Celery Task] DEBUG: No text field found in JSON structure")
                         # Show what structure we do have
                         if 'document' in doc_data:
                             print(f"--- [Celery Task] DEBUG: Document keys: {list(doc_data['document'].keys())}")
+                        else:
+                            print(f"--- [Celery Task] DEBUG: Available top-level keys: {list(doc_data.keys())}")
                         
                 except Exception as e:
                     print(f"--- [Celery Task] DEBUG: Error processing JSON file {blob.name}: {e}")
