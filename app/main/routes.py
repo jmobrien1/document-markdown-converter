@@ -1,5 +1,5 @@
 # app/main/routes.py
-# Enhanced with freemium logic and anonymous usage tracking
+# Enhanced with freemium logic, anonymous usage tracking, and batch processing support
 
 import os
 import uuid
@@ -94,6 +94,7 @@ def convert():
     """
     Handles file upload, checks for pro conversion flag, and starts the task.
     Now supports both authenticated and anonymous users with rate limiting.
+    Enhanced for batch processing of large documents.
     """
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
@@ -138,6 +139,9 @@ def convert():
     file_size = file.tell()
     file.seek(0)  # Reset to beginning
     
+    # Estimate if this will be a batch job (for user feedback)
+    is_large_file = file_size > 1750000  # ~25 pages * 70KB = ~1.75MB
+    
     conversion = Conversion(
         user_id=user_id,
         session_id=session_id,
@@ -155,24 +159,32 @@ def convert():
         usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
         usage.increment_usage()
 
-    # Pass the conversion ID to the Celery task for status updates
+    # Start the conversion task
     task = convert_file_task.delay(
         bucket_name,
         blob_name,
         filename,
-        use_pro_converter,
+        use_pro_converter
     )
 
-    return jsonify({
+    # Provide appropriate user feedback based on file size
+    response_data = {
         'job_id': task.id,
         'conversion_id': conversion.id,
-        'status_url': url_for('main.task_status', job_id=task.id)
-    }), 202
+        'status_url': url_for('main.task_status', job_id=task.id),
+        'is_large_file': is_large_file
+    }
+    
+    if is_large_file and use_pro_converter:
+        response_data['message'] = 'Large document detected. This may take several minutes to process.'
+    
+    return jsonify(response_data), 202
 
 @main.route('/status/<job_id>')
 def task_status(job_id):
     """
     Endpoint for the client to poll for the status of a background task.
+    Enhanced to show progress for batch processing.
     """
     task = convert_file_task.AsyncResult(job_id)
     
