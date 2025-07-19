@@ -1,25 +1,20 @@
 # celery_worker.py
-# Worker-specific entry point that completely avoids stripe dependencies
+# This script is the entry point for the Celery worker.
+# CLEAN VERSION - All anti-patterns removed
 
 import os
 from dotenv import load_dotenv
 
-# Load environment variables first
+# This ensures all environment variables are available before any other code is imported.
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 
-# Set service type BEFORE importing anything from app
-os.environ['MDRAFT_SERVICE_TYPE'] = 'worker'
+from app import create_app, celery
 
-# Now import app factory and create worker-specific app
-from app import create_worker_app, celery
+# Create a Flask app instance using the app factory
+# This is crucial for the worker to have access to app.config
+app = create_app(os.getenv('FLASK_CONFIG') or 'default')
 
-# Create minimal worker app (no auth blueprint = no stripe)
-app = create_worker_app(os.getenv('FLASK_CONFIG') or 'default')
-
-# Push application context for tasks
+# Push an application context to make it available for the tasks
 app.app_context().push()
-
-# Log successful worker startup
-app.logger.info("Celery worker started successfully without stripe dependencies")

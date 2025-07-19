@@ -296,7 +296,7 @@ def conversion_history():
 
 @main.route('/health')
 def health_check():
-    """Health check endpoint for monitoring service status."""
+    """General health check endpoint for monitoring service status."""
     try:
         # Test database connection
         from ..models import User
@@ -336,37 +336,86 @@ def health_check():
     status_code = 200 if health_data["status"] == "healthy" else 503
     return jsonify(health_data), status_code
 
-@main.route('/health/worker')
-def worker_health_check():
-    """Specific health check for worker service."""
+@main.route('/health/web')
+def health_web():
+    """Web service health check endpoint."""
+    health_data = {
+        "service": "web",
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "dependencies": {}
+    }
+    
+    # Test database connection
     try:
-        # Test that we can import worker dependencies
+        from ..models import User
+        User.query.first()
+        health_data["dependencies"]["database"] = "healthy"
+    except Exception as e:
+        health_data["dependencies"]["database"] = f"unhealthy: {str(e)}"
+        health_data["status"] = "degraded"
+    
+    # Test stripe availability
+    try:
+        import stripe
+        health_data["dependencies"]["stripe"] = "available"
+    except ImportError:
+        health_data["dependencies"]["stripe"] = "not_available"
+        health_data["status"] = "degraded"
+    
+    # Test redis/celery connection
+    try:
+        from .. import celery
+        celery.control.ping(timeout=1.0)
+        health_data["dependencies"]["celery"] = "healthy"
+    except Exception as e:
+        health_data["dependencies"]["celery"] = f"unhealthy: {str(e)}"
+    
+    status_code = 200 if health_data["status"] == "healthy" else 503
+    return jsonify(health_data), status_code
+
+@main.route('/health/worker')
+def health_worker():
+    """Worker service health check endpoint."""
+    health_data = {
+        "service": "worker",
+        "status": "healthy", 
+        "timestamp": datetime.utcnow().isoformat(),
+        "dependencies": {}
+    }
+    
+    # Test that we can import worker dependencies
+    try:
         from app.tasks import convert_file_task
-        
-        # Test celery connection
+        health_data["dependencies"]["tasks"] = "available"
+    except Exception as e:
+        health_data["dependencies"]["tasks"] = f"unavailable: {str(e)}"
+        health_data["status"] = "unhealthy"
+    
+    # Test celery worker status
+    try:
         from .. import celery
         inspect = celery.control.inspect()
         stats = inspect.stats()
-        
-        # Check if any workers are active
         active_workers = len(stats) if stats else 0
+        health_data["dependencies"]["active_workers"] = active_workers
         
-        health_data = {
-            "service": "worker", 
-            "status": "healthy" if active_workers > 0 else "no_workers",
-            "active_workers": active_workers,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-        return jsonify(health_data), 200
-        
+        if active_workers == 0:
+            health_data["status"] = "no_workers"
+            
     except Exception as e:
-        return jsonify({
-            "service": "worker",
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }), 503
+        health_data["dependencies"]["celery_inspect"] = f"failed: {str(e)}"
+        health_data["status"] = "unhealthy"
+    
+    # Check if stripe is available (should NOT be required for worker)
+    try:
+        import stripe
+        health_data["dependencies"]["stripe"] = "available_but_not_needed"
+    except ImportError:
+        health_data["dependencies"]["stripe"] = "not_available_as_expected"
+    
+    status_code = 200 if health_data["status"] in ["healthy", "no_workers"] else 503
+    return jsonify(health_data), status_code
 
 @main.app_errorhandler(413)
 def request_entity_too_large(e):
