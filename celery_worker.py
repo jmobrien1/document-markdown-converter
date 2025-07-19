@@ -1,3 +1,13 @@
+import subprocess
+print("📦 Installed packages:")
+subprocess.run(["pip", "list"])
+
+try:
+    import stripe
+except ImportError:
+    print("❌ Stripe not found — installing manually")
+    subprocess.run(["pip", "install", "stripe==9.13.0"])
+    import stripe
 # celery_worker.py
 # This script is the entry point for the Celery worker.
 # This version explicitly loads the .env file to ensure the worker has all credentials.
