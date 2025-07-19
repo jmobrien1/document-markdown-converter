@@ -11,8 +11,8 @@ services:
     name: mdraft-web
     env: python
     plan: free
-    # NUCLEAR CACHE BUST: Every possible cache-busting technique
-    buildCommand: "rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall --upgrade -r requirements.txt && pip show stripe && pip list | grep stripe && echo 'WEB-NUCLEAR-STRIPE-v10-$(date +%s)'"
+    # Force Python 3.11 to avoid grpcio compilation issues
+    buildCommand: "pip install --no-cache-dir --force-reinstall -r requirements.txt"
     startCommand: "gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
@@ -38,8 +38,8 @@ services:
     name: mdraft-worker
     env: python
     plan: free
-    # NUCLEAR CACHE BUST: Maximum aggression against cached builds
-    buildCommand: "rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall --upgrade -r requirements.txt && pip show stripe && pip list | grep stripe && python -c 'import stripe; print(f\"Stripe version: {stripe.__version__}\")' && echo 'WORKER-NUCLEAR-STRIPE-v10-$(date +%s)'"
+    # Force Python 3.11 to avoid grpcio compilation issues
+    buildCommand: "pip install --no-cache-dir --force-reinstall -r requirements.txt"
     startCommand: "celery -A celery_worker.celery worker --loglevel=info"
     envVars:
       - key: PYTHON_VERSION
