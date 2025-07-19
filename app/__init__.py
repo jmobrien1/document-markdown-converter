@@ -1,5 +1,5 @@
-# app/__init__.py - Standardized Configuration Loading
-# Single source of truth for all configuration loading
+# app/__init__.py
+# Flask application factory with complete initialization including Celery and conditional blueprint registration
 
 import os
 from flask import Flask
@@ -82,5 +82,40 @@ def create_app(config_name='default'):
         """Runs the SQL CREATE statements to create the tables."""
         db.create_all()
         print("Database tables created.")
+
+    # Custom CLI command to migrate Stripe columns
+    @app.cli.command("migrate-stripe")
+    def migrate_stripe_columns():
+        """Add missing Stripe columns to users table."""
+        from sqlalchemy import text
+        
+        try:
+            # Check if columns exist first
+            result = db.session.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name IN ('stripe_customer_id', 'stripe_subscription_id')
+            """))
+            existing_columns = [row[0] for row in result]
+            
+            if 'stripe_customer_id' not in existing_columns:
+                db.session.execute(text("ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(255)"))
+                print("✅ Added stripe_customer_id column")
+            else:
+                print("✅ stripe_customer_id column already exists")
+            
+            if 'stripe_subscription_id' not in existing_columns:
+                db.session.execute(text("ALTER TABLE users ADD COLUMN stripe_subscription_id VARCHAR(255)"))
+                print("✅ Added stripe_subscription_id column")
+            else:
+                print("✅ stripe_subscription_id column already exists")
+            
+            db.session.commit()
+            print("🎉 Stripe columns migration completed successfully!")
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ Migration failed: {str(e)}")
+            raise
 
     return app
