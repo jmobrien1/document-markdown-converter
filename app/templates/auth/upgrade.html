@@ -1,250 +1,328 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="Content-Style-Type" content="text/css">
-  <title></title>
-  <meta name="Generator" content="Cocoa HTML Writer">
-  <meta name="CocoaVersion" content="2575.6">
-  <style type="text/css">
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
-    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upgrade to Pro - mdraft</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-dark: #2563eb;
+            --secondary-color: #6366f1;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --success-color: #10b981;
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .upgrade-container {
+            background: var(--surface);
+            border-radius: 1rem;
+            padding: 3rem;
+            box-shadow: var(--shadow-lg);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .logo { 
+            font-size: 2rem; 
+            font-weight: 700; 
+            color: var(--primary-color); 
+            margin-bottom: 2rem; 
+        }
+        
+        .upgrade-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .upgrade-subtitle { 
+            color: var(--text-secondary); 
+            margin-bottom: 2rem; 
+            font-size: 1.1rem; 
+        }
+        
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 2rem 0;
+            text-align: left;
+        }
+        
+        .plan-card {
+            border: 2px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            position: relative;
+        }
+        
+        .plan-card.featured {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 1px var(--primary-color);
+        }
+        
+        .plan-badge {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--primary-color);
+            color: white;
+            padding: 0.25rem 1rem;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .plan-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .plan-price {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+        
+        .plan-price .period {
+            font-size: 1rem;
+            color: var(--text-secondary);
+        }
+        
+        .features-list {
+            list-style: none;
+            margin: 1rem 0;
+        }
+        
+        .features-list li {
+            padding: 0.5rem 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .features-list li::before {
+            content: "✅";
+            margin-right: 0.5rem;
+        }
+        
+        .features-list.basic li::before {
+            content: "✓";
+            color: var(--text-secondary);
+        }
+        
+        .btn {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 1rem;
+            width: 100%;
+            margin-top: 1rem;
+        }
+        
+        .btn:hover { background: var(--primary-dark); }
+        
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover { background: var(--border); color: var(--text-primary); }
+        
+        .value-props {
+            background: #f1f5f9;
+            border-radius: 0.75rem;
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: left;
+        }
+        
+        .value-prop {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+        
+        .value-prop:last-child { margin-bottom: 0; }
+        
+        .value-prop-icon {
+            font-size: 1.5rem;
+            margin-right: 1rem;
+            flex-shrink: 0;
+        }
+        
+        .value-prop-content h4 {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        .value-prop-content p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .money-back {
+            background: rgba(16, 185, 129, 0.1);
+            color: #065f46;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+        
+        .flashes { 
+            list-style: none; 
+            padding: 0; 
+            margin-bottom: 20px; 
+            text-align: left;
+        }
+        
+        .flashes li { 
+            background: #f8d7da; 
+            color: #721c24; 
+            padding: 10px; 
+            border-radius: 8px; 
+            margin-bottom: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .upgrade-container {
+                padding: 2rem;
+                margin: 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
-<p class="p1">&lt;!DOCTYPE html&gt;</p>
-<p class="p1">&lt;html lang="en"&gt;</p>
-<p class="p1">&lt;head&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta charset="UTF-8"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;title&gt;Upgrade to Pro - mdraft&lt;/title&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;style&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>:root {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--primary-color: #3b82f6;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--primary-dark: #2563eb;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--secondary-color: #6366f1;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--background: #f8fafc;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--surface: #ffffff;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--text-primary: #0f172a;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--text-secondary: #64748b;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--border: #e2e8f0;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--success-color: #10b981;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>* {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin: 0;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 0;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>box-sizing: border-box;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>body {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: var(--background);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--text-primary);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>line-height: 1.6;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>min-height: 100vh;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>display: flex;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>align-items: center;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>justify-content: center;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 2rem;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.upgrade-container {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: var(--surface);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 1rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 3rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>box-shadow: var(--shadow-lg);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>max-width: 500px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>width: 100%;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>text-align: center;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.logo {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 2rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 700;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--primary-color);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin-bottom: 2rem;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.upgrade-title {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 2rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 700;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin-bottom: 1rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));</p>
-<p class="p1"><span class="Apple-converted-space">            </span>-webkit-background-clip: text;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>-webkit-text-fill-color: transparent;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background-clip: text;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.upgrade-subtitle {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin-bottom: 2rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 1.1rem;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.features-list {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>list-style: none;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin: 2rem 0;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>text-align: left;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.features-list li {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 0.75rem 0;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>display: flex;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>align-items: center;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.features-list li::before {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>content: "✨";</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin-right: 0.75rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 1.2rem;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.coming-soon {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(59, 130, 246, 0.1));</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border: 1px solid rgba(99, 102, 241, 0.2);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 0.75rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 2rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin: 2rem 0;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.coming-soon-title {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 600;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin-bottom: 0.5rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--primary-color);</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.coming-soon-text {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 0.9rem;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.pricing-preview {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: var(--surface);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border: 2px solid var(--primary-color);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 0.75rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 1.5rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin: 2rem 0;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.price {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 2.5rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 700;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--primary-color);</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.price-period {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 1rem;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.btn-primary {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: var(--primary-color);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: white;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 0.75rem 2rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border: none;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 0.5rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 600;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>cursor: pointer;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>transition: background-color 0.2s ease;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>text-decoration: none;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>display: inline-block;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin: 0.5rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 1.1rem;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.btn-primary:hover {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: var(--primary-dark);</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.btn-secondary {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: transparent;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 0.75rem 2rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border: 1px solid var(--border);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 0.5rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 500;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>cursor: pointer;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>transition: all 0.2s ease;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>text-decoration: none;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>display: inline-block;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin: 0.5rem;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.btn-secondary:hover {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: var(--border);</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.current-plan {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background: rgba(16, 185, 129, 0.1);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border: 1px solid rgba(16, 185, 129, 0.2);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 0.5rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 0.75rem 1rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin: 1rem 0;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: #059669;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 500;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>@media (max-width: 768px) {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>.upgrade-container {</p>
-<p class="p1"><span class="Apple-converted-space">                </span>padding: 2rem;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>margin: 1rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">            </span>.upgrade-title {</p>
-<p class="p1"><span class="Apple-converted-space">                </span>font-size: 1.5rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">            </span>.features-list {</p>
-<p class="p1"><span class="Apple-converted-space">                </span>font-size: 0.9rem;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>}</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;/style&gt;</p>
-<p class="p1">&lt;/head&gt;</p>
-<p class="p1">&lt;body&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="upgrade-container"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="logo"&gt;mdraft&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;h1 class="upgrade-title"&gt;mdraft Pro&lt;/h1&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;p class="upgrade-subtitle"&gt;Unlock the full power of document conversion&lt;/p&gt;</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="current-plan"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>✅ You currently have unlimited conversions with your free account!</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="pricing-preview"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="price"&gt;$9&lt;span class="price-period"&gt;/month&lt;/span&gt;&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;p&gt;Everything in Free, plus:&lt;/p&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;ul class="features-list"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;li&gt;Priority conversion queue&lt;/li&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;li&gt;Advanced Document AI processing&lt;/li&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;li&gt;Batch file conversions&lt;/li&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;li&gt;API access for integrations&lt;/li&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;li&gt;Premium support via email&lt;/li&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;li&gt;Custom output formats (HTML, LaTeX)&lt;/li&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;li&gt;Team collaboration features&lt;/li&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;li&gt;Conversion analytics dashboard&lt;/li&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/ul&gt;</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="coming-soon"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="coming-soon-title"&gt;🚀 Coming Soon&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;p class="coming-soon-text"&gt;Pro features and Stripe integration are currently in development. We'll notify you when they're available!&lt;/p&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;a href="{{ url_for('auth.account') }}" class="btn-secondary"&gt;Back to Account&lt;/a&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;a href="/" class="btn-primary"&gt;Continue with Free&lt;/a&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;p style="margin-top: 2rem; font-size: 0.875rem; color: var(--text-secondary);"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>Questions? Contact us at &lt;strong&gt;support@mdraft.com&lt;/strong&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/p&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
-<p class="p1">&lt;/body&gt;</p>
-<p class="p1">&lt;/html&gt;</p>
+    <div class="upgrade-container">
+        <div class="logo">mdraft</div>
+        <h1 class="upgrade-title">Upgrade to mdraft Pro</h1>
+        <p class="upgrade-subtitle">Get the most accurate document conversion with Google Document AI</p>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul class="flashes">
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <div class="comparison-grid">
+            <!-- Free Plan -->
+            <div class="plan-card">
+                <div class="plan-name">Free</div>
+                <div class="plan-price">$0<span class="period">/month</span></div>
+                <ul class="features-list basic">
+                    <li>Unlimited standard conversions</li>
+                    <li>PDF & DOCX support</li>
+                    <li>Basic accuracy</li>
+                    <li>Conversion history</li>
+                    <li>Copy & download results</li>
+                </ul>
+                <div style="color: var(--success-color); font-weight: 600; margin-top: 1rem;">
+                    ✅ Your current plan
+                </div>
+            </div>
+
+            <!-- Pro Plan -->
+            <div class="plan-card featured">
+                <div class="plan-badge">RECOMMENDED</div>
+                <div class="plan-name">Pro</div>
+                <div class="plan-price">$9.99<span class="period">/month</span></div>
+                <ul class="features-list">
+                    <li>Everything in Free</li>
+                    <li>💎 Pro AI conversion engine</li>
+                    <li>Superior accuracy for complex PDFs</li>
+                    <li>Handles scanned documents</li>
+                    <li>Tables & images extraction</li>
+                    <li>Priority processing</li>
+                    <li>Batch file processing</li>
+                    <li>Email support</li>
+                </ul>
+                
+                <form action="{{ url_for('auth.create_checkout_session') }}" method="POST">
+                    <button type="submit" class="btn">Upgrade to Pro</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="value-props">
+            <div class="value-prop">
+                <div class="value-prop-icon">🎯</div>
+                <div class="value-prop-content">
+                    <h4>10x Better Accuracy</h4>
+                    <p>Google Document AI handles complex layouts, scanned documents, and preserves formatting that standard tools miss.</p>
+                </div>
+            </div>
+            
+            <div class="value-prop">
+                <div class="value-prop-icon">⚡</div>
+                <div class="value-prop-content">
+                    <h4>Save Hours Every Week</h4>
+                    <p>Stop manually fixing converted documents. Pro conversion gets it right the first time.</p>
+                </div>
+            </div>
+            
+            <div class="value-prop">
+                <div class="value-prop-content">
+                    <h4>🔒 Cancel Anytime</h4>
+                    <p>No long-term commitments. Cancel your subscription anytime from your account dashboard.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="money-back">
+            💰 30-day money back guarantee. If you're not satisfied, we'll refund your first month.
+        </div>
+
+        <div style="margin-top: 2rem;">
+            <a href="{{ url_for('auth.account') }}" class="btn btn-secondary">Back to Account</a>
+        </div>
+
+        <p style="margin-top: 2rem; font-size: 0.875rem; color: var(--text-secondary);">
+            Questions? Contact us at <strong>support@mdraft.com</strong>
+        </p>
+    </div>
 </body>
 </html>

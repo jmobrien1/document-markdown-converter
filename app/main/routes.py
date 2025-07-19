@@ -1,5 +1,5 @@
 # app/main/routes.py
-# Enhanced with freemium logic, anonymous usage tracking, batch processing support, and health checks
+# Enhanced with freemium logic, anonymous usage tracking, batch processing support, health checks, and analytics
 
 import os
 import uuid
@@ -9,12 +9,13 @@ from datetime import datetime
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 from flask import (
-    render_template, request, jsonify, url_for, current_app, session
+    render_template, request, jsonify, url_for, current_app, session, redirect, flash
 )
 from werkzeug.utils import secure_filename
 from app.tasks import convert_file_task
-from flask_login import current_user
+from flask_login import current_user, login_required
 from ..models import User, AnonymousUsage, Conversion
+from ..analytics import Analytics
 from .. import db
 from . import main
 
@@ -69,6 +70,19 @@ def get_storage_client():
     except Exception as e:
         current_app.logger.error(f"Failed to create storage client: {e}")
         raise Exception(f"Could not authenticate with Google Cloud Storage: {e}")
+
+def is_admin():
+    """Check if current user is admin."""
+    if not current_user.is_authenticated:
+        return False
+    
+    # Add your admin email(s) here
+    admin_emails = [
+        'your-admin-email@example.com'  # Replace with your actual email
+    ]
+    
+    # Admin if email is in admin list OR if first premium user
+    return (current_user.email in admin_emails) or (current_user.is_premium and current_user.id == 1)
 
 @main.route('/')
 def index():
@@ -291,6 +305,31 @@ def conversion_history():
     except Exception as e:
         current_app.logger.error(f"Error getting conversion history: {str(e)}")
         return jsonify({'error': 'Error retrieving history'}), 500
+
+# --- Analytics Dashboard ---
+
+@main.route('/admin/analytics')
+@login_required
+def admin_analytics():
+    """Admin analytics dashboard"""
+    if not is_admin():
+        flash('Access denied. Admin privileges required.', 'error')
+        return redirect(url_for('main.index'))
+    
+    try:
+        analytics = Analytics()
+        funnel_data = analytics.get_conversion_funnel()
+        revenue_data = analytics.get_revenue_metrics()
+        usage_data = analytics.get_usage_patterns()
+        
+        return render_template('admin/analytics.html', 
+                             funnel=funnel_data,
+                             revenue=revenue_data,
+                             usage=usage_data)
+    except Exception as e:
+        current_app.logger.error(f"Analytics error: {str(e)}")
+        flash('Error loading analytics data.', 'error')
+        return redirect(url_for('main.index'))
 
 # --- Health Check Endpoints ---
 

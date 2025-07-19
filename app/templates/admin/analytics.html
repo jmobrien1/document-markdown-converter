@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard - mdraft</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            box-shadow: var(--shadow);
+        }
+        
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo { 
+            font-size: 1.5rem; 
+            font-weight: 700; 
+            color: var(--primary-color); 
+        }
+        
+        .nav-links a {
+            margin-left: 1rem;
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .metric-card {
+            background: var(--surface);
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: var(--shadow);
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .metric-card.revenue { border-left-color: var(--success-color); }
+        .metric-card.warning { border-left-color: var(--warning-color); }
+        .metric-card.error { border-left-color: var(--error-color); }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+        
+        .metric-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .metric-change {
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        
+        .metric-change.positive { color: var(--success-color); }
+        .metric-change.negative { color: var(--error-color); }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .chart-container {
+            background: var(--surface);
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: var(--shadow);
+        }
+        
+        .chart-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        
+        .data-table {
+            background: var(--surface);
+            border-radius: 0.75rem;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        
+        .table-header {
+            background: var(--background);
+            padding: 1rem 1.5rem;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .table-body {
+            padding: 1rem 1.5rem;
+        }
+        
+        .table-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .table-row:last-child {
+            border-bottom: none;
+        }
+        
+        .alert {
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            color: #92400e;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <div class="logo">mdraft admin</div>
+            <div class="nav-links">
+                <a href="/">Main App</a>
+                <a href="{{ url_for('auth.account') }}">Account</a>
+                <a href="{{ url_for('auth.logout') }}">Logout</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <h1 class="page-title">Analytics Dashboard</h1>
+        
+        {% if funnel.anonymous_users == 0 %}
+        <div class="alert">
+            <strong>No data yet!</strong> Your analytics will populate as users start using mdraft.
+        </div>
+        {% endif %}
+
+        <!-- Key Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card revenue">
+                <div class="metric-value">${{ "%.2f"|format(revenue.mrr) }}</div>
+                <div class="metric-label">Monthly Recurring Revenue</div>
+                <div class="metric-change positive">{{ revenue.premium_users }} active subscribers</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-value">{{ funnel.registered_users }}</div>
+                <div class="metric-label">Total Registered Users</div>
+                <div class="metric-change">{{ funnel.anonymous_users }} anonymous sessions</div>
+            </div>
+            
+            <div class="metric-card {% if funnel.premium_conversion_rate < 5 %}warning{% endif %}">
+                <div class="metric-value">{{ "%.1f"|format(funnel.premium_conversion_rate) }}%</div>
+                <div class="metric-label">Premium Conversion Rate</div>
+                <div class="metric-change">{{ funnel.premium_users }} of {{ funnel.registered_users }} users</div>
+            </div>
+            
+            <div class="metric-card {% if funnel.registration_rate < 10 %}error{% endif %}">
+                <div class="metric-value">{{ "%.1f"|format(funnel.registration_rate) }}%</div>
+                <div class="metric-label">Registration Rate</div>
+                <div class="metric-change">Anonymous → Registered conversion</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h3 class="chart-title">Conversion Funnel</h3>
+                <canvas id="funnelChart" width="400" height="200"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3 class="chart-title">File Types Processed</h3>
+                <canvas id="fileTypesChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Usage Data -->
+        <div class="data-table">
+            <div class="table-header">Usage Breakdown (Last 30 Days)</div>
+            <div class="table-body">
+                {% for file_type, count in usage.popular_file_types.items() %}
+                <div class="table-row">
+                    <span>{{ file_type.upper() }} files</span>
+                    <span><strong>{{ count }}</strong> conversions</span>
+                </div>
+                {% endfor %}
+                
+                {% for conv_type, count in usage.conversion_type_usage.items() %}
+                <div class="table-row">
+                    <span>{{ conv_type.title() }} conversions</span>
+                    <span><strong>{{ count }}</strong> processed</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Revenue Projections -->
+        <div class="data-table" style="margin-top: 2rem;">
+            <div class="table-header">Revenue Projections</div>
+            <div class="table-body">
+                <div class="table-row">
+                    <span>Annual Recurring Revenue (ARR)</span>
+                    <span><strong>${{ "%.0f"|format(revenue.arr) }}</strong></span>
+                </div>
+                <div class="table-row">
+                    <span>Estimated Customer Lifetime Value</span>
+                    <span><strong>${{ "%.0f"|format(revenue.clv) }}</strong></span>
+                </div>
+                <div class="table-row">
+                    <span>Target for 10% conversion rate</span>
+                    <span><strong>{{ (funnel.registered_users * 0.1)|int }} premium users</strong></span>
+                </div>
+                <div class="table-row">
+                    <span>Potential MRR at 10% conversion</span>
+                    <span><strong>${{ "%.0f"|format(funnel.registered_users * 0.1 * 9.99) }}</strong></span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Funnel Chart
+        const funnelCtx = document.getElementById('funnelChart').getContext('2d');
+        new Chart(funnelCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Anonymous Users', 'Registered Users', 'Premium Users'],
+                datasets: [{
+                    label: 'Users',
+                    data: [{{ funnel.anonymous_users }}, {{ funnel.registered_users }}, {{ funnel.premium_users }}],
+                    backgroundColor: ['#e2e8f0', '#3b82f6', '#10b981'],
+                    borderColor: ['#cbd5e1', '#2563eb', '#059669'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // File Types Chart
+        const fileTypesCtx = document.getElementById('fileTypesChart').getContext('2d');
+        new Chart(fileTypesCtx, {
+            type: 'doughnut',
+            data: {
+                labels: [{% for file_type in usage.popular_file_types.keys() %}'{{ file_type.upper() }}'{% if not loop.last %},{% endif %}{% endfor %}],
+                datasets: [{
+                    data: [{% for count in usage.popular_file_types.values() %}{{ count }}{% if not loop.last %},{% endif %}{% endfor %}],
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
+                }]
+            },
+            options: {
+                responsive: true
+            }
+        });
+    </script>
+</body>
+</html>
