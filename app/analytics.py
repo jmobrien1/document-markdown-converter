@@ -1,4 +1,6 @@
 # app/analytics.py
+# Data analytics logic only - NO ROUTES
+
 from datetime import datetime, timedelta
 from flask import current_app
 from .models import User, Conversion, AnonymousUsage
@@ -62,13 +64,39 @@ class Analytics:
             'popular_file_types': dict(file_types),
             'conversion_type_usage': dict(conversion_types)
         }
-
-# Add to your routes
-@main.route('/admin/analytics')
-@login_required  # Add admin check
-def admin_analytics():
-    analytics = Analytics()
-    return render_template('admin/analytics.html', 
-                         funnel=analytics.get_conversion_funnel(),
-                         revenue=analytics.get_revenue_metrics(),
-                         usage=analytics.get_usage_patterns())
+    
+    @staticmethod
+    def get_conversion_health():
+        """Monitor conversion success rates and failure patterns"""
+        last_24h = datetime.utcnow() - timedelta(hours=24)
+        last_7d = datetime.utcnow() - timedelta(days=7)
+        
+        # Recent conversion stats
+        recent_total = Conversion.query.filter(Conversion.created_at >= last_24h).count()
+        recent_failed = Conversion.query.filter(
+            Conversion.created_at >= last_24h,
+            Conversion.status == 'failed'
+        ).count()
+        
+        # Weekly trends
+        weekly_total = Conversion.query.filter(Conversion.created_at >= last_7d).count()
+        weekly_failed = Conversion.query.filter(
+            Conversion.created_at >= last_7d,
+            Conversion.status == 'failed'
+        ).count()
+        
+        # Common failure reasons
+        failure_reasons = db.session.query(
+            Conversion.error_message,
+            db.func.count(Conversion.id).label('count')
+        ).filter(
+            Conversion.status == 'failed',
+            Conversion.created_at >= last_7d
+        ).group_by(Conversion.error_message).all()
+        
+        return {
+            'daily_success_rate': ((recent_total - recent_failed) / recent_total * 100) if recent_total > 0 else 100,
+            'weekly_success_rate': ((weekly_total - weekly_failed) / weekly_total * 100) if weekly_total > 0 else 100,
+            'recent_failures': recent_failed,
+            'common_errors': dict(failure_reasons[:5])  # Top 5 error types
+        }
