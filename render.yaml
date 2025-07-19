@@ -11,7 +11,7 @@ services:
     name: mdraft-web
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: "pip install -r requirements.txt # build-v2"
     startCommand: "gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
@@ -37,7 +37,7 @@ services:
     name: mdraft-worker
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: "pip install -r requirements.txt # build-v2"
     startCommand: "celery -A celery_worker.celery worker --loglevel=info"
     envVars:
       - key: PYTHON_VERSION
