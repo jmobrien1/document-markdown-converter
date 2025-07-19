@@ -6,13 +6,13 @@ services:
     ipAllowList: [] # Allow all, or specify IPs if needed
     maxmemoryPolicy: allkeys-lru
 
-  # The main Flask web application
+  # The main Flask web application (with full features including payments)
   - type: web
     name: mdraft-web
     env: python
     plan: free
-    # CACHE BUST: Multiple strategies to force fresh build
-    buildCommand: "pip install --no-cache-dir --force-reinstall -r requirements.txt && echo 'BUILD-v7-STRIPE-FIX-$(date +%s)'"
+    # CACHE BUST: Force fresh build for web service
+    buildCommand: "pip install --no-cache-dir --force-reinstall -r requirements.txt && echo 'WEB-BUILD-v8-$(date +%s)'"
     startCommand: "gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
@@ -21,6 +21,8 @@ services:
         value: run.py
       - key: FLASK_CONFIG
         value: production
+      - key: MDRAFT_SERVICE_TYPE
+        value: web  # This tells the app to load full features
       - key: CELERY_BROKER_URL
         fromService:
           type: redis
@@ -33,13 +35,13 @@ services:
           property: connectionString
       - fromGroup: mdraft-secrets
 
-  # The Celery background worker with FORCED REBUILD
+  # The Celery background worker (minimal features, no payments)
   - type: worker
     name: mdraft-worker
     env: python
     plan: free
-    # CACHE BUST: Force fresh dependency install with different timestamp
-    buildCommand: "pip install --no-cache-dir --force-reinstall -r requirements.txt && echo 'WORKER-BUILD-v7-STRIPE-FIX-$(date +%s)'"
+    # CACHE BUST: Force fresh build for worker service
+    buildCommand: "pip install --no-cache-dir --force-reinstall -r requirements.txt && echo 'WORKER-BUILD-v8-$(date +%s)'"
     startCommand: "celery -A celery_worker.celery worker --loglevel=info"
     envVars:
       - key: PYTHON_VERSION
@@ -48,6 +50,8 @@ services:
         value: run.py
       - key: FLASK_CONFIG
         value: production
+      - key: MDRAFT_SERVICE_TYPE
+        value: worker  # This tells the app to skip auth blueprint
       - key: CELERY_BROKER_URL
         fromService:
           type: redis

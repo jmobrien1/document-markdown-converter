@@ -1,5 +1,5 @@
 # app/auth/routes.py
-# Enhanced with Stripe payment integration - LAZY LOADING STRIPE
+# Enhanced with Stripe payment integration - NO MODULE-LEVEL STRIPE IMPORT
 
 import re
 from flask import render_template, redirect, request, url_for, flash, jsonify, session, current_app
@@ -179,16 +179,7 @@ def user_status():
             'remaining': 5
         })
 
-# --- Stripe Integration Routes (LAZY LOADED) ---
-
-def _get_stripe():
-    """Lazy load stripe module only when needed."""
-    try:
-        import stripe
-        return stripe
-    except ImportError:
-        current_app.logger.error("Stripe module not available. Payment features disabled.")
-        return None
+# --- Stripe Integration Routes (FUNCTION-LEVEL IMPORTS ONLY) ---
 
 @auth.route('/upgrade')
 @login_required
@@ -203,8 +194,10 @@ def upgrade():
 @login_required
 def create_checkout_session():
     """Create a Stripe Checkout session for the user to pay."""
-    stripe = _get_stripe()
-    if not stripe:
+    try:
+        # Import stripe ONLY when this function is called
+        import stripe
+    except ImportError:
         flash('Payment system is currently unavailable. Please try again later.', 'error')
         return redirect(url_for('auth.upgrade'))
     
@@ -248,8 +241,10 @@ def billing_portal():
         flash("You don't have a billing account with us.", "error")
         return redirect(url_for('auth.account'))
 
-    stripe = _get_stripe()
-    if not stripe:
+    try:
+        # Import stripe ONLY when this function is called
+        import stripe
+    except ImportError:
         flash('Billing system is currently unavailable. Please try again later.', 'error')
         return redirect(url_for('auth.account'))
 
@@ -267,8 +262,10 @@ def billing_portal():
 @auth.route('/stripe-webhook', methods=['POST'])
 def stripe_webhook():
     """Listen for events from Stripe."""
-    stripe = _get_stripe()
-    if not stripe:
+    try:
+        # Import stripe ONLY when this function is called
+        import stripe
+    except ImportError:
         current_app.logger.error("Stripe webhook called but stripe module not available")
         return 'Stripe not available', 503
 
