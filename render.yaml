@@ -11,7 +11,8 @@ services:
     name: mdraft-web
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt # build-v3"
+    # CACHE BUST: Multiple strategies to force fresh build
+    buildCommand: "pip install --no-cache-dir --force-reinstall -r requirements.txt && echo 'BUILD-v7-STRIPE-FIX-$(date +%s)'"
     startCommand: "gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
@@ -32,12 +33,13 @@ services:
           property: connectionString
       - fromGroup: mdraft-secrets
 
-  # The Celery background worker
+  # The Celery background worker with FORCED REBUILD
   - type: worker
     name: mdraft-worker
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt # build-v3"
+    # CACHE BUST: Force fresh dependency install with different timestamp
+    buildCommand: "pip install --no-cache-dir --force-reinstall -r requirements.txt && echo 'WORKER-BUILD-v7-STRIPE-FIX-$(date +%s)'"
     startCommand: "celery -A celery_worker.celery worker --loglevel=info"
     envVars:
       - key: PYTHON_VERSION

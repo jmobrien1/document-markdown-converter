@@ -1,10 +1,11 @@
 # app/main/routes.py
-# Enhanced with freemium logic, anonymous usage tracking, and batch processing support
+# Enhanced with freemium logic, anonymous usage tracking, batch processing support, and health checks
 
 import os
 import uuid
 import tempfile
 import json
+from datetime import datetime
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 from flask import (
@@ -290,6 +291,82 @@ def conversion_history():
     except Exception as e:
         current_app.logger.error(f"Error getting conversion history: {str(e)}")
         return jsonify({'error': 'Error retrieving history'}), 500
+
+# --- Health Check Endpoints ---
+
+@main.route('/health')
+def health_check():
+    """Health check endpoint for monitoring service status."""
+    try:
+        # Test database connection
+        from ..models import User
+        User.query.first()
+        db_status = "healthy"
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+    
+    # Test Redis connection (Celery broker)
+    try:
+        from .. import celery
+        celery.control.ping(timeout=1.0)
+        celery_status = "healthy"
+    except Exception as e:
+        celery_status = f"unhealthy: {str(e)}"
+    
+    # Check if this is worker or web
+    service_type = "web"
+    
+    # Test stripe import (should work on web, might fail on worker)
+    stripe_available = False
+    try:
+        import stripe
+        stripe_available = True
+    except ImportError:
+        pass
+    
+    health_data = {
+        "service": service_type,
+        "status": "healthy" if db_status == "healthy" else "degraded",
+        "database": db_status,
+        "celery": celery_status,
+        "stripe_available": stripe_available,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    
+    status_code = 200 if health_data["status"] == "healthy" else 503
+    return jsonify(health_data), status_code
+
+@main.route('/health/worker')
+def worker_health_check():
+    """Specific health check for worker service."""
+    try:
+        # Test that we can import worker dependencies
+        from app.tasks import convert_file_task
+        
+        # Test celery connection
+        from .. import celery
+        inspect = celery.control.inspect()
+        stats = inspect.stats()
+        
+        # Check if any workers are active
+        active_workers = len(stats) if stats else 0
+        
+        health_data = {
+            "service": "worker", 
+            "status": "healthy" if active_workers > 0 else "no_workers",
+            "active_workers": active_workers,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        return jsonify(health_data), 200
+        
+    except Exception as e:
+        return jsonify({
+            "service": "worker",
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }), 503
 
 @main.app_errorhandler(413)
 def request_entity_too_large(e):

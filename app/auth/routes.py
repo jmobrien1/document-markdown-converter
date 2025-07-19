@@ -1,8 +1,7 @@
 # app/auth/routes.py
-# Enhanced with Stripe payment integration
+# Enhanced with Stripe payment integration - LAZY LOADING STRIPE
 
 import re
-import stripe
 from flask import render_template, redirect, request, url_for, flash, jsonify, session, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from . import auth
@@ -180,7 +179,16 @@ def user_status():
             'remaining': 5
         })
 
-# --- Stripe Integration Routes ---
+# --- Stripe Integration Routes (LAZY LOADED) ---
+
+def _get_stripe():
+    """Lazy load stripe module only when needed."""
+    try:
+        import stripe
+        return stripe
+    except ImportError:
+        current_app.logger.error("Stripe module not available. Payment features disabled.")
+        return None
 
 @auth.route('/upgrade')
 @login_required
@@ -195,6 +203,11 @@ def upgrade():
 @login_required
 def create_checkout_session():
     """Create a Stripe Checkout session for the user to pay."""
+    stripe = _get_stripe()
+    if not stripe:
+        flash('Payment system is currently unavailable. Please try again later.', 'error')
+        return redirect(url_for('auth.upgrade'))
+    
     try:
         stripe.api_key = current_app.config['STRIPE_SECRET_KEY']
         checkout_session = stripe.checkout.Session.create(
@@ -235,6 +248,11 @@ def billing_portal():
         flash("You don't have a billing account with us.", "error")
         return redirect(url_for('auth.account'))
 
+    stripe = _get_stripe()
+    if not stripe:
+        flash('Billing system is currently unavailable. Please try again later.', 'error')
+        return redirect(url_for('auth.account'))
+
     try:
         stripe.api_key = current_app.config['STRIPE_SECRET_KEY']
         portal_session = stripe.billing_portal.Session.create(
@@ -249,6 +267,11 @@ def billing_portal():
 @auth.route('/stripe-webhook', methods=['POST'])
 def stripe_webhook():
     """Listen for events from Stripe."""
+    stripe = _get_stripe()
+    if not stripe:
+        current_app.logger.error("Stripe webhook called but stripe module not available")
+        return 'Stripe not available', 503
+
     payload = request.get_data(as_text=True)
     sig_header = request.headers.get('Stripe-Signature')
     webhook_secret = current_app.config['STRIPE_WEBHOOK_SECRET']
