@@ -1,5 +1,5 @@
 # app/main/routes.py
-# Enhanced with freemium logic, anonymous usage tracking, batch processing support, health checks, and emergency migration
+# Enhanced with freemium logic, anonymous usage tracking, batch processing support, and health checks
 
 import os
 import uuid
@@ -416,102 +416,6 @@ def health_worker():
     
     status_code = 200 if health_data["status"] in ["healthy", "no_workers"] else 503
     return jsonify(health_data), status_code
-
-# --- Emergency Database Migration Route ---
-
-@main.route('/admin/migrate-database')
-def emergency_migrate():
-    """Emergency migration route - run once then remove"""
-    from sqlalchemy import text
-    
-    try:
-        # Check what columns exist first
-        result = db.session.execute(text("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'users' 
-            AND column_name IN ('stripe_customer_id', 'stripe_subscription_id')
-        """))
-        existing = [row[0] for row in result]
-        
-        messages = []
-        
-        # Add stripe_customer_id if missing
-        if 'stripe_customer_id' not in existing:
-            db.session.execute(text("ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(255)"))
-            messages.append("✅ Added stripe_customer_id")
-        else:
-            messages.append("✅ stripe_customer_id already exists")
-        
-        # Add stripe_subscription_id if missing  
-        if 'stripe_subscription_id' not in existing:
-            db.session.execute(text("ALTER TABLE users ADD COLUMN stripe_subscription_id VARCHAR(255)"))
-            messages.append("✅ Added stripe_subscription_id")
-        else:
-            messages.append("✅ stripe_subscription_id already exists")
-            
-        db.session.commit()
-        messages.append("🎉 Migration completed!")
-        
-        # Verify columns now exist
-        verify = db.session.execute(text("""
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_name = 'users' 
-            AND column_name IN ('stripe_customer_id', 'stripe_subscription_id')
-            ORDER BY column_name
-        """))
-        
-        columns = [f"{row[0]} ({row[1]})" for row in verify]
-        
-        return f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Database Migration Status</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                .success {{ color: green; }}
-                .info {{ color: blue; }}
-                .warning {{ color: orange; }}
-                ul {{ margin: 20px 0; }}
-                li {{ margin: 5px 0; }}
-            </style>
-        </head>
-        <body>
-            <h2>Database Migration Status</h2>
-            <ul>
-            {''.join(f'<li class="success">{msg}</li>' for msg in messages)}
-            </ul>
-            <h3>Verified Columns:</h3>
-            <ul>
-            {''.join(f'<li class="info">{col}</li>' for col in columns)}
-            </ul>
-            <p class="warning"><strong>IMPORTANT:</strong> Remove this route from your code after migration!</p>
-            <p><a href="/">← Back to Main App</a></p>
-        </body>
-        </html>
-        """
-        
-    except Exception as e:
-        db.session.rollback()
-        return f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Migration Failed</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                .error {{ color: red; }}
-            </style>
-        </head>
-        <body>
-            <h2 class="error">Migration Failed</h2>
-            <p class="error">Error: {str(e)}</p>
-            <p><a href="/">← Back to Main App</a></p>
-        </body>
-        </html>
-        """, 500
 
 @main.app_errorhandler(413)
 def request_entity_too_large(e):
