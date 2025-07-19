@@ -15,7 +15,7 @@ from werkzeug.utils import secure_filename
 from app.tasks import convert_file_task
 from flask_login import current_user, login_required
 from ..models import User, AnonymousUsage, Conversion
-from ..analytics import Analytics
+from ..data_analytics import Analytics
 from .. import db
 from . import main
 
