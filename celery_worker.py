@@ -1,13 +1,3 @@
-import subprocess
-print("📦 Installed packages:")
-subprocess.run(["pip", "list"])
-
-try:
-    import stripe
-except ImportError:
-    print("❌ Stripe not found — installing manually")
-    subprocess.run(["pip", "install", "stripe==9.13.0"])
-    import stripe
 # celery_worker.py
 # This script is the entry point for the Celery worker.
 # This version explicitly loads the .env file to ensure the worker has all credentials.
@@ -15,14 +5,10 @@ except ImportError:
 import os
 from dotenv import load_dotenv
 
-# --- THE FIX ---
-# Explicitly find and load the .env file at the very beginning of the worker's life.
-# This ensures all environment variables, like GOOGLE_APPLICATION_CREDENTIALS,
-# are available before any other code is imported.
+# This ensures all environment variables are available before any other code is imported.
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
-# --- END FIX ---
 
 from app import create_app, celery
 
