@@ -20,6 +20,13 @@ db = SQLAlchemy()
 celery = Celery(__name__, include=['app.tasks'])
 migrate = Migrate()
 
+# Initialize bcrypt globally - available in both web and worker contexts
+try:
+    from flask_bcrypt import Bcrypt
+    bcrypt = Bcrypt()
+except ImportError:
+    bcrypt = None
+
 
 def create_app(config_name='default', for_worker=False):
     """
@@ -69,16 +76,19 @@ def create_app(config_name='default', for_worker=False):
         # Import and initialize web-only extensions only when needed
         try:
             from flask_login import LoginManager
-            from flask_bcrypt import Bcrypt
         except ImportError as e:
             app.logger.warning(f"Web-only imports failed: {str(e)}")
             return app
         login_manager = LoginManager()
-        bcrypt = Bcrypt()
         login_manager.init_app(app)
-        bcrypt.init_app(app)
-        app.bcrypt = bcrypt
-        app.logger.info("✅ Flask-Bcrypt initialized and attached to app")
+        
+        # Initialize global bcrypt with app if available
+        if bcrypt is not None:
+            bcrypt.init_app(app)
+            app.bcrypt = bcrypt
+            app.logger.info("✅ Flask-Bcrypt initialized and attached to app")
+        else:
+            app.logger.warning("⚠️ Flask-Bcrypt not available")
 
         # Configure Flask-Login
         login_manager.login_view = 'auth.login'

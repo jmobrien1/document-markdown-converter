@@ -3,8 +3,7 @@
 
 from datetime import datetime, timedelta, timezone
 from flask_sqlalchemy import SQLAlchemy
-from flask import current_app
-from . import db
+from . import db, bcrypt
 
 class User(db.Model):
     """User model for storing user accounts."""
@@ -42,7 +41,20 @@ class User(db.Model):
     def get_id(self):
         return str(self.id)
 
+    @property
+    def password(self):
+        raise AttributeError('password is not a readable attribute')
 
+    @password.setter
+    def password(self, password):
+        if bcrypt is None:
+            raise RuntimeError("Flask-Bcrypt not available")
+        self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+
+    def verify_password(self, password):
+        if bcrypt is None:
+            raise RuntimeError("Flask-Bcrypt not available")
+        return bcrypt.check_password_hash(self.password_hash, password)
 
     def get_daily_conversions(self):
         """Get number of conversions today."""

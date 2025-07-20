@@ -8,89 +8,7 @@ from . import auth
 from .. import db
 from ..models import User, AnonymousUsage, Conversion
 
-def _hash_password(password):
-    """Helper function to hash password using bcrypt from Flask app context."""
-    print(f"🔍 _hash_password called with password length: {len(password)}")
-    print(f"🔍 current_app type: {type(current_app)}")
-    print(f"🔍 hasattr(current_app, 'bcrypt'): {hasattr(current_app, 'bcrypt')}")
-    
-    try:
-        # Try to get bcrypt from current_app
-        if hasattr(current_app, 'bcrypt') and current_app.bcrypt is not None:
-            print("✅ Using current_app.bcrypt for hashing")
-            return current_app.bcrypt.generate_password_hash(password).decode('utf-8')
-        
-        print("❌ current_app.bcrypt not available, trying fallback...")
-        
-        # Fallback: try to import bcrypt directly
-        try:
-            from flask_bcrypt import Bcrypt
-            bcrypt = Bcrypt()
-            print("✅ Using direct Bcrypt import for hashing")
-            return bcrypt.generate_password_hash(password).decode('utf-8')
-        except ImportError as e:
-            print(f"❌ Direct import failed: {e}")
-        
-        # Last resort: try to get bcrypt from the app factory
-        try:
-            from .. import create_app
-            app = create_app()
-            if hasattr(app, 'bcrypt') and app.bcrypt is not None:
-                print("✅ Using app factory bcrypt for hashing")
-                return app.bcrypt.generate_password_hash(password).decode('utf-8')
-        except Exception as e:
-            print(f"❌ App factory failed: {e}")
-        
-        print("❌ All fallbacks failed, raising error...")
-        raise RuntimeError("Flask-Bcrypt not available. Make sure you're running in the web environment.")
-    except Exception as e:
-        print(f"❌ Error in _hash_password: {str(e)}")
-        print(f"❌ Error type: {type(e).__name__}")
-        import traceback
-        traceback.print_exc()
-        raise
 
-def _verify_password(pwhash, password):
-    """Helper function to verify password using bcrypt from Flask app context."""
-    print(f"🔍 _verify_password called with pwhash length: {len(pwhash)}")
-    print(f"🔍 current_app type: {type(current_app)}")
-    print(f"🔍 hasattr(current_app, 'bcrypt'): {hasattr(current_app, 'bcrypt')}")
-    
-    try:
-        # Try to get bcrypt from current_app
-        if hasattr(current_app, 'bcrypt') and current_app.bcrypt is not None:
-            print("✅ Using current_app.bcrypt for verification")
-            return current_app.bcrypt.check_password_hash(pwhash, password)
-        
-        print("❌ current_app.bcrypt not available, trying fallback...")
-        
-        # Fallback: try to import bcrypt directly
-        try:
-            from flask_bcrypt import Bcrypt
-            bcrypt = Bcrypt()
-            print("✅ Using direct Bcrypt import for verification")
-            return bcrypt.check_password_hash(pwhash, password)
-        except ImportError as e:
-            print(f"❌ Direct import failed: {e}")
-        
-        # Last resort: try to get bcrypt from the app factory
-        try:
-            from .. import create_app
-            app = create_app()
-            if hasattr(app, 'bcrypt') and app.bcrypt is not None:
-                print("✅ Using app factory bcrypt for verification")
-                return app.bcrypt.check_password_hash(pwhash, password)
-        except Exception as e:
-            print(f"❌ App factory failed: {e}")
-        
-        print("❌ All fallbacks failed, raising error...")
-        raise RuntimeError("Flask-Bcrypt not available. Make sure you're running in the web environment.")
-    except Exception as e:
-        print(f"❌ Error in _verify_password: {str(e)}")
-        print(f"❌ Error type: {type(e).__name__}")
-        import traceback
-        traceback.print_exc()
-        raise
 
 def is_valid_email(email):
     """Validate email format."""
@@ -132,7 +50,7 @@ def signup():
         try:
             # Create new user
             user = User(email=email)
-            user.password_hash = _hash_password(password)  # Use our helper function
+            user.password = password  # Use the User model's password setter
 
             db.session.add(user)
             db.session.commit()
@@ -169,7 +87,7 @@ def login():
         # Find user and verify password
         user = User.query.filter_by(email=email).first()
 
-        if not user or not _verify_password(user.password_hash, password):
+        if not user or not user.verify_password(password):
             flash('Invalid email or password', 'error')
             return render_template('login.html')
 
