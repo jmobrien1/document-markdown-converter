@@ -53,20 +53,12 @@ class User(db.Model):
         self.password_hash = current_app.bcrypt.generate_password_hash(password).decode('utf-8')
 
     def verify_password(self, password):
-        try:
-            if not hasattr(current_app, 'bcrypt') or current_app.bcrypt is None:
-                raise RuntimeError("Flask-Bcrypt not available. Make sure you're running in the web environment.")
-            return current_app.bcrypt.check_password_hash(self.password_hash, password)
-        except Exception as e:
-            # Add debugging information
-            import traceback
-            print(f"Error in verify_password: {str(e)}")
-            print(f"current_app type: {type(current_app)}")
-            print(f"hasattr(current_app, 'bcrypt'): {hasattr(current_app, 'bcrypt')}")
-            if hasattr(current_app, 'bcrypt'):
-                print(f"current_app.bcrypt type: {type(current_app.bcrypt)}")
-            traceback.print_exc()
-            raise
+        print(f"🔍 verify_password called - hasattr(current_app, 'bcrypt'): {hasattr(current_app, 'bcrypt')}")
+        if hasattr(current_app, 'bcrypt'):
+            print(f"🔍 current_app.bcrypt type: {type(current_app.bcrypt)}")
+        if not hasattr(current_app, 'bcrypt') or current_app.bcrypt is None:
+            raise RuntimeError("Flask-Bcrypt not available. Make sure you're running in the web environment.")
+        return current_app.bcrypt.check_password_hash(self.password_hash, password)
 
     def get_daily_conversions(self):
         """Get number of conversions today."""

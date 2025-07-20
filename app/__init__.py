@@ -78,6 +78,7 @@ def create_app(config_name='default', for_worker=False):
         login_manager.init_app(app)
         bcrypt.init_app(app)
         app.bcrypt = bcrypt
+        app.logger.info("✅ Flask-Bcrypt initialized and attached to app")
 
         # Configure Flask-Login
         login_manager.login_view = 'auth.login'
