@@ -4,8 +4,6 @@
 import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
-from flask_bcrypt import Bcrypt
 from celery import Celery
 from flask_migrate import Migrate
 from dotenv import load_dotenv
@@ -19,10 +17,9 @@ if os.path.exists(dotenv_path):
 
 # Initialize extensions
 db = SQLAlchemy()
-login_manager = LoginManager()
-bcrypt = Bcrypt()
 celery = Celery(__name__)
 migrate = Migrate()
+
 
 def create_app(config_name='default'):
     """
@@ -41,9 +38,15 @@ def create_app(config_name='default'):
     
     # Initialize extensions with app
     db.init_app(app)
+    migrate.init_app(app, db)
+
+    # Import and initialize web-only extensions only when needed
+    from flask_login import LoginManager
+    from flask_bcrypt import Bcrypt
+    login_manager = LoginManager()
+    bcrypt = Bcrypt()
     login_manager.init_app(app)
     bcrypt.init_app(app)
-    migrate.init_app(app, db)
     
     # Configure Celery with standardized settings
     celery.conf.update(
