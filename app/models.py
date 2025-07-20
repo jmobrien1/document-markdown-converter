@@ -48,17 +48,67 @@ class User(db.Model):
 
     @password.setter
     def password(self, password):
-        if not hasattr(current_app, 'bcrypt') or current_app.bcrypt is None:
+        try:
+            # Try to get bcrypt from current_app
+            if hasattr(current_app, 'bcrypt') and current_app.bcrypt is not None:
+                self.password_hash = current_app.bcrypt.generate_password_hash(password).decode('utf-8')
+                return
+            
+            # Fallback: try to import bcrypt directly
+            try:
+                from flask_bcrypt import Bcrypt
+                bcrypt = Bcrypt()
+                self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+                return
+            except ImportError:
+                pass
+            
+            # Last resort: try to get bcrypt from the app factory
+            try:
+                from . import create_app
+                app = create_app()
+                if hasattr(app, 'bcrypt') and app.bcrypt is not None:
+                    self.password_hash = app.bcrypt.generate_password_hash(password).decode('utf-8')
+                    return
+            except Exception:
+                pass
+            
             raise RuntimeError("Flask-Bcrypt not available. Make sure you're running in the web environment.")
-        self.password_hash = current_app.bcrypt.generate_password_hash(password).decode('utf-8')
+        except Exception as e:
+            print(f"❌ Error in password setter: {str(e)}")
+            raise
 
     def verify_password(self, password):
-        print(f"🔍 verify_password called - hasattr(current_app, 'bcrypt'): {hasattr(current_app, 'bcrypt')}")
-        if hasattr(current_app, 'bcrypt'):
-            print(f"🔍 current_app.bcrypt type: {type(current_app.bcrypt)}")
-        if not hasattr(current_app, 'bcrypt') or current_app.bcrypt is None:
+        try:
+            # Try to get bcrypt from current_app
+            if hasattr(current_app, 'bcrypt') and current_app.bcrypt is not None:
+                return current_app.bcrypt.check_password_hash(self.password_hash, password)
+            
+            # Fallback: try to import bcrypt directly
+            try:
+                from flask_bcrypt import Bcrypt
+                bcrypt = Bcrypt()
+                return bcrypt.check_password_hash(self.password_hash, password)
+            except ImportError:
+                pass
+            
+            # Last resort: try to get bcrypt from the app factory
+            try:
+                from . import create_app
+                app = create_app()
+                if hasattr(app, 'bcrypt') and app.bcrypt is not None:
+                    return app.bcrypt.check_password_hash(self.password_hash, password)
+            except Exception:
+                pass
+            
             raise RuntimeError("Flask-Bcrypt not available. Make sure you're running in the web environment.")
-        return current_app.bcrypt.check_password_hash(self.password_hash, password)
+        except Exception as e:
+            print(f"❌ Error in verify_password: {str(e)}")
+            print(f"❌ current_app type: {type(current_app)}")
+            print(f"❌ hasattr(current_app, 'bcrypt'): {hasattr(current_app, 'bcrypt')}")
+            if hasattr(current_app, 'bcrypt'):
+                print(f"❌ current_app.bcrypt type: {type(current_app.bcrypt)}")
+            raise
 
     def get_daily_conversions(self):
         """Get number of conversions today."""
