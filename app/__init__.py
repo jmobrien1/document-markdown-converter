@@ -21,10 +21,17 @@ celery = Celery(__name__)
 migrate = Migrate()
 
 
-def create_app(config_name='default'):
+def create_app(config_name='default', for_worker=False):
     """
     Standardized application factory - single source of truth for configuration.
     Used by both web service and worker service with identical config loading.
+
+    Args:
+        config_name (str): The configuration name to use.
+        for_worker (bool): If True, skip web-only components for Celery workers.
+
+    Returns:
+        Flask: The Flask application instance.
     """
     app = Flask(__name__)
     
@@ -40,14 +47,43 @@ def create_app(config_name='default'):
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # Import and initialize web-only extensions only when needed
-    from flask_login import LoginManager
-    from flask_bcrypt import Bcrypt
-    login_manager = LoginManager()
-    bcrypt = Bcrypt()
-    login_manager.init_app(app)
-    bcrypt.init_app(app)
-    
+    if not for_worker:
+        # Import and initialize web-only extensions only when needed
+        from flask_login import LoginManager
+        from flask_bcrypt import Bcrypt
+        login_manager = LoginManager()
+        bcrypt = Bcrypt()
+        login_manager.init_app(app)
+        bcrypt.init_app(app)
+
+        # Configure Flask-Login
+        login_manager.login_view = 'auth.login'
+        login_manager.login_message = 'Please log in to access this page.'
+        login_manager.login_message_category = 'info'
+
+        # Register Blueprints - main blueprint always registered
+        from .main import main
+        app.register_blueprint(main)
+
+        # Register auth blueprint - always register directly now
+        from .auth import auth
+        app.register_blueprint(auth)
+        app.logger.info("Auth blueprint registered successfully")
+
+        # Register admin blueprint - for now, use try/except ImportError for consistency
+        try:
+            from .admin import admin
+            app.register_blueprint(admin)
+            app.logger.info("Admin blueprint registered successfully")
+        except ImportError as e:
+            app.logger.warning(f"Admin blueprint registration failed: {str(e)}")
+
+        # User Loader for Flask-Login
+        from .models import User
+        @login_manager.user_loader
+        def load_user(user_id):
+            return User.query.get(int(user_id))
+
     # Configure Celery with standardized settings
     celery.conf.update(
         broker_url=app.config['CELERY_BROKER_URL'],
@@ -65,34 +101,6 @@ def create_app(config_name='default'):
                 return self.run(*args, **kwargs)
     celery.Task = ContextTask
     
-    # Configure Flask-Login
-    login_manager.login_view = 'auth.login'
-    login_manager.login_message = 'Please log in to access this page.'
-    login_manager.login_message_category = 'info'
-    
-    # Register Blueprints - main blueprint always registered
-    from .main import main
-    app.register_blueprint(main)
-
-    # Register auth blueprint - always register directly now
-    from .auth import auth
-    app.register_blueprint(auth)
-    app.logger.info("Auth blueprint registered successfully")
-
-    # Register admin blueprint - for now, use try/except ImportError for consistency
-    try:
-        from .admin import admin
-        app.register_blueprint(admin)
-        app.logger.info("Admin blueprint registered successfully")
-    except ImportError as e:
-        app.logger.warning(f"Admin blueprint registration failed: {str(e)}")
-
-    # User Loader for Flask-Login
-    from .models import User
-    @login_manager.user_loader
-    def load_user(user_id):
-        return User.query.get(int(user_id))
-
     # Custom CLI command to create the database tables
     @app.cli.command("create-db")
     def create_db_command():
