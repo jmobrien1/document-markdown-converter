@@ -8,6 +8,35 @@ from . import auth
 from .. import db
 from ..models import User, AnonymousUsage, Conversion
 
+def _verify_password(pwhash, password):
+    """Helper function to verify password using bcrypt from Flask app context."""
+    try:
+        # Try to get bcrypt from current_app
+        if hasattr(current_app, 'bcrypt') and current_app.bcrypt is not None:
+            return current_app.bcrypt.check_password_hash(pwhash, password)
+        
+        # Fallback: try to import bcrypt directly
+        try:
+            from flask_bcrypt import Bcrypt
+            bcrypt = Bcrypt()
+            return bcrypt.check_password_hash(pwhash, password)
+        except ImportError:
+            pass
+        
+        # Last resort: try to get bcrypt from the app factory
+        try:
+            from .. import create_app
+            app = create_app()
+            if hasattr(app, 'bcrypt') and app.bcrypt is not None:
+                return app.bcrypt.check_password_hash(pwhash, password)
+        except Exception:
+            pass
+        
+        raise RuntimeError("Flask-Bcrypt not available. Make sure you're running in the web environment.")
+    except Exception as e:
+        print(f"❌ Error in _verify_password: {str(e)}")
+        raise
+
 def is_valid_email(email):
     """Validate email format."""
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
@@ -85,7 +114,7 @@ def login():
         # Find user and verify password
         user = User.query.filter_by(email=email).first()
 
-        if not user or not user.verify_password(password):
+        if not user or not _verify_password(user.password_hash, password):
             flash('Invalid email or password', 'error')
             return render_template('login.html')
 
