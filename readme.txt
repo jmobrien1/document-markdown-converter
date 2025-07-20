@@ -8,6 +8,11 @@ Transform your documents into clean, readable Markdown with mdraft's intuitive i
 	•	💾 Download Ready: Export as .ml (Markdown Language) files
 	•	🔒 Secure: Automatic file cleanup and validation
 	•	⚡ Real-time: Instant feedback and progress indicators
+
+Admin Dashboard
+~~~~~~~~~~~~~~~
+Administrators can now access a dedicated dashboard to view all registered users. The dashboard provides a table listing user details and is accessible only to users with admin privileges.
+
 🎯 Supported Formats
 	•	PDF documents (.pdf)
 	•	Microsoft Word documents (.docx)
@@ -182,3 +187,11 @@ Need help with mdraft?
 
 Made with ❤️ for the developer community
 Transform documents effortlessly with mdraft
+
+Testing
+-------
+This project uses pytest for automated testing. To run the test suite, execute the following command from the project's root directory:
+
+    pytest
+
+This will discover and run all tests in the `tests/` directory and report the results.

@@ -7,7 +7,9 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_bcrypt import Bcrypt
 from celery import Celery
+from flask_migrate import Migrate
 from dotenv import load_dotenv
+import click
 
 # Load environment variables FIRST - single source of truth
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -20,6 +22,7 @@ db = SQLAlchemy()
 login_manager = LoginManager()
 bcrypt = Bcrypt()
 celery = Celery(__name__)
+migrate = Migrate()
 
 def create_app(config_name='default'):
     """
@@ -40,6 +43,7 @@ def create_app(config_name='default'):
     db.init_app(app)
     login_manager.init_app(app)
     bcrypt.init_app(app)
+    migrate.init_app(app, db)
     
     # Configure Celery with standardized settings
     celery.conf.update(
@@ -60,15 +64,19 @@ def create_app(config_name='default'):
     # Register Blueprints - main blueprint always registered
     from .main import main
     app.register_blueprint(main)
-    
-    # Register auth blueprint - this is where stripe imports happen
+
+    # Register auth blueprint - always register directly now
+    from .auth import auth
+    app.register_blueprint(auth)
+    app.logger.info("Auth blueprint registered successfully")
+
+    # Register admin blueprint - for now, use try/except ImportError for consistency
     try:
-        from .auth import auth
-        app.register_blueprint(auth)
-        app.logger.info("Auth blueprint registered successfully")
+        from .admin import admin
+        app.register_blueprint(admin)
+        app.logger.info("Admin blueprint registered successfully")
     except ImportError as e:
-        app.logger.warning(f"Auth blueprint registration failed: {str(e)}")
-        app.logger.warning("This is expected for worker services if stripe is not available")
+        app.logger.warning(f"Admin blueprint registration failed: {str(e)}")
 
     # User Loader for Flask-Login
     from .models import User
@@ -117,5 +125,19 @@ def create_app(config_name='default'):
             db.session.rollback()
             print(f"❌ Migration failed: {str(e)}")
             raise
+
+    # Custom CLI command to add admin privileges to a user
+    @app.cli.command("add-admin")
+    @click.argument("email")
+    def add_admin_command(email):
+        """Grant admin privileges to a user by email."""
+        from .models import User
+        user = User.query.filter_by(email=email).first()
+        if user:
+            user.is_admin = True
+            db.session.commit()
+            print(f"Successfully granted admin privileges to {email}.")
+        else:
+            print(f"User with email '{email}' not found.")
 
     return app

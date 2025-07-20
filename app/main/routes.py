@@ -5,7 +5,7 @@ import os
 import uuid
 import tempfile
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 from flask import (
@@ -165,8 +165,13 @@ def convert():
         bucket_name,
         blob_name,
         filename,
-        use_pro_converter
+        use_pro_converter,
+        conversion.id
     )
+
+    # Store the Celery job ID in the Conversion record
+    conversion.job_id = task.id
+    db.session.commit()
 
     # Provide appropriate user feedback based on file size
     response_data = {
@@ -330,7 +335,7 @@ def health_check():
         "database": db_status,
         "celery": celery_status,
         "stripe_available": stripe_available,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
     status_code = 200 if health_data["status"] == "healthy" else 503
@@ -342,7 +347,7 @@ def health_web():
     health_data = {
         "service": "web",
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "dependencies": {}
     }
     
@@ -380,7 +385,7 @@ def health_worker():
     health_data = {
         "service": "worker",
         "status": "healthy", 
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "dependencies": {}
     }
     

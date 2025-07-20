@@ -58,3 +58,5 @@ Thumbs.db
 # Google Cloud credentials
 gcs-credentials.json
 *.json
+# Ignore PDF files in the root project folder
+/*.pdf

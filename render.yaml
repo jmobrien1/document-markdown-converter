@@ -12,7 +12,7 @@ services:
     env: python
     plan: free
     # NUCLEAR CACHE BUST: Every possible cache-busting technique
-    buildCommand: "rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall --upgrade -r requirements.txt && pip show stripe && pip list | grep stripe && echo 'WEB-NUCLEAR-STRIPE-v10-$(date +%s)'"
+    buildCommand: "rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall --upgrade -r requirements-web.txt && pip show stripe && pip list | grep stripe && echo 'WEB-NUCLEAR-STRIPE-v10-$(date +%s)'"
     startCommand: "gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
@@ -39,7 +39,7 @@ services:
     env: python
     plan: free
     # NUCLEAR CACHE BUST: Maximum aggression against cached builds
-    buildCommand: "rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall --upgrade -r requirements.txt && pip show stripe && pip list | grep stripe && python -c 'import stripe; print(f\"Stripe version: {stripe.__version__}\")' && echo 'WORKER-NUCLEAR-STRIPE-v10-$(date +%s)'"
+    buildCommand: "rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall --upgrade -r requirements-worker.txt && pip show stripe && pip list | grep stripe && python -c 'import stripe; print(f\"Stripe version: {stripe.__version__}\")' && echo 'WORKER-NUCLEAR-STRIPE-v10-$(date +%s)'"
     startCommand: "celery -A celery_worker.celery worker --loglevel=info"
     envVars:
       - key: PYTHON_VERSION

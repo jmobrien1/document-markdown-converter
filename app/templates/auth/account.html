@@ -338,7 +338,7 @@
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                    </span>&lt;/thead&gt;</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                    </span>&lt;tbody&gt;</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                        </span>{% for conversion in recent_conversions %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                        </span>&lt;tr&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">                        </span>&lt;tr id="conversion-row-{{ conversion.id }}" data-job-id="{{ conversion.job_id }}">&gt;</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;{{ conversion.original_filename }}&lt;/td&gt;</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;{{ conversion.file_type.upper() }}&lt;/td&gt;</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;</span></p>
@@ -347,7 +347,7 @@
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>&lt;/span&gt;</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;/td&gt;</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>&lt;span class="status-badge status-{{ conversion.status }}"&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>&lt;span class="status-badge status-{{ conversion.status | lower }}" id="status-badge-{{ conversion.id }}">&gt;</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                                    </span>{{ conversion.status.title() }}</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>&lt;/span&gt;</span></p>
 <p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;/td&gt;</span></p>
@@ -384,5 +384,55 @@
 <p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;/main&gt;</span></p>
 <p class="p1"><span class="s1">&lt;/body&gt;</span></p>
 <p class="p1"><span class="s1">&lt;/html&gt;</span></p>
-</body>
-</html>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Find all rows with a job_id and a pending/processing status
+    const rows = document.querySelectorAll('tr[data-job-id]');
+    const pollingRows = [];
+
+    rows.forEach(row => {
+        const statusBadge = row.querySelector('.status-badge');
+        if (!statusBadge) return;
+        const status = statusBadge.textContent.trim().toLowerCase();
+        const jobId = row.getAttribute('data-job-id');
+        if ((status === 'pending' || status === 'processing') && jobId) {
+            pollingRows.push({
+                row: row,
+                jobId: jobId,
+                statusBadge: statusBadge
+            });
+        }
+    });
+
+    function pollStatus(rowObj) {
+        fetch(`/status/${rowObj.jobId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.state === 'SUCCESS' || data.state === 'FAILURE') {
+                    // Update the badge text and class
+                    let newStatus = data.state === 'SUCCESS' ? 'Completed' : 'Failed';
+                    let newClass = data.state === 'SUCCESS' ? 'status-completed' : 'status-failed';
+                    rowObj.statusBadge.textContent = newStatus;
+                    rowObj.statusBadge.className = 'status-badge ' + newClass;
+                } else if (data.state === 'PROGRESS' && data.status) {
+                    rowObj.statusBadge.textContent = data.status;
+                    rowObj.statusBadge.className = 'status-badge status-pending';
+                    setTimeout(() => pollStatus(rowObj), 3000);
+                } else {
+                    // Still pending/processing, keep polling
+                    setTimeout(() => pollStatus(rowObj), 3000);
+                }
+            })
+            .catch(() => {
+                // On error, try again later
+                setTimeout(() => pollStatus(rowObj), 3000);
+            });
+    }
+
+    // Start polling for each pending/processing row
+    pollingRows.forEach(rowObj => {
+        setTimeout(() => pollStatus(rowObj), 3000);
+    });
+});
+</script>

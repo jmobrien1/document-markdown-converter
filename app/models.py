@@ -1,7 +1,7 @@
 # app/models.py
 # Enhanced with freemium features and anonymous usage tracking
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from . import db, bcrypt
@@ -13,11 +13,12 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(128))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_active = db.Column(db.Boolean, default=True)
 
     # Premium features
     is_premium = db.Column(db.Boolean, default=False)
+    is_admin = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
     premium_expires = db.Column(db.DateTime, nullable=True)
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
@@ -38,7 +39,7 @@ class User(UserMixin, db.Model):
 
     def get_daily_conversions(self):
         """Get number of conversions today."""
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         return self.conversions.filter(
             db.func.date(Conversion.created_at) == today
         ).count()
@@ -68,9 +69,10 @@ class Conversion(db.Model):
     conversion_type = db.Column(db.String(20), default='standard')  # 'standard' or 'pro'
     status = db.Column(db.String(20), default='pending')  # 'pending', 'completed', 'failed'
     error_message = db.Column(db.Text, nullable=True)
+    job_id = db.Column(db.String(64), nullable=True)
 
     # Timing
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = db.Column(db.DateTime, nullable=True)
     processing_time = db.Column(db.Float, nullable=True)  # Seconds
 
@@ -99,7 +101,7 @@ class AnonymousUsage(db.Model):
     # Usage tracking
     conversions_today = db.Column(db.Integer, default=0)
     last_conversion = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     @classmethod
     def get_or_create_session(cls, session_id, ip_address=None):
@@ -115,7 +117,7 @@ class AnonymousUsage(db.Model):
 
     def can_convert(self, daily_limit=5):
         """Check if anonymous user can convert (rate limiting)."""
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
 
         # Reset counter if it's a new day
         if (self.last_conversion and
@@ -127,7 +129,7 @@ class AnonymousUsage(db.Model):
 
     def increment_usage(self):
         """Increment usage counter."""
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
 
         # Reset if new day
         if (self.last_conversion and
@@ -135,7 +137,7 @@ class AnonymousUsage(db.Model):
             self.conversions_today = 0
 
         self.conversions_today += 1
-        self.last_conversion = datetime.utcnow()
+        self.last_conversion = datetime.now(timezone.utc)
         db.session.commit()
 
     def __repr__(self):
