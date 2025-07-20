@@ -10,5 +10,8 @@ COPY requirements-web.txt requirements-worker.txt ./
 # Install system dependencies that might be needed for building packages
 RUN apt-get update && apt-get install -y build-essential
 
+# Upgrade pip to get the latest wheel support
+RUN pip install --upgrade pip setuptools wheel
+
 # Copy the rest of your application code into the container
 COPY . . 

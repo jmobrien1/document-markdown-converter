@@ -97,9 +97,9 @@ def create_app(config_name='default', for_worker=False):
         result_serializer='json',
         timezone='UTC',
         enable_utc=True,
-        # Use gevent pool for memory efficiency
-        worker_pool='gevent',
-        worker_concurrency=10,  # Number of concurrent tasks
+        # Use threads pool for memory efficiency (alternative to gevent)
+        worker_pool='threads',
+        worker_concurrency=4,  # Number of concurrent tasks
         worker_prefetch_multiplier=1,  # Reduce memory usage
         task_acks_late=True,  # Acknowledge tasks after completion
         task_reject_on_worker_lost=True,  # Requeue tasks if worker dies
