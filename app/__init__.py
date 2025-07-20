@@ -46,6 +46,24 @@ def create_app(config_name='default', for_worker=False):
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
+    
+    # Ensure database schema is up to date
+    with app.app_context():
+        try:
+            from sqlalchemy import text
+            # Check if is_admin column exists
+            result = db.session.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name = 'is_admin'
+            """))
+            if not result.fetchone():
+                db.session.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
+                db.session.commit()
+                app.logger.info("✅ Added is_admin column to users table")
+        except Exception as e:
+            app.logger.warning(f"Database migration check failed: {str(e)}")
+            # Continue anyway - the migration command will handle it
 
     if not for_worker:
         # Import and initialize web-only extensions only when needed
@@ -124,7 +142,26 @@ def create_app(config_name='default', for_worker=False):
         """Add missing Stripe columns to users table."""
         from sqlalchemy import text
         
+        print("🔍 Starting database migration check...")
+        
         try:
+            # First, check if the users table exists
+            result = db.session.execute(text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'users'
+                )
+            """))
+            table_exists = result.fetchone()[0]
+            
+            if not table_exists:
+                print("❌ Users table does not exist. Creating tables...")
+                db.create_all()
+                print("✅ Tables created successfully")
+                return
+            
+            print("✅ Users table exists")
+            
             # Check if columns exist first
             result = db.session.execute(text("""
                 SELECT column_name 
@@ -132,20 +169,24 @@ def create_app(config_name='default', for_worker=False):
                 WHERE table_name = 'users' AND column_name IN ('stripe_customer_id', 'stripe_subscription_id', 'is_admin')
             """))
             existing_columns = [row[0] for row in result]
+            print(f"📋 Existing columns: {existing_columns}")
             
             if 'is_admin' not in existing_columns:
+                print("🔧 Adding is_admin column...")
                 db.session.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
                 print("✅ Added is_admin column")
             else:
                 print("✅ is_admin column already exists")
             
             if 'stripe_customer_id' not in existing_columns:
+                print("🔧 Adding stripe_customer_id column...")
                 db.session.execute(text("ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(255)"))
                 print("✅ Added stripe_customer_id column")
             else:
                 print("✅ stripe_customer_id column already exists")
             
             if 'stripe_subscription_id' not in existing_columns:
+                print("🔧 Adding stripe_subscription_id column...")
                 db.session.execute(text("ALTER TABLE users ADD COLUMN stripe_subscription_id VARCHAR(255)"))
                 print("✅ Added stripe_subscription_id column")
             else:
@@ -157,6 +198,9 @@ def create_app(config_name='default', for_worker=False):
         except Exception as e:
             db.session.rollback()
             print(f"❌ Migration failed: {str(e)}")
+            print(f"❌ Error type: {type(e).__name__}")
+            import traceback
+            traceback.print_exc()
             raise
 
     # Custom CLI command to add admin privileges to a user
