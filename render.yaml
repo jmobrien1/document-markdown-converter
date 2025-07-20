@@ -12,8 +12,8 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.render
     plan: free
-    # Install web dependencies with cache busting
-    buildCommand: "echo 'WEB-CACHE-BUST-$(date +%s)' && pip install --no-cache-dir -r requirements-web.txt"
+    # Install web dependencies with aggressive cache busting
+    buildCommand: "echo 'WEB-AGGRESSIVE-CACHE-BUST-$(date +%s)-$(uuidgen)' && rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall -r requirements-web.txt"
     startCommand: "flask db upgrade && flask migrate-stripe && gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
@@ -40,9 +40,9 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.render
     plan: free
-    # Install worker dependencies with cache busting
-    buildCommand: "echo 'WORKER-CACHE-BUST-$(date +%s)' && pip install --no-cache-dir -r requirements-worker.txt"
-    startCommand: "celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4 --without-gossip --without-mingle"
+    # Install worker dependencies with aggressive cache busting
+    buildCommand: "echo 'WORKER-AGGRESSIVE-CACHE-BUST-$(date +%s)-$(uuidgen)' && rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall -r requirements-worker.txt"
+    startCommand: "echo 'WORKER-START-COMMAND-EXECUTED' && celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4 --without-gossip --without-mingle"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
