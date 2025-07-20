@@ -205,18 +205,19 @@ def create_app(config_name='default', for_worker=False):
             traceback.print_exc()
             raise
 
-    # Custom CLI command to add admin privileges to a user
-    @app.cli.command("add-admin")
-    @click.argument("email")
-    def add_admin_command(email):
-        """Grant admin privileges to a user by email."""
-        from .models import User
-        user = User.query.filter_by(email=email).first()
-        if user:
-            user.is_admin = True
-            db.session.commit()
-            print(f"Successfully granted admin privileges to {email}.")
-        else:
-            print(f"User with email '{email}' not found.")
+    if not for_worker:
+        # Custom CLI command to add admin privileges to a user
+        @app.cli.command("add-admin")
+        @click.argument("email")
+        def add_admin_command(email):
+            """Grant admin privileges to a user by email."""
+            from .models import User
+            user = User.query.filter_by(email=email).first()
+            if user:
+                user.is_admin = True
+                db.session.commit()
+                print(f"Successfully granted admin privileges to {email}.")
+            else:
+                print(f"User with email '{email}' not found.")
 
     return app
