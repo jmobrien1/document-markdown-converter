@@ -3,13 +3,8 @@
 
 from datetime import datetime, timedelta, timezone
 from flask_sqlalchemy import SQLAlchemy
+from flask import current_app
 from . import db
-
-# Conditional bcrypt import for web environment
-try:
-    from . import bcrypt
-except ImportError:
-    bcrypt = None
 
 class User(db.Model):
     """User model for storing user accounts."""
@@ -53,14 +48,10 @@ class User(db.Model):
 
     @password.setter
     def password(self, password):
-        if bcrypt is None:
-            raise RuntimeError("Flask-Bcrypt not available in worker environment")
-        self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        self.password_hash = current_app.bcrypt.generate_password_hash(password).decode('utf-8')
 
     def verify_password(self, password):
-        if bcrypt is None:
-            raise RuntimeError("Flask-Bcrypt not available in worker environment")
-        return bcrypt.check_password_hash(self.password_hash, password)
+        return current_app.bcrypt.check_password_hash(self.password_hash, password)
 
     def get_daily_conversions(self):
         """Get number of conversions today."""
