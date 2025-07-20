@@ -14,7 +14,7 @@ services:
     plan: free
     # Install web dependencies with aggressive cache busting
     buildCommand: "echo 'WEB-AGGRESSIVE-CACHE-BUST-$(date +%s)-$(uuidgen)' && rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall -r requirements-web.txt"
-    startCommand: "flask db upgrade && flask migrate-stripe && gunicorn run:app"
+    startCommand: "flask migrate-stripe && gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9

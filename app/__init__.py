@@ -129,9 +129,15 @@ def create_app(config_name='default', for_worker=False):
             result = db.session.execute(text("""
                 SELECT column_name 
                 FROM information_schema.columns 
-                WHERE table_name = 'users' AND column_name IN ('stripe_customer_id', 'stripe_subscription_id')
+                WHERE table_name = 'users' AND column_name IN ('stripe_customer_id', 'stripe_subscription_id', 'is_admin')
             """))
             existing_columns = [row[0] for row in result]
+            
+            if 'is_admin' not in existing_columns:
+                db.session.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
+                print("✅ Added is_admin column")
+            else:
+                print("✅ is_admin column already exists")
             
             if 'stripe_customer_id' not in existing_columns:
                 db.session.execute(text("ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(255)"))
@@ -146,7 +152,7 @@ def create_app(config_name='default', for_worker=False):
                 print("✅ stripe_subscription_id column already exists")
             
             db.session.commit()
-            print("🎉 Stripe columns migration completed successfully!")
+            print("🎉 All columns migration completed successfully!")
             
         except Exception as e:
             db.session.rollback()
