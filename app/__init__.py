@@ -17,7 +17,7 @@ if os.path.exists(dotenv_path):
 
 # Initialize extensions
 db = SQLAlchemy()
-celery = Celery(__name__)
+celery = Celery(__name__, include=['app.tasks'])
 migrate = Migrate()
 
 
