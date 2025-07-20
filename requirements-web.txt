@@ -3,7 +3,7 @@ gunicorn==21.2.0
 Werkzeug==3.0.1
 Flask-SQLAlchemy==3.1.1
 Flask-Login==0.6.3
-Flask-Bcrypt==1.0.1
+bcrypt==4.1.2
 Flask-Migrate
 celery==5.4.0
 redis==5.0.7

@@ -13,8 +13,8 @@ services:
     dockerfilePath: ./Dockerfile.render
     plan: free
     # Install web dependencies with aggressive cache busting
-    buildCommand: "echo 'WEB-AGGRESSIVE-REBUILD-$(date +%s)-$(uuidgen)-$(echo $RANDOM)' && rm -rf ~/.cache/pip && pip cache purge && rm -rf /tmp/* && find . -name '*.pyc' -delete && find . -name '__pycache__' -type d -exec rm -rf {} + && pip install --no-cache-dir --force-reinstall -r requirements-web.txt && echo 'Build completed at $(date)'"
-    startCommand: "echo 'Starting database migration...' && flask db upgrade && echo 'Migration complete, starting web server...' && echo 'Bcrypt fix version: $(date +%s)' && echo 'Verifying User model has verify_password method...' && python -c \"from app.models import User; print('✅ User model verify_password method exists:', hasattr(User, 'verify_password'))\" && echo 'Verifying bcrypt is available...' && python -c \"from app import bcrypt; print('✅ Bcrypt available:', bcrypt is not None)\" && gunicorn run:app"
+    buildCommand: "echo 'RENDER-COMPLETE-REBUILD-$(date +%s)-$(uuidgen)-$(echo $RANDOM)-$(echo $BUILD_ID)' && rm -rf ~/.cache/pip && pip cache purge && rm -rf /tmp/* && find . -name '*.pyc' -delete && find . -name '__pycache__' -type d -exec rm -rf {} + && docker system prune -f && pip install --no-cache-dir --force-reinstall -r requirements-web.txt && echo 'Build completed at $(date)' && echo 'Pure bcrypt migration completed'"
+    startCommand: "echo 'Starting database migration...' && flask db upgrade && echo 'Migration complete, starting web server...' && echo 'Pure bcrypt migration version: $(date +%s)' && echo 'Verifying User model has verify_password method...' && python -c \"from app.models import User; print('✅ User model verify_password method exists:', hasattr(User, 'verify_password'))\" && echo 'Verifying pure bcrypt is available...' && python -c \"import bcrypt; print('✅ Pure bcrypt available:', bcrypt is not None)\" && echo 'Testing bcrypt functionality...' && python -c \"import bcrypt; salt = bcrypt.gensalt(); hashed = bcrypt.hashpw(b'test', salt); print('✅ Bcrypt test successful:', bcrypt.checkpw(b'test', hashed))\" && gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -22,6 +22,10 @@ services:
         value: run.py
       - key: FLASK_CONFIG
         value: production
+      - key: FORCE_REBUILD
+        value: "true"
+      - key: BCRYPT_MIGRATION
+        value: "pure_bcrypt_v1"
       - key: CELERY_BROKER_URL
         fromService:
           type: redis
@@ -50,6 +54,10 @@ services:
         value: run.py
       - key: FLASK_CONFIG
         value: production
+      - key: FORCE_REBUILD
+        value: "true"
+      - key: BCRYPT_MIGRATION
+        value: "pure_bcrypt_v1"
       - key: CELERY_BROKER_URL
         fromService:
           type: redis

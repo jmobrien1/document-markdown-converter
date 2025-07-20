@@ -3,7 +3,8 @@
 
 from datetime import datetime, timedelta, timezone
 from flask_sqlalchemy import SQLAlchemy
-from . import db, bcrypt
+import bcrypt
+from . import db
 
 class User(db.Model):
     """User model for storing user accounts."""
@@ -47,14 +48,23 @@ class User(db.Model):
 
     @password.setter
     def password(self, password):
-        if bcrypt is None:
-            raise RuntimeError("Flask-Bcrypt not available")
-        self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        # Hash password using pure bcrypt
+        salt = bcrypt.gensalt()
+        self.password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
     def verify_password(self, password):
-        if bcrypt is None:
-            raise RuntimeError("Flask-Bcrypt not available")
-        return bcrypt.check_password_hash(self.password_hash, password)
+        # Check password using pure bcrypt
+        try:
+            # Try to verify with pure bcrypt first
+            return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
+        except Exception:
+            # Fallback for old Flask-Bcrypt hashes (if any)
+            try:
+                from flask_bcrypt import Bcrypt
+                flask_bcrypt = Bcrypt()
+                return flask_bcrypt.check_password_hash(self.password_hash, password)
+            except ImportError:
+                return False
 
     def get_daily_conversions(self):
         """Get number of conversions today."""
