@@ -49,8 +49,12 @@ def create_app(config_name='default', for_worker=False):
 
     if not for_worker:
         # Import and initialize web-only extensions only when needed
-        from flask_login import LoginManager
-        from flask_bcrypt import Bcrypt
+        try:
+            from flask_login import LoginManager
+            from flask_bcrypt import Bcrypt
+        except ImportError as e:
+            app.logger.warning(f"Web-only imports failed: {str(e)}")
+            return app
         login_manager = LoginManager()
         bcrypt = Bcrypt()
         login_manager.init_app(app)

@@ -13,7 +13,13 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 from app.tasks import convert_file_task
-from flask_login import current_user
+
+# Conditional Flask-Login import for web environment
+try:
+    from flask_login import current_user
+except ImportError:
+    current_user = None
+
 from ..models import User, AnonymousUsage, Conversion
 from .. import db
 from . import main
@@ -25,7 +31,7 @@ def allowed_file(filename):
 
 def check_conversion_limits():
     """Check if user/session can perform conversions."""
-    if current_user.is_authenticated:
+    if current_user and current_user.is_authenticated:
         # Logged-in users have unlimited conversions
         return True, None
     
@@ -74,7 +80,7 @@ def get_storage_client():
 def index():
     """Renders the main page with the file upload form."""
     # Get usage info for anonymous users
-    if not current_user.is_authenticated:
+    if not current_user or not current_user.is_authenticated:
         session_id = session.get('session_id')
         if not session_id:
             session_id = str(uuid.uuid4())
@@ -117,7 +123,7 @@ def convert():
     # Check if the user requested a pro conversion
     use_pro_converter = request.form.get('pro_conversion') == 'on'
     
-    current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {current_user.email if current_user.is_authenticated else 'Anonymous'}")
+    current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {current_user.email if current_user and current_user.is_authenticated else 'Anonymous'}")
     
     try:
         # Get storage client with proper credential handling
@@ -132,8 +138,8 @@ def convert():
         return jsonify({'error': 'Could not upload file to cloud storage.'}), 500
 
     # Create conversion record
-    user_id = current_user.id if current_user.is_authenticated else None
-    session_id = session.get('session_id') if not current_user.is_authenticated else None
+    user_id = current_user.id if current_user and current_user.is_authenticated else None
+    session_id = session.get('session_id') if not current_user or not current_user.is_authenticated else None
     
     # Get file size
     file.seek(0, 2)  # Seek to end
@@ -156,7 +162,7 @@ def convert():
     db.session.commit()
 
     # Update anonymous usage
-    if not current_user.is_authenticated:
+    if not current_user or not current_user.is_authenticated:
         usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
         usage.increment_usage()
 
