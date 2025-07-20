@@ -40,8 +40,8 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.render
     plan: free
-    # Install worker dependencies
-    buildCommand: "pip install --no-cache-dir -r requirements-worker.txt"
+    # Install worker dependencies with cache busting
+    buildCommand: "echo 'WORKER-CACHE-BUST-$(date +%s)' && pip install --no-cache-dir -r requirements-worker.txt"
     startCommand: "celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4"
     envVars:
       - key: PYTHON_VERSION
