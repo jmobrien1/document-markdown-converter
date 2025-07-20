@@ -42,41 +42,7 @@ class User(db.Model):
     def get_id(self):
         return str(self.id)
 
-    @property
-    def password(self):
-        raise AttributeError('password is not a readable attribute')
 
-    @password.setter
-    def password(self, password):
-        try:
-            # Try to get bcrypt from current_app
-            if hasattr(current_app, 'bcrypt') and current_app.bcrypt is not None:
-                self.password_hash = current_app.bcrypt.generate_password_hash(password).decode('utf-8')
-                return
-            
-            # Fallback: try to import bcrypt directly
-            try:
-                from flask_bcrypt import Bcrypt
-                bcrypt = Bcrypt()
-                self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
-                return
-            except ImportError:
-                pass
-            
-            # Last resort: try to get bcrypt from the app factory
-            try:
-                from . import create_app
-                app = create_app()
-                if hasattr(app, 'bcrypt') and app.bcrypt is not None:
-                    self.password_hash = app.bcrypt.generate_password_hash(password).decode('utf-8')
-                    return
-            except Exception:
-                pass
-            
-            raise RuntimeError("Flask-Bcrypt not available. Make sure you're running in the web environment.")
-        except Exception as e:
-            print(f"❌ Error in password setter: {str(e)}")
-            raise
 
     def get_daily_conversions(self):
         """Get number of conversions today."""

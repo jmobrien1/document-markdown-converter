@@ -13,8 +13,8 @@ services:
     dockerfilePath: ./Dockerfile.render
     plan: free
     # Install web dependencies with aggressive cache busting
-    buildCommand: "echo 'WEB-AGGRESSIVE-CACHE-BUST-$(date +%s)-$(uuidgen)' && rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall -r requirements-web.txt"
-    startCommand: "echo 'Starting database migration...' && flask db upgrade && echo 'Migration complete, starting web server...' && echo 'Bcrypt fix version: $(date +%s)' && gunicorn run:app"
+    buildCommand: "echo 'WEB-COMPLETE-REBUILD-$(date +%s)-$(uuidgen)' && rm -rf ~/.cache/pip && pip cache purge && rm -rf /tmp/* && pip install --no-cache-dir --force-reinstall -r requirements-web.txt && echo 'Build completed at $(date)'"
+    startCommand: "echo 'Starting database migration...' && flask db upgrade && echo 'Migration complete, starting web server...' && echo 'Bcrypt fix version: $(date +%s)' && echo 'Verifying User model has no verify_password method...' && python -c \"from app.models import User; print('✅ User model verify_password method removed:', not hasattr(User, 'verify_password'))\" && gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
