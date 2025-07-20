@@ -9,10 +9,11 @@ services:
   # The main Flask web application
   - type: web
     name: mdraft-web
-    env: python
+    env: docker
+    dockerfilePath: ./Dockerfile.render
     plan: free
-    # NUCLEAR CACHE BUST: Every possible cache-busting technique
-    buildCommand: "rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall --upgrade -r requirements-web.txt && pip show stripe && pip list | grep stripe && echo 'WEB-NUCLEAR-STRIPE-v10-$(date +%s)'"
+    # Install web dependencies
+    buildCommand: "pip install --no-cache-dir -r requirements-web.txt"
     startCommand: "gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
@@ -36,10 +37,11 @@ services:
   # The Celery background worker
   - type: worker
     name: mdraft-worker
-    env: python
+    env: docker
+    dockerfilePath: ./Dockerfile.render
     plan: free
-    # NUCLEAR CACHE BUST: Maximum aggression against cached builds
-    buildCommand: "rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall --upgrade -r requirements-worker.txt && pip show stripe && pip list | grep stripe && python -c 'import stripe; print(f\"Stripe version: {stripe.__version__}\")' && echo 'WORKER-NUCLEAR-STRIPE-v10-$(date +%s)'"
+    # Install worker dependencies
+    buildCommand: "pip install --no-cache-dir -r requirements-worker.txt"
     startCommand: "celery -A celery_worker.celery worker --loglevel=info --pool=gevent --concurrency=10"
     envVars:
       - key: PYTHON_VERSION

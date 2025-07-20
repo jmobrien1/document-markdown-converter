@@ -1,0 +1,14 @@
+# Use Render's official Ubuntu-based Python image
+FROM render/python:3.11
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the requirements files
+COPY requirements-web.txt requirements-worker.txt ./
+
+# Install system dependencies that might be needed for building packages
+RUN apt-get update && apt-get install -y build-essential
+
+# We will install the correct requirements file in the start command
+# This allows the same Docker image to be used for both web and worker 
