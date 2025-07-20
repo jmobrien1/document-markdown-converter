@@ -12,9 +12,9 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.render
     plan: free
-    # Install web dependencies
-    buildCommand: "pip install --no-cache-dir -r requirements-web.txt"
-    startCommand: "gunicorn run:app"
+    # Install web dependencies with cache busting
+    buildCommand: "echo 'WEB-CACHE-BUST-$(date +%s)' && pip install --no-cache-dir -r requirements-web.txt"
+    startCommand: "flask db upgrade && flask migrate-stripe && gunicorn run:app"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -42,7 +42,7 @@ services:
     plan: free
     # Install worker dependencies with cache busting
     buildCommand: "echo 'WORKER-CACHE-BUST-$(date +%s)' && pip install --no-cache-dir -r requirements-worker.txt"
-    startCommand: "celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4"
+    startCommand: "celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4 --without-gossip --without-mingle"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
