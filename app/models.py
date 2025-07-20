@@ -79,28 +79,37 @@ class User(db.Model):
             raise
 
     def verify_password(self, password):
+        print(f"🔍 verify_password called at {__file__}:{__line__}")
+        print(f"🔍 Current error message should be: 'Flask-Bcrypt not available. Make sure you're running in the web environment.'")
+        
         try:
             # Try to get bcrypt from current_app
             if hasattr(current_app, 'bcrypt') and current_app.bcrypt is not None:
+                print("✅ Using current_app.bcrypt")
                 return current_app.bcrypt.check_password_hash(self.password_hash, password)
+            
+            print("❌ current_app.bcrypt not available, trying fallback...")
             
             # Fallback: try to import bcrypt directly
             try:
                 from flask_bcrypt import Bcrypt
                 bcrypt = Bcrypt()
+                print("✅ Using direct Bcrypt import")
                 return bcrypt.check_password_hash(self.password_hash, password)
-            except ImportError:
-                pass
+            except ImportError as e:
+                print(f"❌ Direct import failed: {e}")
             
             # Last resort: try to get bcrypt from the app factory
             try:
                 from . import create_app
                 app = create_app()
                 if hasattr(app, 'bcrypt') and app.bcrypt is not None:
+                    print("✅ Using app factory bcrypt")
                     return app.bcrypt.check_password_hash(self.password_hash, password)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"❌ App factory failed: {e}")
             
+            print("❌ All fallbacks failed, raising error...")
             raise RuntimeError("Flask-Bcrypt not available. Make sure you're running in the web environment.")
         except Exception as e:
             print(f"❌ Error in verify_password: {str(e)}")
