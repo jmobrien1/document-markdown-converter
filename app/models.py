@@ -2,11 +2,10 @@
 # Enhanced with freemium features and anonymous usage tracking
 
 from datetime import datetime, timedelta, timezone
-from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from . import db, bcrypt
 
-class User(UserMixin, db.Model):
+class User(db.Model):
     """User model for storing user accounts."""
     __tablename__ = 'users'
 
@@ -25,6 +24,22 @@ class User(UserMixin, db.Model):
 
     # Relationship to conversions
     conversions = db.relationship('Conversion', backref='user', lazy='dynamic')
+
+    # Flask-Login required properties and methods
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def is_active(self):
+        return True
+
+    @property
+    def is_anonymous(self):
+        return False
+
+    def get_id(self):
+        return str(self.id)
 
     @property
     def password(self):
