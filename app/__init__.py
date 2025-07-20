@@ -55,6 +55,12 @@ def create_app(config_name='default'):
         timezone='UTC',
         enable_utc=True,
     )
+
+    class ContextTask(celery.Task):
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
+    celery.Task = ContextTask
     
     # Configure Flask-Login
     login_manager.login_view = 'auth.login'
