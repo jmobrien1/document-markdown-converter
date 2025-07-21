@@ -461,26 +461,28 @@ def request_entity_too_large(e):
 def run_migration():
     """Temporary route to add job_id column to conversions table"""
     try:
+        from sqlalchemy import text
+        
         # Check if column already exists
-        result = db.session.execute("""
+        result = db.session.execute(text("""
             SELECT column_name 
             FROM information_schema.columns 
             WHERE table_name = 'conversions' AND column_name = 'job_id'
-        """).fetchone()
+        """)).fetchone()
         
         if result:
             return 'Column job_id already exists! Migration not needed.'
         
         # Add the column
-        db.session.execute('ALTER TABLE conversions ADD COLUMN job_id VARCHAR(64);')
+        db.session.execute(text('ALTER TABLE conversions ADD COLUMN job_id VARCHAR(64);'))
         db.session.commit()
         
         # Verify the column was added
-        result = db.session.execute("""
+        result = db.session.execute(text("""
             SELECT column_name 
             FROM information_schema.columns 
             WHERE table_name = 'conversions' AND column_name = 'job_id'
-        """).fetchone()
+        """)).fetchone()
         
         if result:
             return '✅ Migration successful! Column job_id added to conversions table.'
