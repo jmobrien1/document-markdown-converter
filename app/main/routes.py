@@ -222,12 +222,18 @@ def task_status(job_id):
     """
     task = convert_file_task.AsyncResult(job_id)
     
+    # DEBUG: Log the task state and info for troubleshooting
+    print(f"--- [Status Endpoint] Job {job_id}: state={task.state}, info={task.info}")
+    
     if task.state == 'PENDING':
         response = {'state': task.state, 'status': 'Pending...'}
     elif task.state == 'PROGRESS':
         response = {'state': task.state, 'status': task.info.get('status', 'Processing...')}
     elif task.state == 'SUCCESS':
+        # task.info contains the result dictionary from the Celery task
+        # which includes: {'status': 'SUCCESS', 'markdown': '...', 'filename': '...'}
         response = {'state': 'SUCCESS', 'result': task.info}
+        print(f"--- [Status Endpoint] SUCCESS response: {response}")
     else: # 'FAILURE'
         response = {
             'state': 'FAILURE',
