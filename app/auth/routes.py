@@ -135,12 +135,28 @@ def account():
     successful_conversions = current_user.conversions.filter_by(status='completed').count()
     success_rate = (successful_conversions / total_conversions * 100) if total_conversions > 0 else 0
 
+    # Calculate Pro conversions count
+    pro_conversions_count = current_user.conversions.filter_by(conversion_type='pro').count()
+
+    # Calculate average processing time for completed conversions
+    completed_conversions = current_user.conversions.filter_by(status='completed').filter(
+        Conversion.processing_time.isnot(None)
+    ).all()
+    
+    if completed_conversions:
+        total_time = sum(conv.processing_time for conv in completed_conversions)
+        avg_processing_time = total_time / len(completed_conversions)
+    else:
+        avg_processing_time = 0.0
+
     return render_template('auth/account.html',
                          user=current_user,
                          total_conversions=total_conversions,
                          daily_conversions=daily_conversions,
                          recent_conversions=recent_conversions,
-                         success_rate=round(success_rate, 1))
+                         success_rate=round(success_rate, 1),
+                         pro_conversions_count=pro_conversions_count,
+                         avg_processing_time=round(avg_processing_time, 1))
 
 
 @auth.route('/user-status')
