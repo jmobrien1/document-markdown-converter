@@ -267,7 +267,12 @@
                 while (!done) {
                     const resp = await fetch(`/status/${jobId}`);
                     const data = await resp.json();
+                    
+                    // DEBUG: Log the response data
+                    console.log(`[Batch Poll] Job ${jobId}:`, data);
+                    
                     if (data.state === 'SUCCESS' && data.result && data.result.markdown) {
+                        console.log(`[Batch Poll] SUCCESS detected for ${fileName}:`, data.result);
                         statusDiv.querySelector('.status-text').textContent = 'Completed!';
                         // Add download/copy functionality for the completed file
                         const downloadBtn = document.createElement('button');
@@ -287,14 +292,17 @@
                         statusDiv.appendChild(downloadBtn);
                         done = true;
                     } else if (data.state === 'FAILURE') {
+                        console.log(`[Batch Poll] FAILURE detected for ${fileName}:`, data);
                         statusDiv.querySelector('.status-text').textContent = `Failed: ${data.error || 'Unknown error'}`;
                         done = true;
                     } else {
+                        console.log(`[Batch Poll] Still processing ${fileName}:`, data.state, data.status);
                         statusDiv.querySelector('.status-text').textContent = data.status || 'Processing...';
                         await new Promise(res => setTimeout(res, 2000));
                     }
                 }
             } catch (err) {
+                console.error(`[Batch Poll] Error for ${fileName}:`, err);
                 statusDiv.querySelector('.status-text').textContent = `Error: ${err.message}`;
             }
         }
@@ -305,16 +313,23 @@
                     const statusResponse = await fetch(statusUrl);
                     const data = await statusResponse.json();
 
+                    // DEBUG: Log the response data
+                    console.log('[Single Poll] Status response:', data);
+
                     if (data.state === 'SUCCESS') {
+                        console.log('[Single Poll] SUCCESS detected:', data.result);
                         clearInterval(pollingInterval);
                         handleSuccess(data.result);
                     } else if (data.state === 'FAILURE') {
+                        console.log('[Single Poll] FAILURE detected:', data);
                         clearInterval(pollingInterval);
                         handleFailure(data.error);
                     } else {
+                        console.log('[Single Poll] Still processing:', data.state, data.status);
                         loadingText.textContent = data.status || 'Conversion in progress...';
                     }
                 } catch (error) {
+                    console.error('[Single Poll] Error:', error);
                     clearInterval(pollingInterval);
                     showError('Network error while checking status.');
                     resetUI();
