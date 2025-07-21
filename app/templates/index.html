@@ -53,6 +53,8 @@
         .error-message { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
         .success-message { background: #d4edda; color: #155724; border-color: #c3e6cb; }
         .file-info { font-size: 14px; color: var(--text-secondary); margin-top: 10px; text-align: center; }
+        .batch-status { margin-top: 10px; padding: 8px 12px; border-radius: 6px; background-color: #f0f7fa; border: 1px solid #cce5ff; color: #004085; font-size: 0.9em; }
+        .batch-status .status-text { font-weight: 500; }
     </style>
 </head>
 <body>
@@ -138,103 +140,121 @@
         const markdownOutput = document.getElementById('markdownOutput');
         const copyBtn = document.getElementById('copyBtn');
         const downloadBtn = document.getElementById('downloadBtn');
-
         let pollingInterval;
 
+        // Batch upload UI
+        const batchStatusContainer = document.createElement('div');
+        batchStatusContainer.id = 'batchStatusContainer';
+        batchStatusContainer.style.marginTop = '20px';
+        uploadForm.parentNode.insertBefore(batchStatusContainer, uploadForm.nextSibling);
+
+        // Check user status for Pro
+        let isProUser = false;
+        fetch('/user-status').then(r => r.json()).then(data => {
+            isProUser = data.is_premium;
+            if (isProUser) {
+                fileInput.setAttribute('multiple', 'multiple');
+                fileLabel.innerHTML = '<strong>Click to select files</strong> or drag and drop';
+            }
+        });
+
         fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                fileLabel.innerHTML = `<strong>Selected:</strong> ${file.name}`;
-                fileInfo.innerHTML = `<strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            if (isProUser && fileInput.files.length > 1) {
+                fileLabel.innerHTML = `<strong>Selected:</strong> ${fileInput.files.length} files`;
+                let info = '';
+                Array.from(fileInput.files).forEach(f => {
+                    info += `<div><strong>${f.name}</strong> - ${(f.size / 1024 / 1024).toFixed(2)} MB</div>`;
+                });
+                fileInfo.innerHTML = info;
             } else {
-                fileLabel.innerHTML = '<strong>Click to select a file</strong> or drag and drop';
-                fileInfo.innerHTML = '';
+                const file = e.target.files[0];
+                if (file) {
+                    fileLabel.innerHTML = `<strong>Selected:</strong> ${file.name}`;
+                    fileInfo.innerHTML = `<strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+                } else {
+                    fileLabel.innerHTML = '<strong>Click to select a file</strong> or drag and drop';
+                    fileInfo.innerHTML = '';
+                }
             }
         });
 
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const file = fileInput.files[0];
-            if (!file) {
-                showError('Please select a file first.');
-                return;
-            }
-
             hideMessages();
             resultSection.style.display = 'none';
             convertBtn.disabled = true;
             convertBtn.textContent = 'CONVERTING...';
             loading.style.display = 'block';
-            loadingText.textContent = 'Uploading and starting conversion...';
+            loadingText.textContent = isProUser && fileInput.files.length > 1 ? 'Uploading and starting batch conversion...' : 'Uploading and starting conversion...';
+            batchStatusContainer.innerHTML = '';
 
-            const formData = new FormData(uploadForm);
-
-            try {
-                const startResponse = await fetch("{{ url_for('main.convert') }}", { method: 'POST', body: formData });
-                
-                if (!startResponse.ok) {
-                    const errorData = await startResponse.json();
-                    throw new Error(errorData.error || `HTTP error! status: ${startResponse.status}`);
-                }
-
-                const startData = await startResponse.json();
-                if (startResponse.status === 202) {
-                    loadingText.textContent = 'File conversion in progress...';
-                    pollForTaskStatus(startData.status_url);
-                } else {
-                    throw new Error(startData.error || 'Could not start conversion job.');
-                }
-            } catch (error) {
-                showError(`Error: ${error.message}`);
-                resetUI();
+            const files = isProUser ? Array.from(fileInput.files) : [fileInput.files[0]];
+            if (!files.length || !files[0]) {
+                showError('Please select a file first.');
+                convertBtn.disabled = false;
+                convertBtn.textContent = 'Convert with mdraft';
+                loading.style.display = 'none';
+                return;
             }
-        });
 
-        function pollForTaskStatus(statusUrl) {
-            pollingInterval = setInterval(async () => {
+            // For each file, create a FormData and send a request
+            const statusTrackers = [];
+            for (const file of files) {
+                const formData = new FormData(uploadForm);
+                formData.set('file', file);
+                // Create status indicator
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'batch-status';
+                statusDiv.innerHTML = `<strong>${file.name}</strong>: <span class="status-text">Uploading...</span>`;
+                batchStatusContainer.appendChild(statusDiv);
+                statusTrackers.push({ file, statusDiv });
+            }
+
+            // Start all uploads in parallel
+            await Promise.all(statusTrackers.map(async ({ file, statusDiv }) => {
+                const formData = new FormData(uploadForm);
+                formData.set('file', file);
                 try {
-                    const statusResponse = await fetch(statusUrl);
-                    const data = await statusResponse.json();
-
-                    if (data.state === 'SUCCESS') {
-                        clearInterval(pollingInterval);
-                        handleSuccess(data.result);
-                    } else if (data.state === 'FAILURE') {
-                        clearInterval(pollingInterval);
-                        handleFailure(data.error);
-                    } else {
-                        loadingText.textContent = data.status || 'Conversion in progress...';
+                    const startResponse = await fetch("{{ url_for('main.convert') }}", { method: 'POST', body: formData });
+                    if (!startResponse.ok) {
+                        const errorData = await startResponse.json();
+                        throw new Error(errorData.error || `HTTP error! status: ${startResponse.status}`);
                     }
-                } catch (error) {
-                    clearInterval(pollingInterval);
-                    showError('Network error while checking status.');
-                    resetUI();
+                    const startData = await startResponse.json();
+                    statusDiv.querySelector('.status-text').textContent = 'Processing...';
+                    // Poll for status
+                    pollBatchStatus(startData.job_id, statusDiv, file.name);
+                } catch (err) {
+                    statusDiv.querySelector('.status-text').textContent = `Error: ${err.message}`;
                 }
-            }, 2500);
-        }
+            }));
 
-        function handleSuccess(result) {
-            markdownOutput.value = result.markdown;
-            resultSection.style.display = 'block';
-            showSuccess(`Successfully converted "${result.original_filename}"!`);
-            
-            const blob = new Blob([result.markdown], { type: 'text/plain' });
-            downloadBtn.href = URL.createObjectURL(blob);
-            downloadBtn.download = 'mdraft_output.ml';
-            downloadBtn.style.display = 'inline-block';
-
-            resetUI();
-        }
-
-        function handleFailure(errorMsg) {
-            showError(`Conversion Failed: ${errorMsg}`);
-            resetUI();
-        }
-
-        function resetUI() {
-            loading.style.display = 'none';
             convertBtn.disabled = false;
             convertBtn.textContent = 'Convert with mdraft';
+            loading.style.display = 'none';
+        });
+
+        async function pollBatchStatus(jobId, statusDiv, fileName) {
+            try {
+                let done = false;
+                while (!done) {
+                    const resp = await fetch(`/status/${jobId}`);
+                    const data = await resp.json();
+                    if (data.state === 'SUCCESS' && data.markdown) {
+                        statusDiv.querySelector('.status-text').textContent = 'Completed!';
+                        // Optionally, add download/copy buttons for each file here
+                        done = true;
+                    } else if (data.state === 'FAILURE') {
+                        statusDiv.querySelector('.status-text').textContent = `Failed: ${data.error_message || 'Unknown error'}`;
+                        done = true;
+                    } else {
+                        statusDiv.querySelector('.status-text').textContent = data.status || 'Processing...';
+                        await new Promise(res => setTimeout(res, 2000));
+                    }
+                }
+            } catch (err) {
+                statusDiv.querySelector('.status-text').textContent = `Error: ${err.message}`;
+            }
         }
 
         copyBtn.addEventListener('click', () => {
