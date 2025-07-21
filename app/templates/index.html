@@ -197,41 +197,68 @@
                 return;
             }
 
-            // For each file, create a FormData and send a request
-            const statusTrackers = [];
-            for (const file of files) {
+            // Handle single file upload (non-Pro or single file selected)
+            if (!isProUser || files.length === 1) {
+                const file = files[0];
                 const formData = new FormData(uploadForm);
                 formData.set('file', file);
-                // Create status indicator
-                const statusDiv = document.createElement('div');
-                statusDiv.className = 'batch-status';
-                statusDiv.innerHTML = `<strong>${file.name}</strong>: <span class="status-text">Uploading...</span>`;
-                batchStatusContainer.appendChild(statusDiv);
-                statusTrackers.push({ file, statusDiv });
-            }
 
-            // Start all uploads in parallel
-            await Promise.all(statusTrackers.map(async ({ file, statusDiv }) => {
-                const formData = new FormData(uploadForm);
-                formData.set('file', file);
                 try {
                     const startResponse = await fetch("{{ url_for('main.convert') }}", { method: 'POST', body: formData });
+                    
                     if (!startResponse.ok) {
                         const errorData = await startResponse.json();
                         throw new Error(errorData.error || `HTTP error! status: ${startResponse.status}`);
                     }
-                    const startData = await startResponse.json();
-                    statusDiv.querySelector('.status-text').textContent = 'Processing...';
-                    // Poll for status
-                    pollBatchStatus(startData.job_id, statusDiv, file.name);
-                } catch (err) {
-                    statusDiv.querySelector('.status-text').textContent = `Error: ${err.message}`;
-                }
-            }));
 
-            convertBtn.disabled = false;
-            convertBtn.textContent = 'Convert with mdraft';
-            loading.style.display = 'none';
+                    const startData = await startResponse.json();
+                    if (startResponse.status === 202) {
+                        loadingText.textContent = 'File conversion in progress...';
+                        pollForTaskStatus(startData.status_url);
+                    } else {
+                        throw new Error(startData.error || 'Could not start conversion job.');
+                    }
+                } catch (error) {
+                    showError(`Error: ${error.message}`);
+                    resetUI();
+                }
+            } else {
+                // Handle batch upload for Pro users with multiple files
+                const statusTrackers = [];
+                for (const file of files) {
+                    const formData = new FormData(uploadForm);
+                    formData.set('file', file);
+                    // Create status indicator
+                    const statusDiv = document.createElement('div');
+                    statusDiv.className = 'batch-status';
+                    statusDiv.innerHTML = `<strong>${file.name}</strong>: <span class="status-text">Uploading...</span>`;
+                    batchStatusContainer.appendChild(statusDiv);
+                    statusTrackers.push({ file, statusDiv });
+                }
+
+                // Start all uploads in parallel
+                await Promise.all(statusTrackers.map(async ({ file, statusDiv }) => {
+                    const formData = new FormData(uploadForm);
+                    formData.set('file', file);
+                    try {
+                        const startResponse = await fetch("{{ url_for('main.convert') }}", { method: 'POST', body: formData });
+                        if (!startResponse.ok) {
+                            const errorData = await startResponse.json();
+                            throw new Error(errorData.error || `HTTP error! status: ${startResponse.status}`);
+                        }
+                        const startData = await startResponse.json();
+                        statusDiv.querySelector('.status-text').textContent = 'Processing...';
+                        // Poll for status
+                        pollBatchStatus(startData.job_id, statusDiv, file.name);
+                    } catch (err) {
+                        statusDiv.querySelector('.status-text').textContent = `Error: ${err.message}`;
+                    }
+                }));
+
+                convertBtn.disabled = false;
+                convertBtn.textContent = 'Convert with mdraft';
+                loading.style.display = 'none';
+            }
         });
 
         async function pollBatchStatus(jobId, statusDiv, fileName) {
@@ -240,12 +267,27 @@
                 while (!done) {
                     const resp = await fetch(`/status/${jobId}`);
                     const data = await resp.json();
-                    if (data.state === 'SUCCESS' && data.markdown) {
+                    if (data.state === 'SUCCESS' && data.result && data.result.markdown) {
                         statusDiv.querySelector('.status-text').textContent = 'Completed!';
-                        // Optionally, add download/copy buttons for each file here
+                        // Add download/copy functionality for the completed file
+                        const downloadBtn = document.createElement('button');
+                        downloadBtn.textContent = '📄 View Result';
+                        downloadBtn.style.marginLeft = '10px';
+                        downloadBtn.style.padding = '2px 8px';
+                        downloadBtn.style.fontSize = '0.8em';
+                        downloadBtn.onclick = () => {
+                            markdownOutput.value = data.result.markdown;
+                            resultSection.style.display = 'block';
+                            showSuccess(`Successfully converted "${fileName}"!`);
+                            
+                            const blob = new Blob([data.result.markdown], { type: 'text/plain' });
+                            downloadBtn.href = URL.createObjectURL(blob);
+                            downloadBtn.download = `${fileName.replace(/\.[^/.]+$/, '')}.md`;
+                        };
+                        statusDiv.appendChild(downloadBtn);
                         done = true;
                     } else if (data.state === 'FAILURE') {
-                        statusDiv.querySelector('.status-text').textContent = `Failed: ${data.error_message || 'Unknown error'}`;
+                        statusDiv.querySelector('.status-text').textContent = `Failed: ${data.error || 'Unknown error'}`;
                         done = true;
                     } else {
                         statusDiv.querySelector('.status-text').textContent = data.status || 'Processing...';
@@ -255,6 +297,53 @@
             } catch (err) {
                 statusDiv.querySelector('.status-text').textContent = `Error: ${err.message}`;
             }
+        }
+
+        function pollForTaskStatus(statusUrl) {
+            pollingInterval = setInterval(async () => {
+                try {
+                    const statusResponse = await fetch(statusUrl);
+                    const data = await statusResponse.json();
+
+                    if (data.state === 'SUCCESS') {
+                        clearInterval(pollingInterval);
+                        handleSuccess(data.result);
+                    } else if (data.state === 'FAILURE') {
+                        clearInterval(pollingInterval);
+                        handleFailure(data.error);
+                    } else {
+                        loadingText.textContent = data.status || 'Conversion in progress...';
+                    }
+                } catch (error) {
+                    clearInterval(pollingInterval);
+                    showError('Network error while checking status.');
+                    resetUI();
+                }
+            }, 2500);
+        }
+
+        function handleSuccess(result) {
+            markdownOutput.value = result.markdown;
+            resultSection.style.display = 'block';
+            showSuccess(`Successfully converted "${result.filename}"!`);
+            
+            const blob = new Blob([result.markdown], { type: 'text/plain' });
+            downloadBtn.href = URL.createObjectURL(blob);
+            downloadBtn.download = 'mdraft_output.md';
+            downloadBtn.style.display = 'inline-block';
+
+            resetUI();
+        }
+
+        function handleFailure(errorMsg) {
+            showError(`Conversion Failed: ${errorMsg}`);
+            resetUI();
+        }
+
+        function resetUI() {
+            loading.style.display = 'none';
+            convertBtn.disabled = false;
+            convertBtn.textContent = 'Convert with mdraft';
         }
 
         copyBtn.addEventListener('click', () => {
