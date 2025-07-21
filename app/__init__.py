@@ -101,6 +101,10 @@ def create_app(config_name='default', for_worker=False):
         except ImportError as e:
             app.logger.warning(f"Admin blueprint registration failed: {str(e)}")
 
+        # Register health blueprint
+        from app.health import health as health_blueprint
+        app.register_blueprint(health_blueprint)
+
         # User Loader for Flask-Login
         from .models import User
         @login_manager.user_loader
