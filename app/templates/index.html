@@ -229,7 +229,7 @@
                 <form id="uploadForm" enctype="multipart/form-data">
                     <div class="file-input-wrapper">
                         <div class="file-input">
-                            <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.txt,.html,.htm,.csv,.json,.xml,.epub">
+                            <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.pptx,.html,.htm,.csv,.json,.xml,.zip,.epub,.gif,.tiff,.tif,.jpg,.jpeg,.png,.bmp,.webp">
                             <span id="fileLabel"><strong>Click to select a file</strong> or drag and drop</span>
                         </div>
                     </div>
@@ -238,8 +238,11 @@
                     <div class="pro-toggle" style="margin-bottom: 20px; text-align: center; padding: 10px; background: #eef2ff; border-radius: 8px;">
                         <label for="pro_conversion" style="font-weight: 600; color: #4338ca; cursor: pointer;">
                             <input type="checkbox" id="pro_conversion" name="pro_conversion" style="margin-right: 8px;">
-                            💎 Use Pro Converter (for complex PDFs)
+                            💎 Use Pro Converter (PDFs, Images, HTML)
                         </label>
+                        <div style="font-size: 0.9em; color: #6b7280; margin-top: 5px;">
+                            Pro: PDF, GIF, TIFF, JPG, PNG, BMP, WebP, HTML | Standard: DOCX, XLSX, PPTX, CSV, JSON, XML, ZIP, EPUB
+                        </div>
                     </div>
 
                     <button type="submit" class="convert-btn" id="convertBtn">Convert with mdraft</button>
@@ -269,7 +272,10 @@
             <!-- Logged-out View -->
             <section class="welcome-message">
                 <h1>The Smartest Document to Markdown Converter</h1>
-                <p>Upload PDFs, Word docs, and more. Get clean, readable Markdown in seconds.</p>
+                <p>Upload PDFs, Word docs, Excel files, PowerPoint, images, and more. Get clean, readable Markdown in seconds.</p>
+                <div style="font-size: 0.9em; color: #6b7280; margin: 15px 0;">
+                    <strong>Supported formats:</strong> PDF, DOCX, XLSX, PPTX, HTML, CSV, JSON, XML, ZIP, EPUB, GIF, TIFF, JPG, PNG, BMP, WebP
+                </div>
                 <a href="{{ url_for('auth.signup') }}" class="btn convert-btn">Get Started for Free</a>
             </section>
         {% endif %}

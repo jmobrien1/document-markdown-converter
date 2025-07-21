@@ -303,62 +303,96 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
             
             # Process the file
             if use_pro_converter:
-                print("--- [Celery Task] Starting PRO conversion path (Document AI).")
+                # Check if file type is supported by Document AI
+                file_extension = os.path.splitext(original_filename)[1].lower()
+                docai_supported_types = {'.pdf', '.gif', '.tiff', '.tif', '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.html'}
                 
-                project_id = os.environ.get('GOOGLE_CLOUD_PROJECT', 'mdraft')
-                location = os.environ.get('DOCAI_PROCESSOR_REGION', 'us')
-                processor_id = os.environ.get('DOCAI_PROCESSOR_ID')
-                
-                print(f"Using Project ID: {project_id} | Location: {location} | Processor ID: {processor_id}")
-                
-                # DEBUG: Check if this is a large PDF that needs batch processing
-                print("--- [Celery Task] DEBUG: Calling get_pdf_page_count...")
-                estimated_pages = get_pdf_page_count(temp_file_path)
-                print(f"--- [Celery Task] Estimated pages: {estimated_pages}")
-                print(f"--- [Celery Task] DEBUG: File size used for estimation: {file_size}")
-                print(f"--- [Celery Task] DEBUG: Calculation: {file_size} / 70000 = {file_size // 70000}")
-                
-                if estimated_pages > 25:  # Use batch processing for files likely >30 pages
-                    print("--- [Celery Task] Large document detected - using BATCH processing")
-                    
-                    # Create unique GCS paths for batch processing
-                    batch_id = str(uuid.uuid4())
-                    print(f"--- [Celery Task] DEBUG: Generated batch ID: {batch_id}")
-                    
-                    # Upload file to GCS input location for batch processing
-                    input_blob_name = f"batch-input/{batch_id}/{original_filename}"
-                    print(f"--- [Celery Task] DEBUG: Uploading to batch input: {input_blob_name}")
-                    input_blob = bucket.blob(input_blob_name)
-                    input_blob.upload_from_filename(temp_file_path)
-                    
-                    input_gcs_uri = f"gs://{bucket_name}/batch-input/{batch_id}/"
-                    output_gcs_uri = f"gs://{bucket_name}/batch-output/{batch_id}/"
-                    print(f"--- [Celery Task] DEBUG: Input URI: {input_gcs_uri}")
-                    print(f"--- [Celery Task] DEBUG: Output URI: {output_gcs_uri}")
-                    
-                    # Process with batch API
-                    markdown_content = process_with_docai_batch(
-                        credentials_path, project_id, location, processor_id,
-                        input_gcs_uri, output_gcs_uri
-                    )
-                    
-                    # Clean up batch files
-                    try:
-                        for blob_cleanup in bucket.list_blobs(prefix=f"batch-input/{batch_id}/"):
-                            blob_cleanup.delete()
-                        for blob_cleanup in bucket.list_blobs(prefix=f"batch-output/{batch_id}/"):
-                            blob_cleanup.delete()
-                    except:
-                        pass  # Don't fail the task if cleanup fails
-                    
+                if file_extension not in docai_supported_types:
+                    print(f"--- [Celery Task] File type {file_extension} not supported by Document AI, falling back to standard converter")
+                    print("--- [Celery Task] Starting STANDARD conversion path (markitdown).")
+                    md = MarkItDown()
+                    result = md.convert(temp_file_path)
+                    markdown_content = result.text_content
                 else:
-                    print("--- [Celery Task] Small document - using synchronous processing")
-                    print(f"--- [Celery Task] DEBUG: {estimated_pages} <= 25, using sync processing")
-                    # Use existing synchronous processing for small files
-                    markdown_content = process_with_docai(
-                        credentials_path, project_id, location, processor_id, 
-                        temp_file_path, "application/pdf"
-                    )
+                    print("--- [Celery Task] Starting PRO conversion path (Document AI).")
+                    
+                    project_id = os.environ.get('GOOGLE_CLOUD_PROJECT', 'mdraft')
+                    location = os.environ.get('DOCAI_PROCESSOR_REGION', 'us')
+                    processor_id = os.environ.get('DOCAI_PROCESSOR_ID')
+                    
+                    print(f"Using Project ID: {project_id} | Location: {location} | Processor ID: {processor_id}")
+                    
+                    # Determine MIME type based on file extension
+                    mime_type_map = {
+                        '.pdf': 'application/pdf',
+                        '.png': 'image/png',
+                        '.jpg': 'image/jpeg',
+                        '.jpeg': 'image/jpeg',
+                        '.gif': 'image/gif',
+                        '.bmp': 'image/bmp',
+                        '.tiff': 'image/tiff',
+                        '.tif': 'image/tiff',
+                        '.webp': 'image/webp',
+                        '.html': 'text/html'
+                    }
+                    mime_type = mime_type_map.get(file_extension, 'application/pdf')
+                    
+                    # Only use page estimation for PDFs
+                    if file_extension == '.pdf':
+                        print("--- [Celery Task] DEBUG: Calling get_pdf_page_count...")
+                        estimated_pages = get_pdf_page_count(temp_file_path)
+                        print(f"--- [Celery Task] Estimated pages: {estimated_pages}")
+                        print(f"--- [Celery Task] DEBUG: File size used for estimation: {file_size}")
+                        print(f"--- [Celery Task] DEBUG: Calculation: {file_size} / 70000 = {file_size // 70000}")
+                        
+                        if estimated_pages > 25:  # Use batch processing for files likely >30 pages
+                            print("--- [Celery Task] Large document detected - using BATCH processing")
+                            
+                            # Create unique GCS paths for batch processing
+                            batch_id = str(uuid.uuid4())
+                            print(f"--- [Celery Task] DEBUG: Generated batch ID: {batch_id}")
+                            
+                            # Upload file to GCS input location for batch processing
+                            input_blob_name = f"batch-input/{batch_id}/{original_filename}"
+                            print(f"--- [Celery Task] DEBUG: Uploading to batch input: {input_blob_name}")
+                            input_blob = bucket.blob(input_blob_name)
+                            input_blob.upload_from_filename(temp_file_path)
+                            
+                            input_gcs_uri = f"gs://{bucket_name}/batch-input/{batch_id}/"
+                            output_gcs_uri = f"gs://{bucket_name}/batch-output/{batch_id}/"
+                            print(f"--- [Celery Task] DEBUG: Input URI: {input_gcs_uri}")
+                            print(f"--- [Celery Task] DEBUG: Output URI: {output_gcs_uri}")
+                            
+                            # Process with batch API
+                            markdown_content = process_with_docai_batch(
+                                credentials_path, project_id, location, processor_id,
+                                input_gcs_uri, output_gcs_uri
+                            )
+                            
+                            # Clean up batch files
+                            try:
+                                for blob_cleanup in bucket.list_blobs(prefix=f"batch-input/{batch_id}/"):
+                                    blob_cleanup.delete()
+                                for blob_cleanup in bucket.list_blobs(prefix=f"batch-output/{batch_id}/"):
+                                    blob_cleanup.delete()
+                            except:
+                                pass  # Don't fail the task if cleanup fails
+                            
+                        else:
+                            print("--- [Celery Task] Small document - using synchronous processing")
+                            print(f"--- [Celery Task] DEBUG: {estimated_pages} <= 25, using sync processing")
+                            # Use existing synchronous processing for small files
+                            markdown_content = process_with_docai(
+                                credentials_path, project_id, location, processor_id, 
+                                temp_file_path, mime_type
+                            )
+                    else:
+                        # For images and HTML, use synchronous processing
+                        print("--- [Celery Task] Image/HTML file - using synchronous processing")
+                        markdown_content = process_with_docai(
+                            credentials_path, project_id, location, processor_id, 
+                            temp_file_path, mime_type
+                        )
             else:
                 print("--- [Celery Task] Starting STANDARD conversion path (markitdown).")
                 md = MarkItDown()

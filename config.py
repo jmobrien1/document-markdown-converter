@@ -12,8 +12,10 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'a-very-secret-dev-key-for-local-testing')
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024
     ALLOWED_EXTENSIONS = {
-        'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'txt', 'html',
-        'htm', 'csv', 'json', 'xml', 'epub'
+        # Document AI (Pro) supported formats
+        'pdf', 'gif', 'tiff', 'tif', 'jpg', 'jpeg', 'png', 'bmp', 'webp', 'html',
+        # Markitdown (Standard) supported formats  
+        'docx', 'xlsx', 'xls', 'pptx', 'htm', 'csv', 'json', 'xml', 'zip', 'epub'
     }
 
     # Anonymous user daily conversion limit
