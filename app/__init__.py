@@ -219,4 +219,27 @@ def create_app(config_name='default', for_worker=False):
             else:
                 print(f"User with email '{email}' not found.")
 
+        @app.cli.command("fix-job-id-column")
+        def fix_job_id_column_command():
+            """Manually add job_id column to conversions table if it doesn't exist."""
+            from sqlalchemy import text
+            try:
+                # Check if job_id column exists
+                result = db.session.execute(text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'conversions' AND column_name = 'job_id'
+                """))
+                if not result.fetchone():
+                    print("🔧 Adding job_id column to conversions table...")
+                    db.session.execute(text("ALTER TABLE conversions ADD COLUMN job_id VARCHAR(64)"))
+                    db.session.commit()
+                    print("✅ job_id column added successfully!")
+                else:
+                    print("✅ job_id column already exists")
+            except Exception as e:
+                print(f"❌ Error adding job_id column: {str(e)}")
+                db.session.rollback()
+                raise
+
     return app
