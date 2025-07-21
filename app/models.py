@@ -22,6 +22,7 @@ class User(db.Model):
     premium_expires = db.Column(db.DateTime, nullable=True)
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
+    api_key = db.Column(db.String(64), unique=True, nullable=True, index=True)
 
     # Relationship to conversions
     conversions = db.relationship('Conversion', backref='user', lazy='dynamic')
@@ -76,6 +77,13 @@ class User(db.Model):
     def can_convert(self):
         """Check if user can perform conversions (always True for logged-in users)."""
         return True
+
+    def generate_api_key(self):
+        import secrets
+        token = secrets.token_urlsafe(48)[:64]
+        self.api_key = token
+        db.session.commit()
+        return token
 
     def __repr__(self):
         return f'<User {self.email}>'

@@ -98,28 +98,32 @@ class ProductionConfig(Config):
     def init_app(cls, app):
         Config.init_app(app)
 
-        # Production-specific initialization
         import logging
-        from logging.handlers import RotatingFileHandler
+        import sys
+        from pythonjsonlogger import jsonlogger
+        from flask import has_request_context, request
 
-        # Create logs directory if it doesn't exist
-        if not os.path.exists('logs'):
-            os.mkdir('logs')
+        class CustomJsonFormatter(jsonlogger.JsonFormatter):
+            def add_fields(self, log_record, record, message_dict):
+                super().add_fields(log_record, record, message_dict)
+                log_record['timestamp'] = self.formatTime(record, self.datefmt)
+                log_record['level'] = record.levelname
+                log_record['message'] = record.getMessage()
+                if has_request_context():
+                    log_record['path'] = request.path
+                    log_record['method'] = request.method
 
-        # File logging
-        file_handler = RotatingFileHandler(
-            'logs/mdraft.log',
-            maxBytes=10240000,
-            backupCount=10
-        )
-        file_handler.setFormatter(logging.Formatter(
-            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
-        ))
-        file_handler.setLevel(logging.INFO)
-        app.logger.addHandler(file_handler)
-
-        app.logger.setLevel(logging.INFO)
-        app.logger.info('mdraft startup')
+        if os.environ.get('FLASK_CONFIG') == 'production':
+            # Remove all handlers associated with the app logger object
+            for handler in list(app.logger.handlers):
+                app.logger.removeHandler(handler)
+            handler = logging.StreamHandler(sys.stdout)
+            formatter = CustomJsonFormatter()
+            handler.setFormatter(formatter)
+            handler.setLevel(logging.INFO)
+            app.logger.addHandler(handler)
+            app.logger.setLevel(logging.INFO)
+            app.logger.info('mdraft startup (JSON logger enabled)')
 
 
 # A dictionary to easily access configuration classes by name.

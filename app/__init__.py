@@ -105,6 +105,10 @@ def create_app(config_name='default', for_worker=False):
         from app.health import health as health_blueprint
         app.register_blueprint(health_blueprint)
 
+        # Register API blueprint
+        from app.api import api as api_blueprint
+        app.register_blueprint(api_blueprint, url_prefix='/api/v1')
+
         # User Loader for Flask-Login
         from .models import User
         @login_manager.user_loader

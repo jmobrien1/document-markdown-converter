@@ -15,3 +15,5 @@ click
 pytest
 pytest-flask
 markitdown[all]
+
+python-json-logger
