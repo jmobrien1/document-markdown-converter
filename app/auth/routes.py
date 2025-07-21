@@ -159,6 +159,18 @@ def account():
                          avg_processing_time=round(avg_processing_time, 1))
 
 
+@auth.route('/test-email')
+@login_required
+def test_email():
+    """Test email functionality."""
+    try:
+        from app.email import send_conversion_complete_email
+        send_conversion_complete_email(current_user.email, "test-file.pdf")
+        flash('Test email sent successfully!', 'success')
+    except Exception as e:
+        flash(f'Email test failed: {str(e)}', 'error')
+    return redirect(url_for('auth.account'))
+
 @auth.route('/user-status')
 def user_status():
     """API endpoint to get current user status."""

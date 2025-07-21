@@ -14,6 +14,11 @@ def send_conversion_complete_email(user_email, filename):
         filename (str): The original filename that was converted
     """
     try:
+        # Check if email is configured
+        if not current_app.config.get('MAIL_USERNAME') or not current_app.config.get('MAIL_PASSWORD'):
+            current_app.logger.warning("❌ Email not configured - MAIL_USERNAME or MAIL_PASSWORD not set")
+            return
+            
         subject = 'Your mdraft Conversion is Complete!'
         
         # Create the email body
