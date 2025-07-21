@@ -149,7 +149,7 @@ def convert():
     # Estimate if this will be a batch job (for user feedback)
     is_large_file = file_size > 1750000  # ~25 pages * 70KB = ~1.75MB
     
-    # Create conversion record with error handling for missing job_id column
+    # Create conversion record with proper error handling
     try:
         conversion = Conversion(
             user_id=user_id,
@@ -163,32 +163,16 @@ def convert():
         db.session.add(conversion)
         db.session.commit()
     except Exception as e:
+        db.session.rollback()  # Clean up the failed transaction
         if 'job_id' in str(e) and 'does not exist' in str(e):
-            # Database schema issue - try to fix it
-            try:
-                from sqlalchemy import text
-                db.session.execute(text("ALTER TABLE conversions ADD COLUMN job_id VARCHAR(64)"))
-                db.session.commit()
-                print("✅ Added job_id column to conversions table")
-                
-                # Retry the conversion creation
-                conversion = Conversion(
-                    user_id=user_id,
-                    session_id=session_id,
-                    original_filename=filename,
-                    file_size=file_size,
-                    file_type=os.path.splitext(filename)[1].lower(),
-                    conversion_type='pro' if use_pro_converter else 'standard',
-                    status='pending'
-                )
-                db.session.add(conversion)
-                db.session.commit()
-            except Exception as fix_error:
-                print(f"❌ Failed to fix database schema: {fix_error}")
-                return jsonify({'error': 'Database configuration error. Please contact support.'}), 500
+            print(f"❌ Database schema error: job_id column missing. Error: {str(e)}")
+            return jsonify({
+                'error': 'System maintenance in progress. Please try again in a few minutes.',
+                'details': 'Database schema is being updated.'
+            }), 503
         else:
-            # Re-raise if it's not a job_id column issue
-            raise
+            print(f"❌ Database error during conversion creation: {str(e)}")
+            return jsonify({'error': 'Database error occurred. Please try again.'}), 500
 
     # Update anonymous usage
     if not current_user or not current_user.is_authenticated:
@@ -209,12 +193,13 @@ def convert():
         conversion.job_id = task.id
         db.session.commit()
     except Exception as e:
+        db.session.rollback()  # Clean up the failed transaction
         if 'job_id' in str(e) and 'does not exist' in str(e):
-            # Column still doesn't exist - log but continue
-            print(f"⚠️ Warning: job_id column still missing, but conversion {conversion.id} was created successfully")
+            print(f"⚠️ Warning: job_id column missing, but conversion {conversion.id} was created successfully")
+            # Continue without job_id - the conversion will still work
         else:
-            # Re-raise if it's not a job_id column issue
-            raise
+            print(f"❌ Error storing job_id: {str(e)}")
+            # Continue without job_id - the conversion will still work
 
     # Provide appropriate user feedback based on file size
     response_data = {

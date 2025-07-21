@@ -219,27 +219,40 @@ def create_app(config_name='default', for_worker=False):
             else:
                 print(f"User with email '{email}' not found.")
 
-        @app.cli.command("fix-job-id-column")
-        def fix_job_id_column_command():
-            """Manually add job_id column to conversions table if it doesn't exist."""
+        @app.cli.command("check-database-schema")
+        def check_database_schema_command():
+            """Check database schema health and report issues."""
             from sqlalchemy import text
             try:
-                # Check if job_id column exists
+                print("🔍 Checking database schema...")
+                
+                # Check if conversions table exists
                 result = db.session.execute(text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'conversions' AND column_name = 'job_id'
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'conversions'
+                    )
                 """))
-                if not result.fetchone():
-                    print("🔧 Adding job_id column to conversions table...")
-                    db.session.execute(text("ALTER TABLE conversions ADD COLUMN job_id VARCHAR(64)"))
-                    db.session.commit()
-                    print("✅ job_id column added successfully!")
-                else:
-                    print("✅ job_id column already exists")
+                table_exists = result.fetchone()[0]
+                print(f"✅ conversions table exists: {table_exists}")
+                
+                if table_exists:
+                    # Check for required columns
+                    required_columns = ['id', 'user_id', 'original_filename', 'status', 'created_at', 'job_id']
+                    for column in required_columns:
+                        result = db.session.execute(text(f"""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_name = 'conversions' AND column_name = '{column}'
+                        """))
+                        exists = result.fetchone() is not None
+                        status = "✅" if exists else "❌"
+                        print(f"{status} {column} column exists: {exists}")
+                
+                print("🔍 Database schema check complete!")
+                
             except Exception as e:
-                print(f"❌ Error adding job_id column: {str(e)}")
-                db.session.rollback()
+                print(f"❌ Error checking database schema: {str(e)}")
                 raise
 
     return app
