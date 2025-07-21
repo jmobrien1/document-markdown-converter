@@ -13,7 +13,8 @@ from markitdown import MarkItDown
 from celery import current_task
 from app import celery, db
 from flask import current_app
-from app.models import Conversion
+from app.models import Conversion, User
+from app.email import send_conversion_complete_email
 from datetime import datetime, timezone
 
 def get_pdf_page_count(file_path):
@@ -372,6 +373,16 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                     conversion.processing_time = time.time() - start_time
                     conversion.markdown_length = len(markdown_content)
                     db.session.commit()
+                    
+                    # Send email notification if user is logged in
+                    if conversion.user_id:
+                        try:
+                            user = User.query.get(conversion.user_id)
+                            if user and user.email:
+                                send_conversion_complete_email(user.email, original_filename)
+                        except Exception as e:
+                            print(f"--- [Celery Task] Email notification failed: {str(e)}")
+                            # Don't fail the task if email fails
         print("--- [Celery Task] Conversion completed successfully!")
         return {
             'status': 'SUCCESS',

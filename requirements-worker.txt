@@ -16,3 +16,4 @@ pytest
 pytest-flask
 
 python-json-logger
+Flask-Mail==0.9.1

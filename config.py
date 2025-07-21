@@ -23,6 +23,14 @@ class Config:
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 
+    # --- Flask-Mail Configuration ---
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+    MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER')
+
     # --- Google Cloud Storage Configuration ---
     GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME')
 
@@ -80,6 +88,8 @@ class Config:
             app.logger.warning("GCS credentials not configured. All GCS operations will fail.")
         if not app.config.get('STRIPE_SECRET_KEY'):
             app.logger.warning("STRIPE_SECRET_KEY is not set. Payments will fail.")
+        if not app.config.get('MAIL_USERNAME') or not app.config.get('MAIL_PASSWORD'):
+            app.logger.warning("Email configuration not set. Email notifications will fail.")
 
 
 class DevelopmentConfig(Config):

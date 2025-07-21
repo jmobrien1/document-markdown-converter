@@ -6,6 +6,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from celery import Celery
 from flask_migrate import Migrate
+from flask_mail import Mail
 from dotenv import load_dotenv
 import click
 
@@ -19,6 +20,7 @@ if os.path.exists(dotenv_path):
 db = SQLAlchemy()
 celery = Celery(__name__, include=['app.tasks'])
 migrate = Migrate()
+mail = Mail()
 
 
 
@@ -48,6 +50,7 @@ def create_app(config_name='default', for_worker=False):
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
+    mail.init_app(app)
     
     # Ensure database schema is up to date
     with app.app_context():
