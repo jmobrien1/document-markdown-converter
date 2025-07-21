@@ -196,12 +196,21 @@
             background: #5a32a3;
             transform: translateY(-1px);
         }
+        
+        /* Logo styling */
+        .brand img {
+            height: 40px;
+            width: auto;
+            display: block;
+        }
     </style>
 </head>
 <body>
 
     <header class="header">
-        <a href="{{ url_for('main.index') }}" class="brand">mdraft</a>
+        <a href="{{ url_for('main.index') }}" class="brand">
+            <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="mdraft Logo">
+        </a>
         <nav class="nav-links">
             {% if current_user.is_authenticated %}
                 <span>Logged in as: <strong>{{ current_user.email }}</strong></span>

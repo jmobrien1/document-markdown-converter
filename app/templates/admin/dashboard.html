@@ -80,12 +80,21 @@
         .user-table td { font-size: 0.95rem; }
         .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); }
         .empty-state-icon { font-size: 3rem; margin-bottom: 1rem; }
+        
+        /* Logo styling */
+        .logo img {
+            height: 40px;
+            width: auto;
+            display: block;
+        }
     </style>
 </head>
 <body>
     <header class="header">
         <div class="header-content">
-            <a href="/" class="logo">mdraft</a>
+            <a href="/" class="logo">
+                <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="mdraft Logo">
+            </a>
             <nav class="nav-links">
                 <a href="/">Convert</a>
                 <a href="/admin/dashboard">Admin</a>
