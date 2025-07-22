@@ -91,6 +91,70 @@
             border-color: #dc3545;
             background: linear-gradient(135deg, #fff8f8 0%, #ffffff 100%);
         }
+
+        /* Segmented Control Styling */
+        .converter-options {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .segmented-control {
+            display: flex;
+            justify-content: center;
+            background-color: #eef2ff;
+            border-radius: 8px;
+            padding: 5px;
+            width: fit-content;
+            margin: 0 auto 15px auto;
+        }
+
+        .segmented-control button {
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            background-color: transparent;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.2s ease-in-out;
+            color: var(--text-secondary);
+        }
+
+        .segmented-control button.active {
+            background-color: var(--surface);
+            color: var(--primary-start);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .segmented-control button:hover:not(.active) {
+            background-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .converter-details {
+            margin-top: 10px;
+        }
+
+        .converter-details p {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .file-type-tags {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .file-type-tags span {
+            background-color: #f3f4f6;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
         
         .file-info-section {
             flex: 1;
@@ -234,15 +298,33 @@
                         </div>
                     </div>
 
-                    <!-- New Pro Conversion Toggle -->
-                    <div class="pro-toggle" style="margin-bottom: 20px; text-align: center; padding: 10px; background: #eef2ff; border-radius: 8px;">
-                        <label for="pro_conversion" style="font-weight: 600; color: #4338ca; cursor: pointer;">
-                            <input type="checkbox" id="pro_conversion" name="pro_conversion" style="margin-right: 8px;">
-                            💎 Use Pro Converter (PDFs, Images, HTML)
-                        </label>
-                        <div style="font-size: 0.9em; color: #6b7280; margin-top: 5px;">
-                            Pro: PDF, GIF, TIFF, JPG, PNG, BMP, WebP, HTML | Standard: DOCX, XLSX, PPTX, CSV, JSON, XML, ZIP, EPUB
+                    <!-- Converter Options Segmented Control -->
+                    <div class="converter-options">
+                        <div class="segmented-control" role="tablist" aria-label="Conversion Options">
+                            <button type="button" id="standard-tab" class="active" role="tab" aria-selected="true" aria-controls="standard-panel">
+                                Standard
+                            </button>
+                            <button type="button" id="pro-tab" role="tab" aria-selected="false" aria-controls="pro-panel">
+                                💎 Pro
+                            </button>
                         </div>
+
+                        <div class="converter-details">
+                            <div id="standard-panel" role="tabpanel" aria-labelledby="standard-tab">
+                                <p>Fast conversions for simple text documents.</p>
+                                <div class="file-type-tags">
+                                    <span>DOCX</span><span>XLSX</span><span>PPTX</span><span>CSV</span><span>JSON</span><span>XML</span><span>ZIP</span><span>EPUB</span>
+                                </div>
+                            </div>
+                            <div id="pro-panel" role="tabpanel" aria-labelledby="pro-tab" style="display: none;">
+                                <p>Advanced OCR for complex files, powered by Google Document AI.</p>
+                                <div class="file-type-tags">
+                                    <span>PDF</span><span>JPG</span><span>PNG</span><span>GIF</span><span>TIFF</span><span>BMP</span><span>WebP</span><span>HTML</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <input type="hidden" name="pro_conversion" id="pro_conversion_hidden_input" value="off">
                     </div>
 
                     <button type="submit" class="convert-btn" id="convertBtn">Convert with mdraft</button>
@@ -303,6 +385,45 @@
         batchStatusContainer.id = 'batchStatusContainer';
         batchStatusContainer.className = 'file-status-list';
         uploadForm.parentNode.insertBefore(batchStatusContainer, uploadForm.nextSibling);
+
+        // Segmented Control Logic
+        const standardTab = document.getElementById('standard-tab');
+        const proTab = document.getElementById('pro-tab');
+        const standardPanel = document.getElementById('standard-panel');
+        const proPanel = document.getElementById('pro-panel');
+        const hiddenInput = document.getElementById('pro_conversion_hidden_input');
+
+        // Event listener for the "Standard" button
+        standardTab.addEventListener('click', () => {
+            // Update button states
+            standardTab.classList.add('active');
+            standardTab.setAttribute('aria-selected', 'true');
+            proTab.classList.remove('active');
+            proTab.setAttribute('aria-selected', 'false');
+
+            // Update panel visibility
+            standardPanel.style.display = 'block';
+            proPanel.style.display = 'none';
+
+            // Update hidden input for the form submission
+            hiddenInput.value = 'off';
+        });
+
+        // Event listener for the "Pro" button
+        proTab.addEventListener('click', () => {
+            // Update button states
+            proTab.classList.add('active');
+            proTab.setAttribute('aria-selected', 'true');
+            standardTab.classList.remove('active');
+            standardTab.setAttribute('aria-selected', 'false');
+
+            // Update panel visibility
+            proPanel.style.display = 'block';
+            standardPanel.style.display = 'none';
+
+            // Update hidden input for the form submission
+            hiddenInput.value = 'on';
+        });
 
         // Check user status for Pro
         let isProUser = false;
