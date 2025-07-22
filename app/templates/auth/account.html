@@ -1,438 +1,276 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="Content-Style-Type" content="text/css">
-  <title></title>
-  <meta name="Generator" content="Cocoa HTML Writer">
-  <meta name="CocoaVersion" content="2575.6">
-  <style type="text/css">
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #2a2c33; -webkit-text-stroke: #2a2c33; background-color: #ffffff}
-    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #2a2c33; -webkit-text-stroke: #2a2c33; background-color: #ffffff; min-height: 16.0px}
-    span.s1 {font-kerning: none}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Dashboard - mdraft</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-dark: #2563eb;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --surface-2: #f1f5f9;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        .nav-links { display: flex; align-items: center; gap: 1rem; }
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+        }
+        .nav-links a:hover { color: var(--primary-color); background: var(--surface-2); text-decoration: underline; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+        .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
+        .page-title { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .page-subtitle { color: var(--text-secondary); }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: var(--surface);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+        .stat-value { font-size: 2rem; font-weight: 700; color: var(--primary-color); margin-bottom: 0.25rem; }
+        .stat-label { color: var(--text-secondary); font-size: 0.875rem; }
+        .section {
+            background: var(--surface);
+            border-radius: 0.75rem;
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+        }
+        .section-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
+        .conversion-list { overflow-x: auto; }
+        .conversion-table { width: 100%; border-collapse: collapse; }
+        .conversion-table th, .conversion-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+        .conversion-table th { background: var(--surface-2); font-weight: 600; font-size: 0.875rem; color: var(--text-secondary); }
+        .conversion-table td { font-size: 0.875rem; }
+        .status-badge { padding: 0.25rem 0.5rem; border-radius: 99px; font-size: 0.75rem; font-weight: 500; }
+        .status-completed { background: rgba(16, 185, 129, 0.1); color: #059669; }
+        .status-failed { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
+        .status-pending { background: rgba(245, 158, 11, 0.1); color: #d97706; }
+        .conversion-type { padding: 0.25rem 0.5rem; border-radius: 99px; font-size: 0.75rem; font-weight: 500; }
+        .type-standard { background: var(--surface-2); color: var(--text-secondary); }
+        .type-pro { background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(59, 130, 246, 0.1)); color: var(--primary-color); }
+        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); }
+        .empty-state-icon { font-size: 3rem; margin-bottom: 1rem; }
+        
+        /* Logo styling */
+        .logo img {
+            height: 80px;
+            width: auto;
+            display: block;
+        }
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .flashes { list-style: none; padding: 0; margin-bottom: 20px; }
+        .flashes li { background: #d1fae5; color: #065f46; padding: 15px; border-radius: 8px; border: 1px solid #a7f3d0; }
+        .plan-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 99px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .plan-pro { background: linear-gradient(135deg, #818cf8, #3b82f6); color: white; }
+        .plan-free { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); }
+    </style>
 </head>
 <body>
-<p class="p1"><span class="s1">&lt;!DOCTYPE html&gt;</span></p>
-<p class="p1"><span class="s1">&lt;html lang="en"&gt;</span></p>
-<p class="p1"><span class="s1">&lt;head&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;meta charset="UTF-8"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;title&gt;Account Dashboard - mdraft&lt;/title&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;style&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>:root {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--primary-color: #3b82f6;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--primary-dark: #2563eb;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--background: #f8fafc;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--surface: #ffffff;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--surface-2: #f1f5f9;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--text-primary: #0f172a;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--text-secondary: #64748b;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--border: #e2e8f0;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--success-color: #10b981;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--warning-color: #f59e0b;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--error-color: #ef4444;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>* {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin: 0;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 0;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>box-sizing: border-box;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>body {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--background);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--text-primary);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>line-height: 1.6;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>min-height: 100vh;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.header {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--surface);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-bottom: 1px solid var(--border);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>box-shadow: var(--shadow);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>position: sticky;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>top: 0;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>z-index: 100;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.header-content {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>max-width: 1200px;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin: 0 auto;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 1rem 2rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>display: flex;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>justify-content: space-between;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>align-items: center;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.logo {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 1.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 700;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--primary-color);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>text-decoration: none;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.nav-links {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>display: flex;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>align-items: center;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>gap: 1rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.nav-links a {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>text-decoration: none;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 500;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 0.5rem 1rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-radius: 0.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>transition: all 0.2s ease;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.nav-links a:hover {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--primary-color);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--surface-2);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.container {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>max-width: 1000px;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin: 0 auto;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 2rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.page-header {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom: 2rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.page-title {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 2rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 700;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom: 0.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.page-subtitle {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.stats-grid {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>display: grid;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>gap: 1.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom: 2rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.stat-card {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--surface);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-radius: 0.75rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 1.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>box-shadow: var(--shadow);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>text-align: center;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.stat-value {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 2rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 700;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--primary-color);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom: 0.25rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.stat-label {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 0.875rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.section {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--surface);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-radius: 0.75rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 2rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>box-shadow: var(--shadow);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom: 2rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.section-title {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 1.25rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 600;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom: 1rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.conversion-list {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>overflow-x: auto;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.conversion-table {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>width: 100%;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-collapse: collapse;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.conversion-table th,</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.conversion-table td {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 0.75rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>text-align: left;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-bottom: 1px solid var(--border);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.conversion-table th {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--surface-2);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 600;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 0.875rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.conversion-table td {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 0.875rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.status-badge {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 0.25rem 0.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-radius: 0.25rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 0.75rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 500;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.status-completed {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: rgba(16, 185, 129, 0.1);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: #059669;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.status-failed {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: rgba(239, 68, 68, 0.1);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: #dc2626;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.status-processing {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: rgba(59, 130, 246, 0.1);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: #2563eb;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.conversion-type {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 0.25rem 0.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-radius: 0.25rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 0.75rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 500;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.type-standard {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--surface-2);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.type-pro {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(59, 130, 246, 0.1));</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--primary-color);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.empty-state {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>text-align: center;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 3rem 1rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--text-secondary);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.empty-state-icon {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size: 3rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom: 1rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.btn-primary {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--primary-color);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: white;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 0.75rem 1.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border: none;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-radius: 0.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 600;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>cursor: pointer;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>transition: background-color 0.2s ease;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>text-decoration: none;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>display: inline-block;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.btn-primary:hover {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--primary-dark);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.btn-secondary {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--surface-2);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color: var(--text-primary);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding: 0.75rem 1.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border: 1px solid var(--border);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-radius: 0.5rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight: 500;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>cursor: pointer;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>transition: all 0.2s ease;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>text-decoration: none;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>display: inline-block;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.btn-secondary:hover {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background: var(--border);</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>@media (max-width: 768px) {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>.container {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>padding: 1rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>.stats-grid {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>grid-template-columns: 1fr;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>.conversion-table {</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>font-size: 0.75rem;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;/style&gt;</span></p>
-<p class="p1"><span class="s1">&lt;/head&gt;</span></p>
-<p class="p1"><span class="s1">&lt;body&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;header class="header"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;div class="header-content"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;a href="/" class="logo"&gt;mdraft&lt;/a&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;nav class="nav-links"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;a href="/"&gt;Convert&lt;/a&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;span&gt;{{ user.email }}&lt;/span&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;a href="{{ url_for('auth.logout') }}"&gt;Logout&lt;/a&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;/nav&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;/header&gt;</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;main class="container"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;div class="page-header"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;h1 class="page-title"&gt;Account Dashboard&lt;/h1&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;p class="page-subtitle"&gt;Manage your conversions and account settings&lt;/p&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;div class="stats-grid"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;div class="stat-card"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;div class="stat-value"&gt;{{ total_conversions }}&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;div class="stat-label"&gt;Total Conversions&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;div class="stat-card"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;div class="stat-value"&gt;{{ daily_conversions }}&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;div class="stat-label"&gt;Today's Conversions&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;div class="stat-card"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;div class="stat-value"&gt;∞&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;div class="stat-label"&gt;Daily Limit&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;div class="stat-card"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;div class="stat-value"&gt;{{ success_rate }}%&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;div class="stat-label"&gt;Success Rate&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;div class="section"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;h2 class="section-title"&gt;Recent Conversions&lt;/h2&gt;</span></p>
-<p class="p2"><span class="s1"><span class="Apple-converted-space">            </span></span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>{% if recent_conversions %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;div class="conversion-list"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;table class="conversion-table"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                    </span>&lt;thead&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                        </span>&lt;tr&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;th&gt;File Name&lt;/th&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Type&lt;/th&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Conversion&lt;/th&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Status&lt;/th&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Date&lt;/th&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Duration&lt;/th&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                        </span>&lt;/tr&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                    </span>&lt;/thead&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                    </span>&lt;tbody&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                        </span>{% for conversion in recent_conversions %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                        </span>&lt;tr id="conversion-row-{{ conversion.id }}" data-job-id="{{ conversion.job_id }}">&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;{{ conversion.original_filename }}&lt;/td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;{{ conversion.file_type.upper() }}&lt;/td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>&lt;span class="conversion-type type-{{ conversion.conversion_type }}"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                    </span>{% if conversion.conversion_type == 'pro' %}💎 Pro{% else %}Standard{% endif %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>&lt;/span&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;/td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>&lt;span class="status-badge status-{{ conversion.status | lower }}" id="status-badge-{{ conversion.id }}">&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                    </span>{{ conversion.status.title() }}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>&lt;/span&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;/td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;{{ conversion.created_at.strftime('%m/%d/%Y %H:%M') }}&lt;/td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>{% if conversion.processing_time %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                    </span>{{ "%.1f"|format(conversion.processing_time) }}s</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>{% else %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                    </span>-</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                                </span>{% endif %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                            </span>&lt;/td&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                        </span>&lt;/tr&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                        </span>{% endfor %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                    </span>&lt;/tbody&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;/table&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>{% else %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;div class="empty-state"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;div class="empty-state-icon"&gt;📄&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;p&gt;No conversions yet&lt;/p&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>&lt;p&gt;&lt;a href="/" class="btn-primary"&gt;Start Converting&lt;/a&gt;&lt;/p&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>{% endif %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>{% if not user.is_premium %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;div class="section"&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;h2 class="section-title"&gt;Upgrade to Pro&lt;/h2&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;p&gt;Unlock advanced features and priority support with mdraft Pro.&lt;/p&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;br&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>&lt;a href="{{ url_for('auth.upgrade') }}" class="btn-primary"&gt;Learn More&lt;/a&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>{% endif %}</span></p>
-<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;/main&gt;</span></p>
-<p class="p1"><span class="s1">&lt;/body&gt;</span></p>
-<p class="p1"><span class="s1">&lt;/html&gt;</span></p>
+    <header class="header">
+        <div class="header-content">
+            <a href="/" class="logo">
+                <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="mdraft Logo">
+            </a>
+            <nav class="nav-links">
+                <a href="/">Convert</a>
+                <a href="{{ url_for('auth.account') }}">{{ user.email }}</a>
+                <a href="{{ url_for('auth.logout') }}">Logout</a>
+            </nav>
+        </div>
+    </header>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Find all rows with a job_id and a pending/processing status
-    const rows = document.querySelectorAll('tr[data-job-id]');
-    const pollingRows = [];
+    <main class="container">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul class="flashes">
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
 
-    rows.forEach(row => {
-        const statusBadge = row.querySelector('.status-badge');
-        if (!statusBadge) return;
-        const status = statusBadge.textContent.trim().toLowerCase();
-        const jobId = row.getAttribute('data-job-id');
-        if ((status === 'pending' || status === 'processing') && jobId) {
-            pollingRows.push({
-                row: row,
-                jobId: jobId,
-                statusBadge: statusBadge
-            });
-        }
-    });
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Account Dashboard</h1>
+                <p class="page-subtitle">Manage your conversions and account settings</p>
+            </div>
+            <div>
+                {% if user.is_premium %}
+                    <span class="plan-badge plan-pro">💎 Pro Plan</span>
+                {% else %}
+                    <span class="plan-badge plan-free">Free Plan</span>
+                {% endif %}
+            </div>
+        </div>
 
-    function pollStatus(rowObj) {
-        fetch(`/status/${rowObj.jobId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.state === 'SUCCESS' || data.state === 'FAILURE') {
-                    // Update the badge text and class
-                    let newStatus = data.state === 'SUCCESS' ? 'Completed' : 'Failed';
-                    let newClass = data.state === 'SUCCESS' ? 'status-completed' : 'status-failed';
-                    rowObj.statusBadge.textContent = newStatus;
-                    rowObj.statusBadge.className = 'status-badge ' + newClass;
-                } else if (data.state === 'PROGRESS' && data.status) {
-                    rowObj.statusBadge.textContent = data.status;
-                    rowObj.statusBadge.className = 'status-badge status-pending';
-                    setTimeout(() => pollStatus(rowObj), 3000);
-                } else {
-                    // Still pending/processing, keep polling
-                    setTimeout(() => pollStatus(rowObj), 3000);
-                }
-            })
-            .catch(() => {
-                // On error, try again later
-                setTimeout(() => pollStatus(rowObj), 3000);
-            });
-    }
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ total_conversions }}</div>
+                <div class="stat-label">Total Conversions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ daily_conversions }}</div>
+                <div class="stat-label">Today's Conversions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">∞</div>
+                <div class="stat-label">Daily Limit</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ success_rate }}%</div>
+                <div class="stat-label">Success Rate</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ pro_conversions_count }}</div>
+                <div class="stat-label">Pro Conversions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ "%.1f"|format(avg_processing_time) }}</div>
+                <div class="stat-label">Avg. Time Saved (s)</div>
+            </div>
+        </div>
 
-    // Start polling for each pending/processing row
-    pollingRows.forEach(rowObj => {
-        setTimeout(() => pollStatus(rowObj), 3000);
-    });
-});
-</script>
+        <div class="section">
+            <h2 class="section-title">Recent Conversions</h2>
+
+            {% if recent_conversions %}
+            <div class="conversion-list">
+                <table class="conversion-table">
+                    <thead>
+                        <tr>
+                            <th>File Name</th>
+                            <th>Type</th>
+                            <th>Conversion</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for conversion in recent_conversions %}
+                        <tr>
+                            <td>{{ conversion.original_filename }}</td>
+                            <td>{{ conversion.file_type.upper() }}</td>
+                            <td>
+                                <span class="conversion-type type-{{ conversion.conversion_type }}">
+                                    {% if conversion.conversion_type == 'pro' %}💎 Pro{% else %}Standard{% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="status-badge status-{{ conversion.status | lower }}">
+                                    {{ conversion.status.title() }}
+                                </span>
+                            </td>
+                            <td>{{ conversion.created_at.strftime('%m/%d/%Y %H:%M') }}</td>
+                            <td>
+                                {% if conversion.processing_time %}
+                                    {{ "%.1f"|format(conversion.processing_time) }}s
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">📄</div>
+                <p>No conversions yet. <a href="/" style="color: var(--primary-color);">Start Converting!</a></p>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">Subscription</h2>
+            {% if user.is_premium %}
+                <p>You are subscribed to the <strong>MDraft Pro Plan</strong>.</p>
+                <form action="{{ url_for('auth.billing_portal') }}" method="POST" style="margin-top: 1rem;">
+                    <button type="submit" class="btn-primary">Manage Billing</button>
+                </form>
+            {% else %}
+                <p>Upgrade to Pro to unlock advanced features and priority support.</p>
+                <a href="{{ url_for('auth.upgrade') }}" class="btn-primary" style="margin-top: 1rem;">Upgrade to Pro</a>
+            {% endif %}
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">Email Notifications</h2>
+            <p>Test your email notification settings:</p>
+            <a href="{{ url_for('auth.test_email') }}" class="btn-primary" style="margin-top: 1rem;">Test Email Notification</a>
+        </div>
+    </main>
+</body>
+</html>
