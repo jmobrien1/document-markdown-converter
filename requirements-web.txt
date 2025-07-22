@@ -18,3 +18,4 @@ markitdown[all]
 
 python-json-logger
 Flask-Mail==0.9.1
+stripe==12.2.0

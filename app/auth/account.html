@@ -60,7 +60,7 @@
             border-radius: 0.5rem;
             transition: all 0.2s ease;
         }
-        .nav-links a:hover { color: var(--primary-color); background: var(--surface-2); }
+        .nav-links a:hover { color: var(--primary-color); background: var(--surface-2); text-decoration: underline; }
         .container { max-width: 1000px; margin: 0 auto; padding: 2rem; }
         .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
         .page-title { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
@@ -102,6 +102,13 @@
         .type-pro { background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(59, 130, 246, 0.1)); color: var(--primary-color); }
         .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); }
         .empty-state-icon { font-size: 3rem; margin-bottom: 1rem; }
+        
+        /* Logo styling */
+        .logo img {
+            height: 80px;
+            width: auto;
+            display: block;
+        }
         .btn-primary {
             background: var(--primary-color);
             color: white;
@@ -131,10 +138,12 @@
 <body>
     <header class="header">
         <div class="header-content">
-            <a href="/" class="logo">mdraft</a>
+            <a href="/" class="logo">
+                <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="mdraft Logo">
+            </a>
             <nav class="nav-links">
                 <a href="/">Convert</a>
-                <span>{{ user.email }}</span>
+                <a href="{{ url_for('auth.account') }}">{{ user.email }}</a>
                 <a href="{{ url_for('auth.logout') }}">Logout</a>
             </nav>
         </div>

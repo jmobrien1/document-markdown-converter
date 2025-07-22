@@ -40,6 +40,14 @@
             text-align: center;
         }
         .logo { font-size: 2rem; font-weight: 700; color: var(--primary-color); margin-bottom: 2rem; }
+        
+        /* Logo styling */
+        .logo img {
+            height: 100px;
+            width: auto;
+            display: block;
+            margin: 0 auto 20px;
+        }
         .upgrade-title {
             font-size: 2rem;
             font-weight: 700;
@@ -101,7 +109,9 @@
 </head>
 <body>
     <div class="upgrade-container">
-        <div class="logo">mdraft</div>
+        <div class="logo">
+            <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="mdraft Logo">
+        </div>
         <h1 class="upgrade-title">MDraft Pro</h1>
         <p class="upgrade-subtitle">Unlock the full power of document conversion.</p>
 

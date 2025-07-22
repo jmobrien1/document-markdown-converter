@@ -19,8 +19,8 @@
         .header { width: 100%; background: var(--surface); padding: 15px 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #dee2e6; }
         .header .brand { font-size: 1.5em; font-weight: 700; color: var(--text-primary); text-decoration: none; }
         .header .nav-links { display: flex; align-items: center; gap: 20px; }
-        .header .nav-links a { text-decoration: none; color: var(--text-secondary); font-weight: 500; transition: color 0.2s; }
-        .header .nav-links a:hover { color: var(--primary-start); }
+        .header .nav-links a { text-decoration: none; color: var(--text-secondary); font-weight: 500; transition: color 0.2s; cursor: pointer; padding: 5px 10px; border-radius: 4px; }
+        .header .nav-links a:hover { color: var(--primary-start); text-decoration: underline; }
         .header .nav-links .btn { background: var(--primary-start); color: white; padding: 8px 15px; border-radius: 8px; transition: background 0.2s; }
         .header .nav-links .btn:hover { background: var(--primary-end); }
         .container { width: 100%; max-width: 800px; padding: 40px; margin-top: 40px; }
@@ -277,7 +277,7 @@
         </a>
         <nav class="nav-links">
             {% if current_user.is_authenticated %}
-                <span>Logged in as: <strong>{{ current_user.email }}</strong></span>
+                <a href="{{ url_for('auth.account') }}">{{ current_user.email }}</a>
                 <a href="{{ url_for('auth.logout') }}">Logout</a>
             {% else %}
                 <a href="{{ url_for('auth.login') }}">Login</a>
