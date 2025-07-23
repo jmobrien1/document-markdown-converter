@@ -477,7 +477,7 @@
             <!-- Logged-out View -->
             <section class="welcome-message">
                 <h1>The Smartest Document to Markdown Converter</h1>
-                <p>Upload PDFs, Word docs, Excel files, PowerPoint, images, and more. Get clean, readable Markdown in seconds.</p>
+                <p id="dynamic-use-case-text" class="dynamic-use-case-text">Upload PDFs, Word docs, Excel files, PowerPoint, images, and more. Get clean, readable Markdown in seconds.</p>
                 <div style="font-size: 0.9em; color: #6b7280; margin: 15px 0;">
                     <strong>Supported formats:</strong> PDF, DOCX, XLSX, PPTX, HTML, CSV, JSON, XML, ZIP, EPUB, GIF, TIFF, JPG, PNG, BMP, WebP
                 </div>
@@ -486,8 +486,55 @@
         {% endif %}
     </main>
 
-    {% if current_user.is_authenticated %}
     <script>
+        // Dynamic use case text rotation (works for both logged-in and logged-out users)
+        const useCases = [
+            "Prepping a PDF for your RAG pipeline? Start here.",
+            "The perfect starting point for ChatGPT, Gemini, and Claude.",
+            "Turn a 50-page scanned RFP into structured text instantly with Pro.",
+            "Modernize your legacy docs for a docs-as-code workflow."
+        ];
+        
+        let currentUseCaseIndex = 0;
+        const dynamicTextElement = document.getElementById('dynamic-use-case-text');
+        
+        function updateUseCaseText() {
+            if (!dynamicTextElement) return;
+            
+            // Fade out
+            dynamicTextElement.classList.add('fade-out');
+            
+            setTimeout(() => {
+                // Update text
+                dynamicTextElement.textContent = useCases[currentUseCaseIndex];
+                
+                // Fade in
+                dynamicTextElement.classList.remove('fade-out');
+                dynamicTextElement.classList.add('fade-in');
+                
+                // Move to next use case
+                currentUseCaseIndex = (currentUseCaseIndex + 1) % useCases.length;
+                
+                // Remove fade-in class after animation completes
+                setTimeout(() => {
+                    dynamicTextElement.classList.remove('fade-in');
+                }, 500);
+            }, 500);
+        }
+        
+        // Start the rotation when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set initial text
+            if (dynamicTextElement) {
+                dynamicTextElement.textContent = useCases[0];
+                currentUseCaseIndex = 1; // Start with second item on first rotation
+            }
+            
+            // Start rotation every 6 seconds
+            setInterval(updateUseCaseText, 6000);
+        });
+        
+        // Only run authenticated user code if elements exist (user is logged in)
         const uploadForm = document.getElementById('uploadForm');
         const convertBtn = document.getElementById('convertBtn');
         const fileInput = document.getElementById('fileInput');
@@ -502,6 +549,9 @@
         const copyBtn = document.getElementById('copyBtn');
         const downloadBtn = document.getElementById('downloadBtn');
         let pollingInterval;
+        
+        // Only run authenticated user functionality if elements exist
+        if (uploadForm && convertBtn && fileInput) {
 
         // Enhanced Batch upload UI with card-based layout
         const batchStatusContainer = document.createElement('div');
@@ -879,54 +929,7 @@
             errorMessage.style.display = 'none';
             successMessage.style.display = 'none';
         }
-        
-        // Dynamic use case text rotation
-        const useCases = [
-            "Prepping a PDF for your RAG pipeline? Start here.",
-            "The perfect starting point for ChatGPT, Gemini, and Claude.",
-            "Turn a 50-page scanned RFP into structured text instantly with Pro.",
-            "Modernize your legacy docs for a docs-as-code workflow."
-        ];
-        
-        let currentUseCaseIndex = 0;
-        const dynamicTextElement = document.getElementById('dynamic-use-case-text');
-        
-        function updateUseCaseText() {
-            if (!dynamicTextElement) return;
-            
-            // Fade out
-            dynamicTextElement.classList.add('fade-out');
-            
-            setTimeout(() => {
-                // Update text
-                dynamicTextElement.textContent = useCases[currentUseCaseIndex];
-                
-                // Fade in
-                dynamicTextElement.classList.remove('fade-out');
-                dynamicTextElement.classList.add('fade-in');
-                
-                // Move to next use case
-                currentUseCaseIndex = (currentUseCaseIndex + 1) % useCases.length;
-                
-                // Remove fade-in class after animation completes
-                setTimeout(() => {
-                    dynamicTextElement.classList.remove('fade-in');
-                }, 500);
-            }, 500);
         }
-        
-        // Start the rotation when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            // Set initial text
-            if (dynamicTextElement) {
-                dynamicTextElement.textContent = useCases[0];
-                currentUseCaseIndex = 1; // Start with second item on first rotation
-            }
-            
-            // Start rotation every 6 seconds
-            setInterval(updateUseCaseText, 6000);
-        });
     </script>
-    {% endif %}
 </body>
 </html>
