@@ -25,6 +25,87 @@
             width: auto;
             display: block;
         }
+        
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            .header {
+                padding: 10px 20px;
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .header .brand img {
+                height: 60px; /* Smaller on mobile */
+            }
+            
+            .header .nav-links {
+                gap: 10px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .container {
+                padding: 20px;
+                margin-top: 20px;
+            }
+            
+            .welcome-message {
+                padding: 40px 20px;
+            }
+            
+            .welcome-message h1 {
+                font-size: 2em;
+                line-height: 1.2;
+            }
+            
+            .welcome-message p {
+                font-size: 1em;
+            }
+            
+            .welcome-message .btn {
+                font-size: 1em;
+                padding: 12px 20px;
+                white-space: nowrap; /* Prevent button text wrapping */
+                width: auto;
+                min-width: 200px;
+            }
+            
+            .welcome-btn {
+                font-size: 1em;
+                padding: 12px 20px;
+                white-space: nowrap;
+                min-width: 200px;
+            }
+            
+            .upload-section {
+                padding: 20px;
+            }
+            
+            .file-input {
+                padding: 30px 15px;
+            }
+            
+            .convert-btn {
+                font-size: 14px;
+                padding: 12px;
+            }
+        }
+        
+        /* Extra small mobile devices */
+        @media (max-width: 480px) {
+            .header .brand img {
+                height: 50px;
+            }
+            
+            .welcome-message h1 {
+                font-size: 1.8em;
+            }
+            
+            .welcome-message .btn {
+                min-width: 180px;
+                font-size: 0.9em;
+            }
+        }
         .header .nav-links { display: flex; align-items: center; gap: 20px; }
         .header .nav-links a { text-decoration: none; color: var(--text-secondary); font-weight: 500; transition: color 0.2s; cursor: pointer; padding: 5px 10px; border-radius: 4px; }
         .header .nav-links a:hover { color: var(--primary-start); text-decoration: underline; }
@@ -35,6 +116,30 @@
         .welcome-message h1 { font-size: 2.5em; font-weight: 700; margin-bottom: 15px; }
         .welcome-message p { font-size: 1.1em; color: var(--text-secondary); margin-bottom: 30px; }
         .welcome-message .btn { font-size: 1.1em; padding: 12px 25px; }
+        
+        .welcome-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+            color: white;
+            text-decoration: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            min-width: 200px;
+        }
+        
+        .welcome-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            color: white;
+            text-decoration: none;
+        }
         .upload-section { background: var(--surface); padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
         .file-input-wrapper { position: relative; display: block; width: 100%; margin-bottom: 20px; }
         .file-input { width: 100%; padding: 40px 20px; border: 2px dashed #dee2e6; border-radius: 12px; background: #f8f9fa; cursor: pointer; text-align: center; transition: all 0.3s ease; }
@@ -268,19 +373,15 @@
             transform: translateY(-1px);
         }
         
-        /* Logo styling */
-        .brand img {
-            height: 80px;
-            width: auto;
-            display: block;
-        }
+
     </style>
 </head>
 <body>
 
     <header class="header">
         <a href="{{ url_for('main.index') }}" class="brand">
-            <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="mdraft Logo">
+            <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="mdraft Logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <span style="display: none; font-size: 1.5em; font-weight: 700; color: var(--text-primary);">mdraft</span>
         </a>
         <nav class="nav-links">
             {% if current_user.is_authenticated %}
@@ -365,7 +466,7 @@
                 <div style="font-size: 0.9em; color: #6b7280; margin: 15px 0;">
                     <strong>Supported formats:</strong> PDF, DOCX, XLSX, PPTX, HTML, CSV, JSON, XML, ZIP, EPUB, GIF, TIFF, JPG, PNG, BMP, WebP
                 </div>
-                <a href="{{ url_for('auth.signup') }}" class="btn convert-btn">Get Started for Free</a>
+                <a href="{{ url_for('auth.signup') }}" class="welcome-btn">Get Started for Free</a>
             </section>
         {% endif %}
     </main>
