@@ -156,6 +156,10 @@ def account():
     else:
         avg_processing_time = 0.0
 
+    # Monthly allowance for Pro users
+    from app.tasks import MONTHLY_PAGE_ALLOWANCE
+    monthly_allowance = MONTHLY_PAGE_ALLOWANCE
+    
     return render_template('auth/account.html',
                          user=current_user,
                          total_conversions=total_conversions,
@@ -165,7 +169,8 @@ def account():
                          pro_conversions_count=pro_conversions_count,
                          avg_processing_time=round(avg_processing_time, 1),
                          trial_days_remaining=current_user.trial_days_remaining,
-                         pro_pages_processed=getattr(current_user, 'pro_pages_processed_current_month', 0))
+                         pro_pages_processed=getattr(current_user, 'pro_pages_processed_current_month', 0),
+                         monthly_allowance=monthly_allowance)
 
 
 @auth.route('/test-email')

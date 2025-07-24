@@ -189,6 +189,51 @@
         }
         .plan-pro { background: linear-gradient(135deg, #818cf8, #3b82f6); color: white; }
         .plan-free { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); }
+        
+        /* Usage Progress Bar */
+        .usage-container {
+            background: var(--surface-2);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .usage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .usage-label {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .usage-count {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+        .usage-progress {
+            background: var(--border);
+            border-radius: 99px;
+            height: 8px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+        .usage-progress-bar {
+            background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.3s ease;
+        }
+        .usage-footer {
+            font-size: 0.875rem;
+        }
+        .usage-info {
+            color: var(--text-secondary);
+        }
+        .usage-warning {
+            color: var(--warning-color);
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -272,11 +317,35 @@
             </div>
             {% if user.has_pro_access %}
             <div class="stat-card">
-                <div class="stat-value">{{ pro_pages_processed }}</div>
+                <div class="stat-value">{{ pro_pages_processed }}/{{ monthly_allowance }}</div>
                 <div class="stat-label">Pages Processed (This Month)</div>
             </div>
             {% endif %}
         </div>
+
+        {% if user.has_pro_access %}
+        <div class="section">
+            <h2 class="section-title">Pro Usage This Month</h2>
+            <div class="usage-container">
+                <div class="usage-header">
+                    <span class="usage-label">Pages Processed</span>
+                    <span class="usage-count">{{ pro_pages_processed }} / {{ monthly_allowance }}</span>
+                </div>
+                <div class="usage-progress">
+                    <div class="usage-progress-bar" style="width: {{ (pro_pages_processed / monthly_allowance * 100) | min(100) }}%"></div>
+                </div>
+                <div class="usage-footer">
+                    {% if pro_pages_processed >= monthly_allowance %}
+                        <span class="usage-warning">⚠️ Monthly limit reached. Usage resets on the 1st of next month.</span>
+                    {% elif pro_pages_processed >= (monthly_allowance * 0.8) %}
+                        <span class="usage-warning">⚠️ Approaching monthly limit ({{ monthly_allowance - pro_pages_processed }} pages remaining)</span>
+                    {% else %}
+                        <span class="usage-info">{{ monthly_allowance - pro_pages_processed }} pages remaining this month</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="section">
             <h2 class="section-title">Recent Conversions</h2>

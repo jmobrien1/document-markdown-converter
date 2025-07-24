@@ -17,6 +17,15 @@ from app.models import Conversion, User
 from app.email import send_conversion_complete_email
 from datetime import datetime, timezone
 
+# Configuration constants
+MONTHLY_PAGE_ALLOWANCE = 1000  # Pages per month for Pro users
+
+# Configuration constants
+MONTHLY_PAGE_ALLOWANCE = 1000  # Pages per month for Pro users
+
+# Configuration constants
+MONTHLY_PAGE_ALLOWANCE = 1000  # Pages per month for Pro users
+
 def get_pdf_page_count(file_path):
     """
     Estimate PDF page count using a simple file size heuristic.
@@ -310,6 +319,23 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         user = User.get_user_safely(conversion.user_id)
                         if not user or not user.has_pro_access:
                             raise Exception("Pro access required. Please upgrade to Pro or check your trial status.")
+                        
+                        # Check monthly usage limit
+                        current_usage = getattr(user, 'pro_pages_processed_current_month', 0)
+                        
+                        # Estimate pages for this job
+                        file_extension = os.path.splitext(original_filename)[1].lower()
+                        if file_extension == '.pdf':
+                            estimated_pages = get_pdf_page_count(temp_file_path)
+                        else:
+                            estimated_pages = 1  # Images and other files count as 1 page
+                        
+                        # Check if this job would exceed the monthly limit
+                        if current_usage + estimated_pages > MONTHLY_PAGE_ALLOWANCE:
+                            remaining_pages = MONTHLY_PAGE_ALLOWANCE - current_usage
+                            raise Exception(f"Monthly limit exceeded. This job would use {estimated_pages} pages, but you only have {remaining_pages} pages remaining this month. Please upgrade to Pro+ or wait until next month's reset.")
+                        
+                        print(f"--- [Celery Task] Usage check passed: {current_usage} + {estimated_pages} = {current_usage + estimated_pages} pages (limit: {MONTHLY_PAGE_ALLOWANCE})")
                 
                 # Check if file type is supported by Document AI
                 file_extension = os.path.splitext(original_filename)[1].lower()
