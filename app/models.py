@@ -93,19 +93,26 @@ class User(db.Model):
             return True
         
         # Check if user is on trial and trial hasn't expired
-        if self.on_trial and self.trial_end_date:
-            return datetime.now(timezone.utc) < self.trial_end_date
+        # Handle case where trial fields don't exist yet (graceful degradation)
+        try:
+            if hasattr(self, 'on_trial') and self.on_trial and hasattr(self, 'trial_end_date') and self.trial_end_date:
+                return datetime.now(timezone.utc) < self.trial_end_date
+        except:
+            pass
         
         return False
     
     @property
     def trial_days_remaining(self):
         """Get the number of days remaining in the trial."""
-        if not self.on_trial or not self.trial_end_date:
+        try:
+            if not hasattr(self, 'on_trial') or not self.on_trial or not hasattr(self, 'trial_end_date') or not self.trial_end_date:
+                return 0
+            
+            remaining = self.trial_end_date - datetime.now(timezone.utc)
+            return max(0, remaining.days)
+        except:
             return 0
-        
-        remaining = self.trial_end_date - datetime.now(timezone.utc)
-        return max(0, remaining.days)
 
     def generate_api_key(self):
         import secrets

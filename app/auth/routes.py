@@ -165,7 +165,7 @@ def account():
                          pro_conversions_count=pro_conversions_count,
                          avg_processing_time=round(avg_processing_time, 1),
                          trial_days_remaining=current_user.trial_days_remaining,
-                         pro_pages_processed=current_user.pro_pages_processed_current_month)
+                         pro_pages_processed=getattr(current_user, 'pro_pages_processed_current_month', 0))
 
 
 @auth.route('/test-email')
@@ -193,7 +193,7 @@ def user_status():
             'email': current_user.email,
             'is_premium': current_user.is_premium,
             'has_pro_access': current_user.has_pro_access,
-            'on_trial': current_user.on_trial,
+            'on_trial': getattr(current_user, 'on_trial', False),
             'trial_days_remaining': current_user.trial_days_remaining,
             'daily_conversions': daily_conversions,
             'total_conversions': total_conversions,

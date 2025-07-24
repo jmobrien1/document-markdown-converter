@@ -9,3 +9,10 @@ echo "----------------------------------------"
 
 pip install --upgrade pip
 pip install -r requirements.txt
+
+# Run database migrations
+echo "--- Running database migrations ---"
+export FLASK_APP=run.py
+export FLASK_CONFIG=production
+flask db upgrade
+echo "--- Database migrations completed ---"
