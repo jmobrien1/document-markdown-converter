@@ -245,10 +245,18 @@
             margin-top: 10px;
         }
 
-        .converter-details p {
+        .static-description {
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            min-height: 20px; /* Prevents layout shift */
+        }
+
+        .rotating-slogan {
             font-size: 0.9em;
             color: var(--text-secondary);
-            margin-bottom: 8px;
+            min-height: 20px; /* Prevents layout shift */
+            transition: opacity 0.5s ease-in-out;
         }
 
         .file-type-tags {
@@ -256,7 +264,7 @@
             flex-wrap: wrap;
             justify-content: center;
             gap: 8px;
-            margin-top: 10px;
+            margin-top: 15px;
         }
 
         .file-type-tags span {
@@ -265,7 +273,7 @@
             border-radius: 4px;
             font-size: 0.85em;
             font-weight: 500;
-            color: var(--text-secondary);
+            color: #495057;
         }
         
         .file-info-section {
@@ -433,14 +441,16 @@
                         </div>
 
                         <div class="converter-details">
-                            <div id="standard-panel" role="tabpanel" aria-labelledby="standard-tab">
-                                <p id="dynamic-use-case-text" class="dynamic-use-case-text">Fast conversions for most text documents.</p>
+                            <div id="standard-details">
+                                <p class="static-description">Fast conversions for simple text documents.</p>
+                                <p class="rotating-slogan"></p>
                                 <div class="file-type-tags">
-                                    <span>DOCX</span><span>XLSX</span><span>XLS</span><span>PPTX</span><span>PDF</span><span>HTML</span><span>HTM</span><span>CSV</span><span>JSON</span><span>XML</span>
+                                    <span>DOCX</span><span>XLSX</span><span>PPTX</span><span>CSV</span><span>JSON</span><span>XML</span><span>ZIP</span><span>EPUB</span>
                                 </div>
                             </div>
-                            <div id="pro-panel" role="tabpanel" aria-labelledby="pro-tab" style="display: none;">
-                                <p>Advanced OCR for complex files, powered by Google Document AI.</p>
+                            <div id="pro-details" style="display: none;">
+                                <p class="static-description">Advanced OCR for complex files, powered by Google Document AI.</p>
+                                <p class="rotating-slogan"></p>
                                 <div class="file-type-tags">
                                     <span>PDF</span><span>JPG</span><span>PNG</span><span>GIF</span><span>TIFF</span><span>BMP</span><span>WebP</span><span>HTML</span>
                                 </div>
@@ -487,71 +497,27 @@
     </main>
 
     <script>
-        // Dynamic use case text rotation (works for both logged-in and logged-out users)
-        const useCases = [
-            "Prepping a PDF for your RAG pipeline? Start here.",
-            "The perfect starting point for ChatGPT, Gemini, and Claude.",
-            "Turn a 50-page scanned RFP into structured text instantly with Pro.",
-            "Modernize your legacy docs for a docs-as-code workflow."
-        ];
+
         
-        let currentUseCaseIndex = 0;
-        const dynamicTextElement = document.getElementById('dynamic-use-case-text');
-        
-        function updateUseCaseText() {
-            if (!dynamicTextElement) return;
+        document.addEventListener('DOMContentLoaded', function() {
+            // Only run authenticated user code if elements exist (user is logged in)
+            const uploadForm = document.getElementById('uploadForm');
+            const convertBtn = document.getElementById('convertBtn');
+            const fileInput = document.getElementById('fileInput');
+            const fileLabel = document.getElementById('fileLabel');
+            const fileInfo = document.getElementById('fileInfo');
+            const loading = document.getElementById('loading');
+            const loadingText = document.getElementById('loadingText');
+            const errorMessage = document.getElementById('errorMessage');
+            const successMessage = document.getElementById('successMessage');
+            const resultSection = document.getElementById('resultSection');
+            const markdownOutput = document.getElementById('markdownOutput');
+            const copyBtn = document.getElementById('copyBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
+            let pollingInterval;
             
-            // Fade out
-            dynamicTextElement.classList.add('fade-out');
-            
-            setTimeout(() => {
-                // Update text
-                dynamicTextElement.textContent = useCases[currentUseCaseIndex];
-                
-                // Fade in
-                dynamicTextElement.classList.remove('fade-out');
-                dynamicTextElement.classList.add('fade-in');
-                
-                // Move to next use case
-                currentUseCaseIndex = (currentUseCaseIndex + 1) % useCases.length;
-                
-                // Remove fade-in class after animation completes
-                setTimeout(() => {
-                    dynamicTextElement.classList.remove('fade-in');
-                }, 500);
-            }, 500);
-        }
-        
-        // Start the rotation when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            // Set initial text
-            if (dynamicTextElement) {
-                dynamicTextElement.textContent = useCases[0];
-                currentUseCaseIndex = 1; // Start with second item on first rotation
-            }
-            
-            // Start rotation every 6 seconds
-            setInterval(updateUseCaseText, 6000);
-        });
-        
-        // Only run authenticated user code if elements exist (user is logged in)
-        const uploadForm = document.getElementById('uploadForm');
-        const convertBtn = document.getElementById('convertBtn');
-        const fileInput = document.getElementById('fileInput');
-        const fileLabel = document.getElementById('fileLabel');
-        const fileInfo = document.getElementById('fileInfo');
-        const loading = document.getElementById('loading');
-        const loadingText = document.getElementById('loadingText');
-        const errorMessage = document.getElementById('errorMessage');
-        const successMessage = document.getElementById('successMessage');
-        const resultSection = document.getElementById('resultSection');
-        const markdownOutput = document.getElementById('markdownOutput');
-        const copyBtn = document.getElementById('copyBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
-        let pollingInterval;
-        
-        // Only run authenticated user functionality if elements exist
-        if (uploadForm && convertBtn && fileInput) {
+            // Only run authenticated user functionality if elements exist
+            if (uploadForm && convertBtn && fileInput) {
 
         // Enhanced Batch upload UI with card-based layout
         const batchStatusContainer = document.createElement('div');
@@ -559,44 +525,91 @@
         batchStatusContainer.className = 'file-status-list';
         uploadForm.parentNode.insertBefore(batchStatusContainer, uploadForm.nextSibling);
 
-        // Segmented Control Logic
-        const standardTab = document.getElementById('standard-tab');
-        const proTab = document.getElementById('pro-tab');
-        const standardPanel = document.getElementById('standard-panel');
-        const proPanel = document.getElementById('pro-panel');
+        // --- Segmented Control Logic ---
+        const standardBtn = document.getElementById('standard-tab');
+        const proBtn = document.getElementById('pro-tab');
+        const standardDetails = document.getElementById('standard-details');
+        const proDetails = document.getElementById('pro-details');
         const hiddenInput = document.getElementById('pro_conversion_hidden_input');
 
-        // Event listener for the "Standard" button
-        standardTab.addEventListener('click', () => {
-            // Update button states
-            standardTab.classList.add('active');
-            standardTab.setAttribute('aria-selected', 'true');
-            proTab.classList.remove('active');
-            proTab.setAttribute('aria-selected', 'false');
+        // --- Rotating Slogan Logic ---
+        const sloganElement = document.querySelector('.rotating-slogan'); // Note: We select the class now
+        const standardSlogans = [
+            "Cleaning up a messy Word doc?",
+            "Need to format a DOCX for an AI prompt?",
+            "Quickly structuring your CSV data?",
+            "From XLSX to clean text in seconds."
+        ];
+        const proSlogans = [
+            "Prepping a scanned PDF for your RAG pipeline?",
+            "Extracting tables from a complex report?",
+            "Turning a scanned contract into usable text?",
+            "Digitizing a document image with OCR?"
+        ];
 
-            // Update panel visibility
-            standardPanel.style.display = 'block';
-            proPanel.style.display = 'none';
+        let currentSlogans = standardSlogans;
+        let sloganIndex = 0;
+        let sloganInterval;
 
-            // Update hidden input for the form submission
+        function updateSlogan() {
+            const sloganElementStd = standardDetails.querySelector('.rotating-slogan');
+            const sloganElementPro = proDetails.querySelector('.rotating-slogan');
+
+            sloganElementStd.style.opacity = 0;
+            sloganElementPro.style.opacity = 0;
+
+            setTimeout(() => {
+                sloganIndex = (sloganIndex + 1) % currentSlogans.length;
+                sloganElementStd.textContent = currentSlogans[sloganIndex];
+                sloganElementPro.textContent = currentSlogans[sloganIndex];
+                sloganElementStd.style.opacity = 1;
+                sloganElementPro.style.opacity = 1;
+            }, 500);
+        }
+
+        function startSloganRotation() {
+            stopSloganRotation(); // Clear any existing interval
+            // Set initial text immediately
+            const sloganElementStd = standardDetails.querySelector('.rotating-slogan');
+            const sloganElementPro = proDetails.querySelector('.rotating-slogan');
+            sloganIndex = 0;
+            sloganElementStd.textContent = currentSlogans[sloganIndex];
+            sloganElementPro.textContent = currentSlogans[sloganIndex];
+            sloganElementStd.style.opacity = 1;
+            sloganElementPro.style.opacity = 1;
+            
+            sloganInterval = setInterval(updateSlogan, 3000);
+        }
+
+        function stopSloganRotation() {
+            clearInterval(sloganInterval);
+        }
+
+        // --- Event Listeners ---
+        standardBtn.addEventListener('click', () => {
+            if (standardBtn.classList.contains('active')) return; // Do nothing if already active
+            standardBtn.classList.add('active');
+            proBtn.classList.remove('active');
+            standardDetails.style.display = 'block';
+            proDetails.style.display = 'none';
             hiddenInput.value = 'off';
+            currentSlogans = standardSlogans;
+            startSloganRotation();
         });
 
-        // Event listener for the "Pro" button
-        proTab.addEventListener('click', () => {
-            // Update button states
-            proTab.classList.add('active');
-            proTab.setAttribute('aria-selected', 'true');
-            standardTab.classList.remove('active');
-            standardTab.setAttribute('aria-selected', 'false');
-
-            // Update panel visibility
-            proPanel.style.display = 'block';
-            standardPanel.style.display = 'none';
-
-            // Update hidden input for the form submission
+        proBtn.addEventListener('click', () => {
+            if (proBtn.classList.contains('active')) return; // Do nothing if already active
+            proBtn.classList.add('active');
+            standardBtn.classList.remove('active');
+            proDetails.style.display = 'block';
+            standardDetails.style.display = 'none';
             hiddenInput.value = 'on';
+            currentSlogans = proSlogans;
+            startSloganRotation();
         });
+
+        // Initial start
+        startSloganRotation();
 
         // Check user status for Pro
         let isProUser = false;
@@ -930,6 +943,7 @@
             successMessage.style.display = 'none';
         }
         }
+    });
     </script>
 </body>
 </html>
