@@ -105,7 +105,16 @@ class User(db.Model):
 
     @property
     def is_active(self):
-        return True
+        # Return the database column value if it exists, otherwise True
+        try:
+            return self._is_active if hasattr(self, '_is_active') else True
+        except:
+            return True
+    
+    @is_active.setter
+    def is_active(self, value):
+        # Set the database column value
+        self._is_active = value
 
     @property
     def is_anonymous(self):
