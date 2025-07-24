@@ -112,6 +112,14 @@ def create_app(config_name='default', for_worker=False):
         from app.api import api as api_blueprint
         app.register_blueprint(api_blueprint, url_prefix='/api/v1')
 
+        # Register API documentation blueprint
+        try:
+            from app.api_docs import api_docs as api_docs_blueprint
+            app.register_blueprint(api_docs_blueprint, url_prefix='/api/v1/docs')
+            app.logger.info("API documentation blueprint registered successfully")
+        except ImportError as e:
+            app.logger.warning(f"API documentation blueprint registration failed: {str(e)}")
+
         # User Loader for Flask-Login
         from .models import User
         @login_manager.user_loader
