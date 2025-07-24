@@ -8,37 +8,6 @@ api_docs = Blueprint('api_docs', __name__)
 # Create Flask-Smorest API instance
 api = Api(api_docs)
 
-# Configure the API with proper settings
-api.config = {
-    'API_TITLE': 'mdraft.app API',
-    'API_VERSION': 'v1',
-    'OPENAPI_VERSION': '3.0.2',
-    'OPENAPI_URL_PREFIX': '/api/v1/docs',
-    'OPENAPI_SWAGGER_UI_PATH': '/',
-    'OPENAPI_SWAGGER_UI_URL': 'https://cdn.jsdelivr.net/npm/swagger-ui-dist/',
-    'API_SPEC_OPTIONS': {
-        'info': {
-            'title': 'mdraft.app API',
-            'version': '1.0.0',
-            'description': 'API for converting documents to Markdown format with advanced OCR capabilities',
-            'contact': {
-                'name': 'mdraft.app Support',
-                'url': 'https://mdraft.app'
-            }
-        },
-        'servers': [
-            {
-                'url': 'https://mdraft.app/api/v1',
-                'description': 'Production server'
-            },
-            {
-                'url': 'http://localhost:5000/api/v1',
-                'description': 'Development server'
-            }
-        ]
-    }
-}
-
 # Define schemas for API documentation
 class ErrorSchema(Schema):
     """Schema for error responses."""

@@ -114,7 +114,37 @@ def create_app(config_name='default', for_worker=False):
 
         # Register API documentation blueprint
         try:
-            from app.api_docs import api_docs as api_docs_blueprint
+            from app.api_docs import api_docs as api_docs_blueprint, api
+            # Configure Flask-Smorest
+            app.config['API_TITLE'] = 'mdraft.app API'
+            app.config['API_VERSION'] = 'v1'
+            app.config['OPENAPI_VERSION'] = '3.0.2'
+            app.config['OPENAPI_URL_PREFIX'] = '/api/v1/docs'
+            app.config['OPENAPI_SWAGGER_UI_PATH'] = '/'
+            app.config['OPENAPI_SWAGGER_UI_URL'] = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist/'
+            app.config['API_SPEC_OPTIONS'] = {
+                'info': {
+                    'title': 'mdraft.app API',
+                    'version': '1.0.0',
+                    'description': 'API for converting documents to Markdown format with advanced OCR capabilities',
+                    'contact': {
+                        'name': 'mdraft.app Support',
+                        'url': 'https://mdraft.app'
+                    }
+                },
+                'servers': [
+                    {
+                        'url': 'https://mdraft.app/api/v1',
+                        'description': 'Production server'
+                    },
+                    {
+                        'url': 'http://localhost:5000/api/v1',
+                        'description': 'Development server'
+                    }
+                ]
+            }
+            # Initialize Flask-Smorest API
+            api.init_app(app)
             app.register_blueprint(api_docs_blueprint, url_prefix='/api/v1/docs')
             app.logger.info("API documentation blueprint registered successfully")
         except ImportError as e:
