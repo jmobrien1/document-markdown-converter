@@ -6,6 +6,23 @@ from flask_sqlalchemy import SQLAlchemy
 import bcrypt
 from . import db
 
+def check_column_exists(table_name, column_name):
+    """Check if a column exists in the database."""
+    try:
+        from sqlalchemy import text
+        result = db.session.execute(
+            text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = :table_name AND column_name = :column_name
+            """),
+            {'table_name': table_name, 'column_name': column_name}
+        ).fetchone()
+        return result is not None
+    except Exception:
+        # If we can't check, assume it doesn't exist
+        return False
+
 class User(db.Model):
     """User model for storing user accounts."""
     __tablename__ = 'users'
@@ -43,33 +60,42 @@ class User(db.Model):
             return cls.query.get(user_id)
         except Exception as e:
             if 'trial_start_date' in str(e) or 'trial_end_date' in str(e) or 'on_trial' in str(e):
+                # Rollback the failed transaction first
+                db.session.rollback()
+                
                 # If trial columns don't exist, query only the core columns
                 from sqlalchemy import text
-                result = db.session.execute(
-                    text("""
-                        SELECT id, email, password_hash, created_at, is_active, 
-                               is_premium, is_admin, premium_expires, 
-                               stripe_customer_id, stripe_subscription_id, api_key
-                        FROM users WHERE id = :user_id
-                    """),
-                    {'user_id': user_id}
-                ).fetchone()
-                
-                if result:
-                    # Create a user object with the available data
-                    user = cls()
-                    user.id = result.id
-                    user.email = result.email
-                    user.password_hash = result.password_hash
-                    user.created_at = result.created_at
-                    user.is_active = result.is_active
-                    user.is_premium = result.is_premium
-                    user.is_admin = result.is_admin
-                    user.premium_expires = result.premium_expires
-                    user.stripe_customer_id = result.stripe_customer_id
-                    user.stripe_subscription_id = result.stripe_subscription_id
-                    user.api_key = result.api_key
-                    return user
+                try:
+                    result = db.session.execute(
+                        text("""
+                            SELECT id, email, password_hash, created_at, is_active, 
+                                   is_premium, is_admin, premium_expires, 
+                                   stripe_customer_id, stripe_subscription_id, api_key
+                            FROM users WHERE id = :user_id
+                        """),
+                        {'user_id': user_id}
+                    ).fetchone()
+                    
+                    if result:
+                        # Create a user object with the available data
+                        user = cls()
+                        user.id = result.id
+                        user.email = result.email
+                        user.password_hash = result.password_hash
+                        user.created_at = result.created_at
+                        user.is_active = result.is_active
+                        user.is_premium = result.is_premium
+                        user.is_admin = result.is_admin
+                        user.premium_expires = result.premium_expires
+                        user.stripe_customer_id = result.stripe_customer_id
+                        user.stripe_subscription_id = result.stripe_subscription_id
+                        user.api_key = result.api_key
+                        return user
+                except Exception as fallback_error:
+                    # If even the fallback fails, rollback again and try a simpler approach
+                    db.session.rollback()
+                    print(f"Fallback query failed: {fallback_error}")
+                    raise e  # Re-raise the original error
             raise e
 
     # Flask-Login required properties and methods
@@ -132,7 +158,11 @@ class User(db.Model):
         # Check if user is on trial and trial hasn't expired
         # Handle case where trial fields don't exist yet (graceful degradation)
         try:
-            if hasattr(self, 'on_trial') and self.on_trial and hasattr(self, 'trial_end_date') and self.trial_end_date:
+            # Check if trial columns exist before accessing them
+            if (check_column_exists('users', 'on_trial') and 
+                check_column_exists('users', 'trial_end_date') and
+                hasattr(self, 'on_trial') and self.on_trial and 
+                hasattr(self, 'trial_end_date') and self.trial_end_date):
                 return datetime.now(timezone.utc) < self.trial_end_date
         except:
             pass
@@ -143,6 +173,11 @@ class User(db.Model):
     def trial_days_remaining(self):
         """Get the number of days remaining in the trial."""
         try:
+            # Check if trial columns exist before accessing them
+            if not (check_column_exists('users', 'on_trial') and 
+                   check_column_exists('users', 'trial_end_date')):
+                return 0
+                
             if not hasattr(self, 'on_trial') or not self.on_trial or not hasattr(self, 'trial_end_date') or not self.trial_end_date:
                 return 0
             
@@ -208,36 +243,45 @@ class Conversion(db.Model):
             return cls.query.get(conversion_id)
         except Exception as e:
             if 'pages_processed' in str(e):
+                # Rollback the failed transaction first
+                db.session.rollback()
+                
                 # If pages_processed column doesn't exist, query only the core columns
                 from sqlalchemy import text
-                result = db.session.execute(
-                    text("""
-                        SELECT id, user_id, session_id, original_filename, file_size, file_type,
-                               conversion_type, status, error_message, job_id, created_at, 
-                               completed_at, processing_time, markdown_length
-                        FROM conversions WHERE id = :conversion_id
-                    """),
-                    {'conversion_id': conversion_id}
-                ).fetchone()
-                
-                if result:
-                    # Create a conversion object with the available data
-                    conversion = cls()
-                    conversion.id = result.id
-                    conversion.user_id = result.user_id
-                    conversion.session_id = result.session_id
-                    conversion.original_filename = result.original_filename
-                    conversion.file_size = result.file_size
-                    conversion.file_type = result.file_type
-                    conversion.conversion_type = result.conversion_type
-                    conversion.status = result.status
-                    conversion.error_message = result.error_message
-                    conversion.job_id = result.job_id
-                    conversion.created_at = result.created_at
-                    conversion.completed_at = result.completed_at
-                    conversion.processing_time = result.processing_time
-                    conversion.markdown_length = result.markdown_length
-                    return conversion
+                try:
+                    result = db.session.execute(
+                        text("""
+                            SELECT id, user_id, session_id, original_filename, file_size, file_type,
+                                   conversion_type, status, error_message, job_id, created_at, 
+                                   completed_at, processing_time, markdown_length
+                            FROM conversions WHERE id = :conversion_id
+                        """),
+                        {'conversion_id': conversion_id}
+                    ).fetchone()
+                    
+                    if result:
+                        # Create a conversion object with the available data
+                        conversion = cls()
+                        conversion.id = result.id
+                        conversion.user_id = result.user_id
+                        conversion.session_id = result.session_id
+                        conversion.original_filename = result.original_filename
+                        conversion.file_size = result.file_size
+                        conversion.file_type = result.file_type
+                        conversion.conversion_type = result.conversion_type
+                        conversion.status = result.status
+                        conversion.error_message = result.error_message
+                        conversion.job_id = result.job_id
+                        conversion.created_at = result.created_at
+                        conversion.completed_at = result.completed_at
+                        conversion.processing_time = result.processing_time
+                        conversion.markdown_length = result.markdown_length
+                        return conversion
+                except Exception as fallback_error:
+                    # If even the fallback fails, rollback again
+                    db.session.rollback()
+                    print(f"Fallback conversion query failed: {fallback_error}")
+                    raise e  # Re-raise the original error
             raise e
 
 

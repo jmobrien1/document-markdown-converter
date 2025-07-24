@@ -116,7 +116,18 @@ def create_app(config_name='default', for_worker=False):
         from .models import User
         @login_manager.user_loader
         def load_user(user_id):
-            return User.get_user_safely(int(user_id))
+            try:
+                return User.get_user_safely(int(user_id))
+            except Exception as e:
+                # If all else fails, rollback and return None (user not found)
+                from flask import current_app
+                current_app.logger.error(f"Failed to load user {user_id}: {str(e)}")
+                try:
+                    from . import db
+                    db.session.rollback()
+                except:
+                    pass
+                return None
 
     # Configure Celery with standardized settings
     celery.conf.update(
