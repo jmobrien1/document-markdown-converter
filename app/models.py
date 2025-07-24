@@ -23,6 +23,14 @@ class User(db.Model):
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
     api_key = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    
+    # Trial features
+    trial_start_date = db.Column(db.DateTime, nullable=True)
+    trial_end_date = db.Column(db.DateTime, nullable=True)
+    on_trial = db.Column(db.Boolean, default=True)
+    
+    # Usage tracking
+    pro_pages_processed_current_month = db.Column(db.Integer, default=0)
 
     # Relationship to conversions
     conversions = db.relationship('Conversion', backref='user', lazy='dynamic')
@@ -77,6 +85,27 @@ class User(db.Model):
     def can_convert(self):
         """Check if user can perform conversions (always True for logged-in users)."""
         return True
+    
+    @property
+    def has_pro_access(self):
+        """Check if user has Pro access (either premium or on trial)."""
+        if self.is_premium:
+            return True
+        
+        # Check if user is on trial and trial hasn't expired
+        if self.on_trial and self.trial_end_date:
+            return datetime.now(timezone.utc) < self.trial_end_date
+        
+        return False
+    
+    @property
+    def trial_days_remaining(self):
+        """Get the number of days remaining in the trial."""
+        if not self.on_trial or not self.trial_end_date:
+            return 0
+        
+        remaining = self.trial_end_date - datetime.now(timezone.utc)
+        return max(0, remaining.days)
 
     def generate_api_key(self):
         import secrets
@@ -115,6 +144,7 @@ class Conversion(db.Model):
 
     # Results
     markdown_length = db.Column(db.Integer, nullable=True)  # Character count
+    pages_processed = db.Column(db.Integer, nullable=True)  # Number of pages processed (for Pro conversions)
 
     @property
     def duration(self):

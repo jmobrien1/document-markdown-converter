@@ -614,7 +614,7 @@
         // Check user status for Pro
         let isProUser = false;
         fetch('/user-status').then(r => r.json()).then(data => {
-            isProUser = data.is_premium;
+            isProUser = data.has_pro_access;
             if (isProUser) {
                 fileInput.setAttribute('multiple', 'multiple');
                 fileLabel.innerHTML = '<strong>Click to select files</strong> or drag and drop';

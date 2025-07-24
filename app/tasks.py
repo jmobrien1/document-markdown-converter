@@ -303,6 +303,14 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
             
             # Process the file
             if use_pro_converter:
+                # Check user has Pro access
+                if conversion_id:
+                    conversion = Conversion.query.get(conversion_id)
+                    if conversion and conversion.user_id:
+                        user = User.query.get(conversion.user_id)
+                        if not user or not user.has_pro_access:
+                            raise Exception("Pro access required. Please upgrade to Pro or check your trial status.")
+                
                 # Check if file type is supported by Document AI
                 file_extension = os.path.splitext(original_filename)[1].lower()
                 docai_supported_types = {'.pdf', '.gif', '.tiff', '.tif', '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.html'}
@@ -406,6 +414,19 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                     conversion.completed_at = datetime.now(timezone.utc)
                     conversion.processing_time = time.time() - start_time
                     conversion.markdown_length = len(markdown_content)
+                    
+                    # Track Pro usage if this was a Pro conversion
+                    if use_pro_converter and conversion.user_id:
+                        user = User.query.get(conversion.user_id)
+                        if user:
+                            # Estimate pages processed (for now, use file size heuristic)
+                            pages_processed = get_pdf_page_count(temp_file_path) if file_extension == '.pdf' else 1
+                            conversion.pages_processed = pages_processed
+                            
+                            # Atomically increment user's monthly usage
+                            user.pro_pages_processed_current_month += pages_processed
+                            print(f"--- [Celery Task] Tracked {pages_processed} pages for user {user.email}")
+                    
                     db.session.commit()
                     
                     # Send email notification if user is logged in
@@ -446,3 +467,50 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
         if 'temp_creds' in locals() and os.path.exists(temp_creds.name):
             os.unlink(temp_creds.name)
         print("--- [Celery Task] Cleanup complete. Task finished. ---\n")
+
+
+@celery.task
+def expire_trials():
+    """Expire trials for users whose trial period has ended."""
+    from datetime import datetime, timezone
+    
+    try:
+        with current_app.app_context():
+            # Find users whose trial has expired
+            expired_users = User.query.filter(
+                User.on_trial == True,
+                User.trial_end_date < datetime.now(timezone.utc)
+            ).all()
+            
+            expired_count = 0
+            for user in expired_users:
+                user.on_trial = False
+                expired_count += 1
+            
+            if expired_count > 0:
+                db.session.commit()
+                print(f"--- [Celery Task] Expired {expired_count} user trials")
+            else:
+                print("--- [Celery Task] No trials to expire")
+                
+    except Exception as e:
+        print(f"--- [Celery Task] Error expiring trials: {str(e)}")
+        db.session.rollback()
+
+
+@celery.task
+def reset_monthly_usage():
+    """Reset monthly usage counters for all users."""
+    try:
+        with current_app.app_context():
+            # Reset all users' monthly page count
+            updated_count = User.query.update({
+                User.pro_pages_processed_current_month: 0
+            })
+            
+            db.session.commit()
+            print(f"--- [Celery Task] Reset monthly usage for {updated_count} users")
+                
+    except Exception as e:
+        print(f"--- [Celery Task] Error resetting monthly usage: {str(e)}")
+        db.session.rollback()

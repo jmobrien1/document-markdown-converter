@@ -98,6 +98,62 @@
         .status-failed { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
         .status-pending { background: rgba(245, 158, 11, 0.1); color: #d97706; }
         .conversion-type { padding: 0.25rem 0.5rem; border-radius: 99px; font-size: 0.75rem; font-weight: 500; }
+        
+        /* Trial Banner */
+        .trial-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 0.75rem;
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+        .trial-banner-content {
+            display: flex;
+            align-items: center;
+            padding: 1.5rem;
+            gap: 1rem;
+        }
+        .trial-banner-icon {
+            font-size: 2rem;
+            flex-shrink: 0;
+        }
+        .trial-banner-text {
+            flex: 1;
+            color: white;
+        }
+        .trial-banner-text h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .trial-banner-text p {
+            margin: 0;
+            opacity: 0.9;
+        }
+        .trial-banner-button {
+            background: white;
+            color: #667eea;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        .trial-banner-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* Plan Badges */
+        .plan-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 99px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .plan-pro { background: rgba(16, 185, 129, 0.1); color: #059669; }
+        .plan-trial { background: rgba(245, 158, 11, 0.1); color: #d97706; }
+        .plan-free { background: rgba(107, 114, 128, 0.1); color: #6b7280; }
         .type-standard { background: var(--surface-2); color: var(--text-secondary); }
         .type-pro { background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(59, 130, 246, 0.1)); color: var(--primary-color); }
         .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); }
@@ -168,11 +224,26 @@
             <div>
                 {% if user.is_premium %}
                     <span class="plan-badge plan-pro">💎 Pro Plan</span>
+                {% elif user.has_pro_access and user.on_trial %}
+                    <span class="plan-badge plan-trial">🎁 Pro Trial ({{ trial_days_remaining }} days left)</span>
                 {% else %}
                     <span class="plan-badge plan-free">Free Plan</span>
                 {% endif %}
             </div>
         </div>
+
+        {% if user.has_pro_access and user.on_trial and not user.is_premium %}
+        <div class="trial-banner">
+            <div class="trial-banner-content">
+                <div class="trial-banner-icon">🎁</div>
+                <div class="trial-banner-text">
+                    <h3>You're on the Pro Trial!</h3>
+                    <p>You have <strong>{{ trial_days_remaining }} days</strong> left to experience all Pro features. Upgrade now to continue using advanced OCR and batch processing.</p>
+                </div>
+                <a href="{{ url_for('auth.upgrade') }}" class="trial-banner-button">Upgrade Now</a>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="stats-grid">
             <div class="stat-card">
@@ -199,6 +270,12 @@
                 <div class="stat-value">{{ "%.1f"|format(avg_processing_time) }}</div>
                 <div class="stat-label">Avg. Time Saved (s)</div>
             </div>
+            {% if user.has_pro_access %}
+            <div class="stat-card">
+                <div class="stat-value">{{ pro_pages_processed }}</div>
+                <div class="stat-label">Pages Processed (This Month)</div>
+            </div>
+            {% endif %}
         </div>
 
         <div class="section">

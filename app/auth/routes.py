@@ -48,9 +48,16 @@ def signup():
             return render_template('signup.html')
 
         try:
-            # Create new user
+            # Create new user with trial
+            from datetime import datetime, timedelta, timezone
+            
             user = User(email=email)
             user.password = password  # Use the User model's password setter
+            
+            # Set trial dates (7-day trial)
+            user.trial_start_date = datetime.now(timezone.utc)
+            user.trial_end_date = user.trial_start_date + timedelta(days=7)
+            user.on_trial = True
 
             db.session.add(user)
             db.session.commit()
@@ -156,7 +163,9 @@ def account():
                          recent_conversions=recent_conversions,
                          success_rate=round(success_rate, 1),
                          pro_conversions_count=pro_conversions_count,
-                         avg_processing_time=round(avg_processing_time, 1))
+                         avg_processing_time=round(avg_processing_time, 1),
+                         trial_days_remaining=current_user.trial_days_remaining,
+                         pro_pages_processed=current_user.pro_pages_processed_current_month)
 
 
 @auth.route('/test-email')
@@ -183,6 +192,9 @@ def user_status():
             'authenticated': True,
             'email': current_user.email,
             'is_premium': current_user.is_premium,
+            'has_pro_access': current_user.has_pro_access,
+            'on_trial': current_user.on_trial,
+            'trial_days_remaining': current_user.trial_days_remaining,
             'daily_conversions': daily_conversions,
             'total_conversions': total_conversions,
             'can_convert': current_user.can_convert()
