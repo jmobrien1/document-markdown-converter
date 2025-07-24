@@ -160,6 +160,10 @@ def account():
     from app.tasks import MONTHLY_PAGE_ALLOWANCE
     monthly_allowance = MONTHLY_PAGE_ALLOWANCE
     
+    # Generate API key if user doesn't have one
+    if not current_user.api_key:
+        current_user.generate_api_key()
+    
     return render_template('auth/account.html',
                          user=current_user,
                          total_conversions=total_conversions,
@@ -183,6 +187,28 @@ def test_email():
         flash('Test email sent successfully!', 'success')
     except Exception as e:
         flash(f'Email test failed: {str(e)}', 'error')
+    return redirect(url_for('auth.account'))
+
+@auth.route('/api-key/generate', methods=['POST'])
+@login_required
+def generate_api_key():
+    """Generate a new API key for the current user."""
+    try:
+        current_user.generate_api_key()
+        flash('New API key generated successfully!', 'success')
+    except Exception as e:
+        flash(f'Failed to generate API key: {str(e)}', 'error')
+    return redirect(url_for('auth.account'))
+
+@auth.route('/api-key/revoke', methods=['POST'])
+@login_required
+def revoke_api_key():
+    """Revoke the current API key."""
+    try:
+        current_user.revoke_api_key()
+        flash('API key revoked successfully!', 'success')
+    except Exception as e:
+        flash(f'Failed to revoke API key: {str(e)}', 'error')
     return redirect(url_for('auth.account'))
 
 @auth.route('/user-status')

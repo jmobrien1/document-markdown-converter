@@ -193,6 +193,11 @@ class User(db.Model):
         db.session.commit()
         return token
 
+    def revoke_api_key(self):
+        """Revoke the current API key by setting it to None."""
+        self.api_key = None
+        db.session.commit()
+
     def __repr__(self):
         return f'<User {self.email}>'
 
