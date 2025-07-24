@@ -7,9 +7,10 @@ from app.tasks import convert_file_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
 
-from . import api
+from . import api, api_key_required
 
 @api.route('/convert', methods=['POST'])
+@api_key_required
 def api_convert():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
@@ -22,9 +23,7 @@ def api_convert():
     bucket_name = current_app.config['GCS_BUCKET_NAME']
 
     use_pro_converter = request.form.get('pro_conversion') == 'on'
-    user = getattr(g, 'current_user', None)
-    if not user:
-        return jsonify({'error': 'API user not found'}), 401
+    user = g.current_user  # Now guaranteed to exist due to decorator
 
     try:
         storage_client = get_storage_client()
@@ -76,10 +75,9 @@ def api_convert():
     return jsonify({'job_id': task.id, 'status_url': status_url}), 202 
 
 @api.route('/status/<job_id>', methods=['GET'])
+@api_key_required
 def api_status(job_id):
-    user = getattr(g, 'current_user', None)
-    if not user:
-        return jsonify({'error': 'API user not found'}), 401
+    user = g.current_user  # Now guaranteed to exist due to decorator
 
     # Query Celery for task status
     task = AsyncResult(job_id)
@@ -114,4 +112,59 @@ def api_status(job_id):
     elif task.state == 'FAILURE':
         response['error_message'] = conversion.error_message
 
-    return jsonify(response) 
+    return jsonify(response)
+
+@api.route('/result/<job_id>', methods=['GET'])
+@api_key_required
+def api_result(job_id):
+    """Get the markdown result for a completed conversion job."""
+    user = g.current_user  # Now guaranteed to exist due to decorator
+
+    # Query Conversion record for this job_id and user
+    conversion = Conversion.query.filter_by(job_id=job_id, user_id=user.id).first()
+    if not conversion:
+        return jsonify({'error': 'Conversion not found'}), 404
+
+    # Query Celery for task status
+    task = AsyncResult(job_id)
+
+    # Check if the job is successful
+    if task.state != 'SUCCESS' or conversion.status != 'completed':
+        return jsonify({
+            'error': 'Job not completed',
+            'job_id': job_id,
+            'state': task.state,
+            'conversion_status': conversion.status
+        }), 400
+
+    # Fetch markdown result from GCS
+    try:
+        storage_client = get_storage_client()
+        bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
+        output_blob = bucket.blob(f"results/{conversion.id}.md")
+        markdown = output_blob.download_as_text()
+        
+        return jsonify({
+            'job_id': job_id,
+            'markdown': markdown,
+            'file_name': conversion.original_filename,
+            'conversion_type': conversion.conversion_type,
+            'completed_at': conversion.completed_at.isoformat() if conversion.completed_at else None,
+            'processing_time': conversion.processing_time
+        })
+    except Exception as e:
+        current_app.logger.error(f"Failed to fetch markdown for job {job_id}: {e}")
+        return jsonify({
+            'error': 'Could not fetch markdown result',
+            'job_id': job_id,
+            'details': str(e)
+        }), 500
+
+@api.route('/health', methods=['GET'])
+def api_health():
+    """Health check endpoint for the API."""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'mdraft-api',
+        'version': '1.0.0'
+    }) 
