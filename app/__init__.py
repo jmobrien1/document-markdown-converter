@@ -116,7 +116,7 @@ def create_app(config_name='default', for_worker=False):
         from .models import User
         @login_manager.user_loader
         def load_user(user_id):
-            return User.query.get(int(user_id))
+            return User.get_user_safely(int(user_id))
 
     # Configure Celery with standardized settings
     celery.conf.update(

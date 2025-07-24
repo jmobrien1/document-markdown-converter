@@ -24,16 +24,53 @@ class User(db.Model):
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
     api_key = db.Column(db.String(64), unique=True, nullable=True, index=True)
     
-    # Trial features
-    trial_start_date = db.Column(db.DateTime, nullable=True)
-    trial_end_date = db.Column(db.DateTime, nullable=True)
-    on_trial = db.Column(db.Boolean, default=True)
+    # Trial features (optional - will be added by migration)
+    trial_start_date = db.Column(db.DateTime, nullable=True, info={'optional': True})
+    trial_end_date = db.Column(db.DateTime, nullable=True, info={'optional': True})
+    on_trial = db.Column(db.Boolean, default=True, info={'optional': True})
     
-    # Usage tracking
-    pro_pages_processed_current_month = db.Column(db.Integer, default=0)
+    # Usage tracking (optional - will be added by migration)
+    pro_pages_processed_current_month = db.Column(db.Integer, default=0, info={'optional': True})
 
     # Relationship to conversions
     conversions = db.relationship('Conversion', backref='user', lazy='dynamic')
+    
+    @classmethod
+    def get_user_safely(cls, user_id):
+        """Get user safely, handling missing trial columns."""
+        try:
+            # Try to get user with all columns first
+            return cls.query.get(user_id)
+        except Exception as e:
+            if 'trial_start_date' in str(e) or 'trial_end_date' in str(e) or 'on_trial' in str(e):
+                # If trial columns don't exist, query only the core columns
+                from sqlalchemy import text
+                result = db.session.execute(
+                    text("""
+                        SELECT id, email, password_hash, created_at, is_active, 
+                               is_premium, is_admin, premium_expires, 
+                               stripe_customer_id, stripe_subscription_id, api_key
+                        FROM users WHERE id = :user_id
+                    """),
+                    {'user_id': user_id}
+                ).fetchone()
+                
+                if result:
+                    # Create a user object with the available data
+                    user = cls()
+                    user.id = result.id
+                    user.email = result.email
+                    user.password_hash = result.password_hash
+                    user.created_at = result.created_at
+                    user.is_active = result.is_active
+                    user.is_premium = result.is_premium
+                    user.is_admin = result.is_admin
+                    user.premium_expires = result.premium_expires
+                    user.stripe_customer_id = result.stripe_customer_id
+                    user.stripe_subscription_id = result.stripe_subscription_id
+                    user.api_key = result.api_key
+                    return user
+            raise e
 
     # Flask-Login required properties and methods
     @property
@@ -151,7 +188,7 @@ class Conversion(db.Model):
 
     # Results
     markdown_length = db.Column(db.Integer, nullable=True)  # Character count
-    pages_processed = db.Column(db.Integer, nullable=True)  # Number of pages processed (for Pro conversions)
+    pages_processed = db.Column(db.Integer, nullable=True, info={'optional': True})  # Number of pages processed (for Pro conversions)
 
     @property
     def duration(self):
@@ -162,6 +199,46 @@ class Conversion(db.Model):
 
     def __repr__(self):
         return f'<Conversion {self.original_filename} - {self.status}>'
+    
+    @classmethod
+    def get_conversion_safely(cls, conversion_id):
+        """Get conversion safely, handling missing pages_processed column."""
+        try:
+            # Try to get conversion with all columns first
+            return cls.query.get(conversion_id)
+        except Exception as e:
+            if 'pages_processed' in str(e):
+                # If pages_processed column doesn't exist, query only the core columns
+                from sqlalchemy import text
+                result = db.session.execute(
+                    text("""
+                        SELECT id, user_id, session_id, original_filename, file_size, file_type,
+                               conversion_type, status, error_message, job_id, created_at, 
+                               completed_at, processing_time, markdown_length
+                        FROM conversions WHERE id = :conversion_id
+                    """),
+                    {'conversion_id': conversion_id}
+                ).fetchone()
+                
+                if result:
+                    # Create a conversion object with the available data
+                    conversion = cls()
+                    conversion.id = result.id
+                    conversion.user_id = result.user_id
+                    conversion.session_id = result.session_id
+                    conversion.original_filename = result.original_filename
+                    conversion.file_size = result.file_size
+                    conversion.file_type = result.file_type
+                    conversion.conversion_type = result.conversion_type
+                    conversion.status = result.status
+                    conversion.error_message = result.error_message
+                    conversion.job_id = result.job_id
+                    conversion.created_at = result.created_at
+                    conversion.completed_at = result.completed_at
+                    conversion.processing_time = result.processing_time
+                    conversion.markdown_length = result.markdown_length
+                    return conversion
+            raise e
 
 
 class AnonymousUsage(db.Model):

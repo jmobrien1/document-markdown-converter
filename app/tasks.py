@@ -305,9 +305,9 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
             if use_pro_converter:
                 # Check user has Pro access
                 if conversion_id:
-                    conversion = Conversion.query.get(conversion_id)
+                    conversion = Conversion.get_conversion_safely(conversion_id)
                     if conversion and conversion.user_id:
-                        user = User.query.get(conversion.user_id)
+                        user = User.get_user_safely(conversion.user_id)
                         if not user or not user.has_pro_access:
                             raise Exception("Pro access required. Please upgrade to Pro or check your trial status.")
                 
@@ -408,7 +408,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                 markdown_content = result.text_content
             
             if conversion_id:
-                conversion = Conversion.query.get(conversion_id)
+                conversion = Conversion.get_conversion_safely(conversion_id)
                 if conversion:
                     conversion.status = 'completed'
                     conversion.completed_at = datetime.now(timezone.utc)
@@ -417,22 +417,29 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                     
                     # Track Pro usage if this was a Pro conversion
                     if use_pro_converter and conversion.user_id:
-                        user = User.query.get(conversion.user_id)
+                        user = User.get_user_safely(conversion.user_id)
                         if user:
                             # Estimate pages processed (for now, use file size heuristic)
                             pages_processed = get_pdf_page_count(temp_file_path) if file_extension == '.pdf' else 1
-                            conversion.pages_processed = pages_processed
+                            # Only set pages_processed if the column exists
+                            try:
+                                conversion.pages_processed = pages_processed
+                            except:
+                                pass  # Column doesn't exist yet
                             
                             # Atomically increment user's monthly usage
-                            user.pro_pages_processed_current_month += pages_processed
-                            print(f"--- [Celery Task] Tracked {pages_processed} pages for user {user.email}")
+                            try:
+                                user.pro_pages_processed_current_month += pages_processed
+                                print(f"--- [Celery Task] Tracked {pages_processed} pages for user {user.email}")
+                            except:
+                                pass  # Column doesn't exist yet
                     
                     db.session.commit()
                     
                     # Send email notification if user is logged in
                     if conversion.user_id:
                         try:
-                            user = User.query.get(conversion.user_id)
+                            user = User.get_user_safely(conversion.user_id)
                             if user and user.email:
                                 send_conversion_complete_email(user.email, original_filename)
                         except Exception as e:
@@ -451,7 +458,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
         print(f"Error Details: {error_msg}")
         with current_app.app_context():
             if conversion_id:
-                conversion = Conversion.query.get(conversion_id)
+                conversion = Conversion.get_conversion_safely(conversion_id)
                 if conversion:
                     conversion.status = 'failed'
                     conversion.error_message = error_msg
