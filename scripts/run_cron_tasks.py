@@ -20,13 +20,21 @@ def run_expire_trials():
         with app.app_context():
             print(f"[{datetime.now(timezone.utc)}] Starting expire_trials task...")
             
-            # Check if trial columns exist
-            result = db.session.execute(text("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'users' AND column_name IN ('on_trial', 'trial_end_date')
-            """))
-            existing_columns = [row[0] for row in result]
+            # Check if trial columns exist - handle both PostgreSQL and SQLite
+            database_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+            
+            if 'postgresql' in database_url or 'postgres' in database_url:
+                # PostgreSQL syntax
+                result = db.session.execute(text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name IN ('on_trial', 'trial_end_date')
+                """))
+                existing_columns = [row[0] for row in result]
+            else:
+                # SQLite syntax
+                result = db.session.execute(text("PRAGMA table_info(users)"))
+                existing_columns = [row[1] for row in result if row[1] in ('on_trial', 'trial_end_date')]
             
             if 'on_trial' not in existing_columns or 'trial_end_date' not in existing_columns:
                 print("Trial columns don't exist yet, skipping trial expiration")
@@ -71,14 +79,23 @@ def run_reset_monthly_usage():
         with app.app_context():
             print(f"[{datetime.now(timezone.utc)}] Starting reset_monthly_usage task...")
             
-            # Check if the column exists
-            result = db.session.execute(text("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'users' AND column_name = 'pro_pages_processed_current_month'
-            """))
+            # Check if the column exists - handle both PostgreSQL and SQLite
+            database_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
             
-            if not result.fetchone():
+            if 'postgresql' in database_url or 'postgres' in database_url:
+                # PostgreSQL syntax
+                result = db.session.execute(text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'pro_pages_processed_current_month'
+                """))
+                column_exists = result.fetchone() is not None
+            else:
+                # SQLite syntax
+                result = db.session.execute(text("PRAGMA table_info(users)"))
+                column_exists = any(row[1] == 'pro_pages_processed_current_month' for row in result)
+            
+            if not column_exists:
                 print("pro_pages_processed_current_month column doesn't exist yet, skipping reset")
                 return True
             

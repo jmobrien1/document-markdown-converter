@@ -35,13 +35,23 @@ def check_and_fix_schema():
     
     try:
         with engine.connect() as conn:
-            # Check if users table exists
-            result = conn.execute(text("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'users'
-                )
-            """))
+            # Check if users table exists - handle both PostgreSQL and SQLite
+            if 'postgresql' in database_url or 'postgres' in database_url:
+                # PostgreSQL syntax
+                result = conn.execute(text("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'users'
+                    )
+                """))
+            else:
+                # SQLite syntax
+                result = conn.execute(text("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM sqlite_master 
+                        WHERE type='table' AND name='users'
+                    )
+                """))
             
             if not result.scalar():
                 print("❌ Users table does not exist!")
@@ -49,15 +59,24 @@ def check_and_fix_schema():
             
             print("✅ Users table exists")
             
-            # Check existing columns
-            result = conn.execute(text("""
-                SELECT column_name, data_type, is_nullable, column_default
-                FROM information_schema.columns 
-                WHERE table_name = 'users' 
-                ORDER BY ordinal_position
-            """))
+            # Check existing columns - handle both PostgreSQL and SQLite
+            if 'postgresql' in database_url or 'postgres' in database_url:
+                # PostgreSQL syntax
+                result = conn.execute(text("""
+                    SELECT column_name, data_type, is_nullable, column_default
+                    FROM information_schema.columns 
+                    WHERE table_name = 'users' 
+                    ORDER BY ordinal_position
+                """))
+            else:
+                # SQLite syntax
+                result = conn.execute(text("PRAGMA table_info(users)"))
             
-            existing_columns = {row[0]: row[1] for row in result}
+            if 'postgresql' in database_url or 'postgres' in database_url:
+                existing_columns = {row[0]: row[1] for row in result}
+            else:
+                existing_columns = {row[1]: row[2] for row in result}  # SQLite: name, type
+            
             print(f"📋 Existing columns: {list(existing_columns.keys())}")
             
             # Define required columns
@@ -91,19 +110,35 @@ def check_and_fix_schema():
                     print(f"✅ {column_name} column already exists")
             
             # Check conversions table for pages_processed column
-            result = conn.execute(text("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'conversions'
-                )
-            """))
+            if 'postgresql' in database_url or 'postgres' in database_url:
+                # PostgreSQL syntax
+                result = conn.execute(text("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'conversions'
+                    )
+                """))
+            else:
+                # SQLite syntax
+                result = conn.execute(text("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM sqlite_master 
+                        WHERE type='table' AND name='conversions'
+                    )
+                """))
             
             if result.scalar():
-                result = conn.execute(text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'conversions' AND column_name = 'pages_processed'
-                """))
+                if 'postgresql' in database_url or 'postgres' in database_url:
+                    # PostgreSQL syntax
+                    result = conn.execute(text("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'conversions' AND column_name = 'pages_processed'
+                    """))
+                else:
+                    # SQLite syntax
+                    result = conn.execute(text("PRAGMA table_info(conversions)"))
+                    result = [row for row in result if row[1] == 'pages_processed']
                 
                 if not result.fetchone():
                     print("➕ Adding pages_processed column to conversions table...")
