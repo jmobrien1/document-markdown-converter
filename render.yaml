@@ -80,7 +80,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python -c "from app import create_app; from app.tasks import expire_trials; app = create_app('production'); app.app_context().push(); expire_trials.delay()"
+    startCommand: python scripts/run_cron_tasks.py expire_trials
     schedule: "0 0 * * *"  # Daily at midnight UTC
     envVars:
       - key: FLASK_APP
@@ -105,7 +105,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python -c "from app import create_app; from app.tasks import reset_monthly_usage; app = create_app('production'); app.app_context().push(); reset_monthly_usage.delay()"
+    startCommand: python scripts/run_cron_tasks.py reset_monthly_usage
     schedule: "0 0 1 * *"  # First day of every month at midnight UTC
     envVars:
       - key: FLASK_APP
@@ -130,7 +130,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python -c "from app import create_app; from app.tasks import redis_health_check; app = create_app('production'); app.app_context().push(); redis_health_check.delay()"
+    startCommand: python scripts/run_cron_tasks.py redis_health_check
     schedule: "*/30 * * * *"  # Every 30 minutes
     envVars:
       - key: FLASK_APP

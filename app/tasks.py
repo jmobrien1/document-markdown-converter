@@ -506,9 +506,22 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
 def expire_trials():
     """Expire trials for users whose trial period has ended."""
     from datetime import datetime, timezone
+    from sqlalchemy import text
     
     try:
         with current_app.app_context():
+            # Check if trial columns exist
+            result = db.session.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name IN ('on_trial', 'trial_end_date')
+            """))
+            existing_columns = [row[0] for row in result]
+            
+            if 'on_trial' not in existing_columns or 'trial_end_date' not in existing_columns:
+                print("--- [Celery Task] Trial columns don't exist yet, skipping trial expiration")
+                return
+            
             # Find users whose trial has expired
             expired_users = User.query.filter(
                 User.on_trial == True,
@@ -528,14 +541,30 @@ def expire_trials():
                 
     except Exception as e:
         print(f"--- [Celery Task] Error expiring trials: {str(e)}")
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except:
+            pass
 
 
 @celery.task
 def reset_monthly_usage():
     """Reset monthly usage counters for all users."""
+    from sqlalchemy import text
+    
     try:
         with current_app.app_context():
+            # Check if the column exists
+            result = db.session.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name = 'pro_pages_processed_current_month'
+            """))
+            
+            if not result.fetchone():
+                print("--- [Celery Task] pro_pages_processed_current_month column doesn't exist yet, skipping reset")
+                return
+            
             # Reset all users' monthly page count
             updated_count = User.query.update({
                 User.pro_pages_processed_current_month: 0
@@ -546,7 +575,10 @@ def reset_monthly_usage():
                 
     except Exception as e:
         print(f"--- [Celery Task] Error resetting monthly usage: {str(e)}")
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except:
+            pass
 
 
 @celery.task
