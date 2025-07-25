@@ -547,3 +547,24 @@ def reset_monthly_usage():
     except Exception as e:
         print(f"--- [Celery Task] Error resetting monthly usage: {str(e)}")
         db.session.rollback()
+
+
+@celery.task
+def redis_health_check():
+    """
+    Simple health check task to keep Redis active.
+    This task does minimal work but ensures Redis connection is maintained.
+    """
+    try:
+        # Just return a simple status to keep Redis active
+        return {
+            'status': 'healthy',
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'message': 'Redis health check completed'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'error': str(e)
+        }

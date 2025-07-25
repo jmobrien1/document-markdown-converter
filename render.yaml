@@ -124,6 +124,31 @@ services:
           property: connectionString
       - fromGroup: mdraft-secrets
 
+  # Cron job for Redis health check (keeps Redis active)
+  - type: cron
+    name: redis-health-check
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "from app import create_app; from app.tasks import redis_health_check; app = create_app('production'); app.app_context().push(); redis_health_check.delay()"
+    schedule: "*/30 * * * *"  # Every 30 minutes
+    envVars:
+      - key: FLASK_APP
+        value: run.py
+      - key: FLASK_CONFIG
+        value: production
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: redis-mdraft
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: redis-mdraft
+          property: connectionString
+      - fromGroup: mdraft-secrets
+
 envVarGroups:
   - name: mdraft-secrets
     envVars:
