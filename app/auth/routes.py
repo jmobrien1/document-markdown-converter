@@ -119,7 +119,9 @@ def login():
 @login_required
 def logout():
     """User logout endpoint."""
-    user_email = current_user.email
+    # Ensure we have a fresh user object bound to the session
+    user = User.query.get(current_user.id)
+    user_email = user.email if user else 'User'
     logout_user()
     flash(f'Goodbye, {user_email}!', 'info')
     return redirect(url_for('main.index'))
@@ -129,24 +131,30 @@ def logout():
 @login_required
 def account():
     """User account dashboard."""
-    # Get user statistics
-    total_conversions = current_user.conversions.count()
-    daily_conversions = current_user.get_daily_conversions()
+    # Ensure we have a fresh user object bound to the session
+    user = User.query.get(current_user.id)
+    if not user:
+        flash('User not found', 'error')
+        return redirect(url_for('main.index'))
+    
+    # Get user statistics using the fresh user object
+    total_conversions = user.conversions.count()
+    daily_conversions = user.get_daily_conversions()
 
     # Get recent conversions
-    recent_conversions = current_user.conversions.order_by(
+    recent_conversions = user.conversions.order_by(
         Conversion.created_at.desc()
     ).limit(10).all()
 
     # Calculate success rate
-    successful_conversions = current_user.conversions.filter_by(status='completed').count()
+    successful_conversions = user.conversions.filter_by(status='completed').count()
     success_rate = (successful_conversions / total_conversions * 100) if total_conversions > 0 else 0
 
     # Calculate Pro conversions count
-    pro_conversions_count = current_user.conversions.filter_by(conversion_type='pro').count()
+    pro_conversions_count = user.conversions.filter_by(conversion_type='pro').count()
 
     # Calculate average processing time for completed conversions
-    completed_conversions = current_user.conversions.filter_by(status='completed').filter(
+    completed_conversions = user.conversions.filter_by(status='completed').filter(
         Conversion.processing_time.isnot(None)
     ).all()
     
@@ -161,19 +169,19 @@ def account():
     monthly_allowance = MONTHLY_PAGE_ALLOWANCE
     
     # Generate API key if user doesn't have one
-    if not current_user.api_key:
-        current_user.generate_api_key()
+    if not user.api_key:
+        user.generate_api_key()
     
     return render_template('auth/account.html',
-                         user=current_user,
+                         user=user,
                          total_conversions=total_conversions,
                          daily_conversions=daily_conversions,
                          recent_conversions=recent_conversions,
                          success_rate=round(success_rate, 1),
                          pro_conversions_count=pro_conversions_count,
                          avg_processing_time=round(avg_processing_time, 1),
-                         trial_days_remaining=current_user.trial_days_remaining,
-                         pro_pages_processed=getattr(current_user, 'pro_pages_processed_current_month', 0),
+                         trial_days_remaining=user.trial_days_remaining,
+                         pro_pages_processed=getattr(user, 'pro_pages_processed_current_month', 0),
                          monthly_allowance=monthly_allowance)
 
 
@@ -182,8 +190,14 @@ def account():
 def test_email():
     """Test email functionality."""
     try:
+        # Ensure we have a fresh user object bound to the session
+        user = User.query.get(current_user.id)
+        if not user:
+            flash('User not found', 'error')
+            return redirect(url_for('auth.account'))
+        
         from app.email import send_conversion_complete_email
-        send_conversion_complete_email(current_user.email, "test-file.pdf")
+        send_conversion_complete_email(user.email, "test-file.pdf")
         flash('Test email sent successfully!', 'success')
     except Exception as e:
         flash(f'Email test failed: {str(e)}', 'error')
@@ -194,7 +208,13 @@ def test_email():
 def generate_api_key():
     """Generate a new API key for the current user."""
     try:
-        current_user.generate_api_key()
+        # Ensure we have a fresh user object bound to the session
+        user = User.query.get(current_user.id)
+        if not user:
+            flash('User not found', 'error')
+            return redirect(url_for('auth.account'))
+        
+        user.generate_api_key()
         flash('New API key generated successfully!', 'success')
     except Exception as e:
         flash(f'Failed to generate API key: {str(e)}', 'error')
@@ -205,7 +225,13 @@ def generate_api_key():
 def revoke_api_key():
     """Revoke the current API key."""
     try:
-        current_user.revoke_api_key()
+        # Ensure we have a fresh user object bound to the session
+        user = User.query.get(current_user.id)
+        if not user:
+            flash('User not found', 'error')
+            return redirect(url_for('auth.account'))
+        
+        user.revoke_api_key()
         flash('API key revoked successfully!', 'success')
     except Exception as e:
         flash(f'Failed to revoke API key: {str(e)}', 'error')
@@ -215,20 +241,25 @@ def revoke_api_key():
 def user_status():
     """API endpoint to get current user status."""
     if current_user.is_authenticated:
-        # Get user's conversion stats
-        daily_conversions = current_user.get_daily_conversions()
-        total_conversions = current_user.conversions.count()
+        # Ensure we have a fresh user object bound to the session
+        user = User.query.get(current_user.id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get user's conversion stats using the fresh user object
+        daily_conversions = user.get_daily_conversions()
+        total_conversions = user.conversions.count()
 
         return jsonify({
             'authenticated': True,
-            'email': current_user.email,
-            'is_premium': current_user.is_premium,
-            'has_pro_access': current_user.has_pro_access,
-            'on_trial': getattr(current_user, 'on_trial', False),
-            'trial_days_remaining': current_user.trial_days_remaining,
+            'email': user.email,
+            'is_premium': user.is_premium,
+            'has_pro_access': user.has_pro_access,
+            'on_trial': getattr(user, 'on_trial', False),
+            'trial_days_remaining': user.trial_days_remaining,
             'daily_conversions': daily_conversions,
             'total_conversions': total_conversions,
-            'can_convert': current_user.can_convert()
+            'can_convert': user.can_convert()
         })
     else:
         # Anonymous user status
@@ -258,7 +289,13 @@ def user_status():
 @login_required
 def upgrade():
     """Upgrade to premium page."""
-    if current_user.is_premium:
+    # Ensure we have a fresh user object bound to the session
+    user = User.query.get(current_user.id)
+    if not user:
+        flash('User not found', 'error')
+        return redirect(url_for('auth.account'))
+    
+    if user.is_premium:
         flash('You are already on the Pro plan!', 'info')
         return redirect(url_for('auth.account'))
     return render_template('auth/upgrade.html')
@@ -275,6 +312,12 @@ def create_checkout_session():
         return redirect(url_for('auth.upgrade'))
     
     try:
+        # Ensure we have a fresh user object bound to the session
+        user = User.query.get(current_user.id)
+        if not user:
+            flash('User not found', 'error')
+            return redirect(url_for('auth.upgrade'))
+        
         stripe.api_key = current_app.config['STRIPE_SECRET_KEY']
         checkout_session = stripe.checkout.Session.create(
             line_items=[
@@ -286,11 +329,11 @@ def create_checkout_session():
             mode='subscription',
             success_url=url_for('auth.stripe_success', _external=True),
             cancel_url=url_for('auth.upgrade', _external=True),
-            customer_email=current_user.email,
-            client_reference_id=current_user.id,
+            customer_email=user.email,
+            client_reference_id=user.id,
             subscription_data={
                 "metadata": {
-                    "user_id": current_user.id
+                    "user_id": user.id
                 }
             }
         )
@@ -310,7 +353,13 @@ def stripe_success():
 @login_required
 def billing_portal():
     """Redirect user to Stripe Customer Billing Portal."""
-    if not current_user.stripe_customer_id:
+    # Ensure we have a fresh user object bound to the session
+    user = User.query.get(current_user.id)
+    if not user:
+        flash('User not found', 'error')
+        return redirect(url_for('auth.account'))
+    
+    if not user.stripe_customer_id:
         flash("You don't have a billing account with us.", "error")
         return redirect(url_for('auth.account'))
 
@@ -324,7 +373,7 @@ def billing_portal():
     try:
         stripe.api_key = current_app.config['STRIPE_SECRET_KEY']
         portal_session = stripe.billing_portal.Session.create(
-            customer=current_user.stripe_customer_id,
+            customer=user.stripe_customer_id,
             return_url=url_for('auth.account', _external=True)
         )
         return redirect(portal_session.url, code=303)

@@ -123,7 +123,13 @@ def convert():
     # Check if the user requested a pro conversion
     use_pro_converter = request.form.get('pro_conversion') == 'on'
     
-    current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {current_user.email if current_user and current_user.is_authenticated else 'Anonymous'}")
+    # Get user info for logging
+    user_email = 'Anonymous'
+    if current_user and current_user.is_authenticated:
+        user = User.query.get(current_user.id)
+        user_email = user.email if user else 'Unknown'
+    
+    current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {user_email}")
     
     try:
         # Get storage client with proper credential handling
@@ -244,10 +250,15 @@ def conversion_stats():
     """Get conversion statistics for dashboard."""
     try:
         if current_user.is_authenticated:
-            # User-specific stats
-            total_conversions = current_user.conversions.count()
-            daily_conversions = current_user.get_daily_conversions()
-            successful_conversions = current_user.conversions.filter_by(status='completed').count()
+            # Ensure we have a fresh user object bound to the session
+            user = User.query.get(current_user.id)
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            # User-specific stats using the fresh user object
+            total_conversions = user.conversions.count()
+            daily_conversions = user.get_daily_conversions()
+            successful_conversions = user.conversions.filter_by(status='completed').count()
             
             # Calculate success rate
             success_rate = (successful_conversions / total_conversions * 100) if total_conversions > 0 else 0
@@ -296,8 +307,13 @@ def conversion_history():
         return jsonify({'error': 'Authentication required'}), 401
     
     try:
-        # Get user's conversion history
-        conversions = current_user.conversions.order_by(
+        # Ensure we have a fresh user object bound to the session
+        user = User.query.get(current_user.id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get user's conversion history using the fresh user object
+        conversions = user.conversions.order_by(
             Conversion.created_at.desc()
         ).limit(50).all()
         
@@ -319,8 +335,8 @@ def conversion_history():
         
         return jsonify({
             'history': history,
-            'total_conversions': current_user.conversions.count(),
-            'daily_conversions': current_user.get_daily_conversions()
+            'total_conversions': user.conversions.count(),
+            'daily_conversions': user.get_daily_conversions()
         })
         
     except Exception as e:
