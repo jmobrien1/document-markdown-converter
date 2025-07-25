@@ -22,8 +22,16 @@ class Config:
     ANONYMOUS_DAILY_LIMIT = 5
 
     # --- Celery Configuration ---
+    # Use environment variables for Redis connection
+    # In production (Render), these will point to the managed Redis service
+    # In development, fall back to localhost
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+    
+    # For cron jobs, ensure we have proper Redis configuration
+    if not os.environ.get('CELERY_BROKER_URL') and os.environ.get('RENDER'):
+        # We're on Render but no Redis URL is set - this is an error
+        print("WARNING: CELERY_BROKER_URL not set on Render. Cron jobs may fail.")
 
     # --- Flask-Mail Configuration ---
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
