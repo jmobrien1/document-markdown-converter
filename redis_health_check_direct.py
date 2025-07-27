@@ -12,53 +12,49 @@ def main():
     print(f"[{datetime.now(timezone.utc)}] Starting redis_health_check task...")
     
     try:
-        from app import create_app
         import redis
+        import os
         
-        app = create_app('production')
+        # Try to get Redis URL from environment variables first
+        redis_url = os.environ.get('CELERY_BROKER_URL')
         
-        with app.app_context():
-            # Get Redis connection from app config
-            redis_url = app.config.get('CELERY_BROKER_URL')
-            if not redis_url:
-                print("No Redis URL configured, skipping health check")
-                return True
+        if not redis_url:
+            # Fallback to app config
+            try:
+                from app import create_app
+                app = create_app('production')
+                with app.app_context():
+                    redis_url = app.config.get('CELERY_BROKER_URL')
+            except Exception as e:
+                print(f"Could not load app config: {e}")
+                return False
+        
+        if not redis_url:
+            print("No Redis URL configured, skipping health check")
+            return True
             
             try:
-                # Parse Redis URL and connect
-                if redis_url.startswith('redis://'):
-                    # Extract host and port from URL
-                    url_parts = redis_url.replace('redis://', '').split('/')[0]
-                    if '@' in url_parts:
-                        # Format: redis://username:password@host:port
-                        auth_part, host_part = url_parts.split('@')
-                        host, port = host_part.split(':')
-                    else:
-                        # Format: redis://host:port
-                        host, port = url_parts.split(':')
-                    
-                    port = int(port)
-                    
-                    # Connect to Redis
-                    r = redis.Redis(host=host, port=port, decode_responses=True)
-                    
-                    # Test connection
-                    r.ping()
-                    
-                    result = {
-                        'status': 'healthy',
-                        'timestamp': datetime.now(timezone.utc).isoformat(),
-                        'message': 'Redis health check completed',
-                        'host': host,
-                        'port': port
-                    }
-                    
-                    print(f"Redis health check successful: {result}")
-                    return True
-                    
-                else:
-                    print(f"Unsupported Redis URL format: {redis_url}")
-                    return False
+                print(f"Attempting to connect to Redis: {redis_url.split('@')[-1] if '@' in redis_url else redis_url}")
+                
+                # Use redis.from_url for better URL parsing
+                r = redis.from_url(redis_url, decode_responses=True)
+                
+                # Test connection
+                r.ping()
+                
+                # Get connection info
+                info = r.info()
+                
+                result = {
+                    'status': 'healthy',
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                    'message': 'Redis health check completed',
+                    'redis_version': info.get('redis_version', 'unknown'),
+                    'connected_clients': info.get('connected_clients', 0)
+                }
+                
+                print(f"Redis health check successful: {result}")
+                return True
                     
             except redis.ConnectionError as e:
                 print(f"Redis connection error: {e}")
