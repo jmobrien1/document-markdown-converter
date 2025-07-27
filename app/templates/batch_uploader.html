@@ -519,7 +519,7 @@
 
     <script>
         // Global variables
-        let currentJobId = null;
+        let currentBatchId = null;
         let selectedFiles = [];
         let uploadInProgress = false;
 
@@ -595,7 +595,7 @@
             });
 
             try {
-                const response = await fetch('/batch-upload', {
+                const response = await fetch('/uploads/batch-upload', {
                     method: 'POST',
                     body: formData
                 });
@@ -603,7 +603,7 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    currentJobId = result.job_id;
+                    currentBatchId = result.batch_id;
                     showJobQueue(result);
                     startStatusPolling();
                     showMessage(result.message, 'success');
@@ -620,7 +620,7 @@
         });
 
         function showJobQueue(data) {
-            jobId.textContent = data.job_id;
+            jobId.textContent = data.batch_id;
             jobQueue.classList.add('active');
             
             // Clear existing files
@@ -641,7 +641,7 @@
                     <div class="file-icon">📄</div>
                     <div class="file-details">
                         <h4>${file.filename}</h4>
-                        <p>${formatFileSize(file.size)}</p>
+                        <p>${formatFileSize(file.size || 0)}</p>
                     </div>
                 </div>
                 <div class="file-status ${file.status}">${file.status}</div>
@@ -659,11 +659,11 @@
 
         // Status polling
         function startStatusPolling() {
-            if (!currentJobId) return;
+            if (!currentBatchId) return;
             
             const pollInterval = setInterval(async () => {
                 try {
-                    const response = await fetch(`/batch-status/${currentJobId}`);
+                    const response = await fetch(`/uploads/batch-status/${currentBatchId}`);
                     const status = await response.json();
                     
                     updateJobStatus(status);
@@ -684,12 +684,25 @@
             progressFill.style.width = `${status.progress}%`;
             progressText.textContent = `${status.progress}% Complete`;
             
+            // Update file list with individual file statuses
+            if (status.files && status.files.length > 0) {
+                updateFileList(status.files);
+            }
+            
             if (status.status === 'completed') {
                 downloadBtn.style.display = 'inline-block';
                 showMessage('Batch processing completed!', 'success');
             } else if (status.status === 'failed') {
                 showMessage('Batch processing failed', 'error');
             }
+        }
+
+        function updateFileList(files) {
+            fileList.innerHTML = '';
+            files.forEach(file => {
+                const fileItem = createFileItem(file);
+                fileList.appendChild(fileItem);
+            });
         }
 
         // Utility functions
@@ -712,17 +725,17 @@
         cancelBtn.addEventListener('click', () => {
             if (confirm('Are you sure you want to cancel this job?')) {
                 jobQueue.classList.remove('active');
-                currentJobId = null;
+                currentBatchId = null;
                 showMessage('Job cancelled', 'success');
             }
         });
 
         // Download functionality
         downloadBtn.addEventListener('click', async () => {
-            if (!currentJobId) return;
+            if (!currentBatchId) return;
             
             try {
-                const response = await fetch(`/batch-download/${currentJobId}`);
+                const response = await fetch(`/uploads/batch-download/${currentBatchId}`);
                 const result = await response.json();
                 
                 if (result.success) {

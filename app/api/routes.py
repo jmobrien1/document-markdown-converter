@@ -2,7 +2,7 @@ from flask import request, jsonify, current_app, g, url_for
 import os
 import uuid
 from werkzeug.utils import secure_filename
-from app.models import Conversion, db
+from app.models import Conversion, Batch, ConversionJob, db
 from app.tasks import convert_file_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
@@ -167,4 +167,54 @@ def api_health():
         'status': 'healthy',
         'service': 'mdraft-api',
         'version': '1.0.0'
-    }) 
+    })
+
+
+@api.route('/batch/<batch_id>/status', methods=['GET'])
+@api_key_required
+def api_batch_status(batch_id):
+    """Get the status of a batch processing job."""
+    user = g.current_user  # Now guaranteed to exist due to decorator
+    
+    try:
+        # Find batch by batch_id (UUID)
+        batch = Batch.query.filter_by(batch_id=batch_id, user_id=user.id).first()
+        
+        if not batch:
+            return jsonify({'error': 'Batch not found'}), 404
+        
+        # Get all conversion jobs for this batch
+        conversion_jobs = batch.conversion_jobs.all()
+        
+        # Build files status list
+        files_status = []
+        for job in conversion_jobs:
+            files_status.append({
+                'filename': job.original_filename,
+                'status': job.status,
+                'error_message': job.error_message,
+                'processing_time': job.processing_time,
+                'markdown_length': job.markdown_length,
+                'pages_processed': job.pages_processed,
+                'created_at': job.created_at.isoformat() if job.created_at else None,
+                'completed_at': job.completed_at.isoformat() if job.completed_at else None
+            })
+        
+        # Calculate overall status
+        response = {
+            'batch_id': batch.batch_id,
+            'status': batch.status,
+            'progress': batch.progress_percentage(),
+            'total_files': batch.total_files,
+            'processed_files': batch.processed_files,
+            'failed_files': batch.failed_files,
+            'created_at': batch.created_at.isoformat() if batch.created_at else None,
+            'completed_at': batch.completed_at.isoformat() if batch.completed_at else None,
+            'files': files_status
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        current_app.logger.error(f'Batch status API error: {str(e)}')
+        return jsonify({'error': 'Failed to get batch status'}), 500 

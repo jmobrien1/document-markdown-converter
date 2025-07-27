@@ -13,7 +13,7 @@ from markitdown import MarkItDown
 from celery import current_task
 from app import celery, db
 from flask import current_app
-from app.models import Conversion, User
+from app.models import Conversion, User, Batch, ConversionJob
 from app.email import send_conversion_complete_email
 from datetime import datetime, timezone
 
@@ -600,3 +600,70 @@ def redis_health_check():
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'error': str(e)
         }
+
+
+@celery.task(bind=True)
+def process_batch_conversions(self, batch_id):
+    """
+    Process all conversion jobs in a batch.
+    
+    Args:
+        batch_id (int): The ID of the batch to process.
+    """
+    try:
+        with current_app.app_context():
+            # Get the batch and its conversion jobs
+            batch = Batch.query.get(batch_id)
+            if not batch:
+                print(f"--- [Celery Task] Batch {batch_id} not found")
+                return
+            
+            # Update batch status to processing
+            batch.status = 'processing'
+            db.session.commit()
+            
+            # Get all queued conversion jobs for this batch
+            conversion_jobs = batch.conversion_jobs.filter_by(status='queued').all()
+            
+            print(f"--- [Celery Task] Processing {len(conversion_jobs)} conversion jobs for batch {batch_id}")
+            
+            for job in conversion_jobs:
+                try:
+                    # Mark job as processing
+                    job.start_processing()
+                    
+                    # Simulate file processing (placeholder for actual conversion logic)
+                    # In a real implementation, you would:
+                    # 1. Retrieve the uploaded file from storage
+                    # 2. Process it using your conversion logic
+                    # 3. Store the results
+                    
+                    # For now, we'll simulate processing with a delay
+                    import time
+                    time.sleep(2)  # Simulate processing time
+                    
+                    # Simulate successful conversion
+                    markdown_content = f"# Converted: {job.original_filename}\n\nThis is simulated markdown content for {job.original_filename}."
+                    job.complete_success(markdown_content, pages_processed=1)
+                    
+                    print(f"--- [Celery Task] Completed job {job.id} for {job.original_filename}")
+                    
+                except Exception as job_error:
+                    print(f"--- [Celery Task] Error processing job {job.id}: {str(job_error)}")
+                    job.complete_failure(str(job_error))
+                
+                # Update batch progress
+                batch.update_progress()
+            
+            print(f"--- [Celery Task] Batch {batch_id} processing completed")
+            
+    except Exception as e:
+        print(f"--- [Celery Task] Error processing batch {batch_id}: {str(e)}")
+        try:
+            with current_app.app_context():
+                batch = Batch.query.get(batch_id)
+                if batch:
+                    batch.status = 'failed'
+                    db.session.commit()
+        except:
+            pass

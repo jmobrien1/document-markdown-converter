@@ -505,3 +505,124 @@ class Invoice(db.Model):
     
     def __repr__(self):
         return f'<Invoice {self.stripe_invoice_id} - {self.status}>'
+
+
+class Batch(db.Model):
+    """Model to track batch upload jobs."""
+    __tablename__ = 'batches'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    batch_id = db.Column(db.String(64), unique=True, nullable=False)  # UUID for external reference
+    status = db.Column(db.String(50), default='queued')  # queued, processing, completed, failed
+    total_files = db.Column(db.Integer, default=0)
+    processed_files = db.Column(db.Integer, default=0)
+    failed_files = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    completed_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships
+    user = db.relationship('User', backref=db.backref('batches', lazy='dynamic'))
+    conversion_jobs = db.relationship('ConversionJob', backref='batch', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def progress_percentage(self):
+        """Calculate progress percentage."""
+        if self.total_files == 0:
+            return 0
+        return int((self.processed_files + self.failed_files) / self.total_files * 100)
+    
+    def is_completed(self):
+        """Check if batch is completed."""
+        return self.status in ['completed', 'failed']
+    
+    def update_progress(self):
+        """Update progress based on conversion jobs."""
+        completed = self.conversion_jobs.filter_by(status='completed').count()
+        failed = self.conversion_jobs.filter_by(status='failed').count()
+        self.processed_files = completed
+        self.failed_files = failed
+        
+        if completed + failed == self.total_files:
+            self.status = 'completed' if failed == 0 else 'failed'
+            self.completed_at = datetime.now(timezone.utc)
+        
+        db.session.commit()
+    
+    def __repr__(self):
+        return f'<Batch {self.batch_id} - {self.status}>'
+
+
+class ConversionJob(db.Model):
+    """Model to track individual conversion jobs within a batch."""
+    __tablename__ = 'conversion_jobs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    batch_id = db.Column(db.Integer, db.ForeignKey('batches.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # File information
+    original_filename = db.Column(db.String(255), nullable=False)
+    file_size = db.Column(db.Integer)  # Size in bytes
+    file_type = db.Column(db.String(10))
+    
+    # Job details
+    status = db.Column(db.String(50), default='queued')  # queued, processing, completed, failed
+    error_message = db.Column(db.Text, nullable=True)
+    job_id = db.Column(db.String(64), nullable=True)  # Celery task ID
+    
+    # Timing
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    processing_time = db.Column(db.Float, nullable=True)  # Seconds
+    
+    # Results
+    markdown_content = db.Column(db.Text, nullable=True)
+    markdown_length = db.Column(db.Integer, nullable=True)  # Character count
+    pages_processed = db.Column(db.Integer, nullable=True)
+    
+    # Relationships
+    user = db.relationship('User', backref=db.backref('conversion_jobs', lazy='dynamic'))
+    
+    def start_processing(self):
+        """Mark job as started."""
+        self.status = 'processing'
+        self.started_at = datetime.now(timezone.utc)
+        db.session.commit()
+    
+    def complete_success(self, markdown_content, pages_processed=None):
+        """Mark job as completed successfully."""
+        self.status = 'completed'
+        self.completed_at = datetime.now(timezone.utc)
+        self.markdown_content = markdown_content
+        self.markdown_length = len(markdown_content) if markdown_content else 0
+        self.pages_processed = pages_processed
+        
+        if self.started_at:
+            # Ensure both datetimes are timezone-aware
+            completed_at = self.completed_at
+            started_at = self.started_at
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            self.processing_time = (completed_at - started_at).total_seconds()
+        
+        db.session.commit()
+    
+    def complete_failure(self, error_message):
+        """Mark job as failed."""
+        self.status = 'failed'
+        self.completed_at = datetime.now(timezone.utc)
+        self.error_message = error_message
+        
+        if self.started_at:
+            # Ensure both datetimes are timezone-aware
+            completed_at = self.completed_at
+            started_at = self.started_at
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            self.processing_time = (completed_at - started_at).total_seconds()
+        
+        db.session.commit()
+    
+    def __repr__(self):
+        return f'<ConversionJob {self.original_filename} - {self.status}>'
