@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Uploader - mdraft</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-start: #2563eb;
+            --primary-end: #7c3aed;
+            --background: #f8f9fa;
+            --surface: #ffffff;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --success: #28a745;
+            --warning: #ffc107;
+            --danger: #dc3545;
+            --info: #17a2b8;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: var(--background); 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        
+        .header { 
+            width: 100%; 
+            background: var(--surface); 
+            padding: 15px 40px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid #dee2e6; 
+        }
+        
+        .header .brand { 
+            font-size: 1.5em; 
+            font-weight: 700; 
+            color: var(--text-primary); 
+            text-decoration: none; 
+        }
+        
+        .header .nav-links { 
+            display: flex; 
+            align-items: center; 
+            gap: 20px; 
+        }
+        
+        .header .nav-links a { 
+            text-decoration: none; 
+            color: var(--text-secondary); 
+            font-weight: 500; 
+            transition: color 0.2s; 
+            cursor: pointer; 
+            padding: 5px 10px; 
+            border-radius: 4px; 
+        }
+        
+        .header .nav-links a:hover { 
+            color: var(--primary-start); 
+            text-decoration: underline; 
+        }
+        
+        .container { 
+            width: 100%; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 40px; 
+            flex: 1; 
+        }
+        
+        .page-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .page-header h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .page-header p {
+            font-size: 1.1em;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .upload-section { 
+            background: var(--surface); 
+            padding: 40px; 
+            border-radius: 20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05); 
+            margin-bottom: 30px;
+        }
+        
+        .drag-drop-area {
+            border: 3px dashed #dee2e6;
+            border-radius: 15px;
+            padding: 60px 20px;
+            text-align: center;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .drag-drop-area.dragover {
+            border-color: var(--primary-start);
+            background: #e3f2fd;
+            transform: scale(1.02);
+        }
+        
+        .drag-drop-area:hover {
+            border-color: var(--primary-start);
+            background: #e9ecef;
+        }
+        
+        .drag-drop-icon {
+            font-size: 3em;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+        
+        .drag-drop-text {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+        }
+        
+        .drag-drop-subtext {
+            font-size: 1em;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+        
+        .file-input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            cursor: pointer;
+        }
+        
+        .upload-btn {
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 20px;
+        }
+        
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .upload-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .job-queue {
+            background: var(--surface);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            display: none;
+        }
+        
+        .job-queue.active {
+            display: block;
+        }
+        
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .job-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .job-status {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .job-status.pending {
+            background: var(--warning);
+            color: #212529;
+        }
+        
+        .job-status.processing {
+            background: var(--info);
+            color: white;
+        }
+        
+        .job-status.completed {
+            background: var(--success);
+            color: white;
+        }
+        
+        .job-status.failed {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .progress-container {
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: #e9ecef;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+            border-radius: 6px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        
+        .progress-text {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+        
+        .file-list {
+            margin-top: 20px;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        
+        .file-item:hover {
+            border-color: var(--primary-start);
+            background: #e3f2fd;
+        }
+        
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .file-icon {
+            font-size: 1.5em;
+            color: var(--text-secondary);
+        }
+        
+        .file-details h4 {
+            font-size: 1em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+        
+        .file-details p {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+        }
+        
+        .file-status {
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .file-status.pending {
+            background: var(--warning);
+            color: #212529;
+        }
+        
+        .file-status.processing {
+            background: var(--info);
+            color: white;
+        }
+        
+        .file-status.completed {
+            background: var(--success);
+            color: white;
+        }
+        
+        .file-status.failed {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .job-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        
+        .action-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .download-btn {
+            background: var(--success);
+            color: white;
+        }
+        
+        .download-btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+        }
+        
+        .cancel-btn {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .cancel-btn:hover {
+            background: #c82333;
+            transform: translateY(-1px);
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            color: var(--primary-start);
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--primary-start);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message, .success-message {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid;
+            display: none;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+        
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+        
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .upload-section {
+                padding: 20px;
+            }
+            
+            .drag-drop-area {
+                padding: 40px 15px;
+            }
+            
+            .drag-drop-text {
+                font-size: 1.1em;
+            }
+            
+            .job-queue {
+                padding: 20px;
+            }
+            
+            .job-header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+            
+            .file-item {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+            
+            .job-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <a href="{{ url_for('main.index') }}" class="brand">mdraft</a>
+        <nav class="nav-links">
+            <a href="{{ url_for('main.index') }}">Home</a>
+            <a href="{{ url_for('uploads.batch_uploader') }}">Batch Uploader</a>
+            <a href="{{ url_for('auth.account') }}">Account</a>
+            <a href="{{ url_for('auth.logout') }}">Logout</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="page-header">
+            <h1>Batch Uploader</h1>
+            <p>Upload multiple documents at once for efficient batch processing. Perfect for proposal writers with tight deadlines.</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="drag-drop-area" id="dragDropArea">
+                <div class="drag-drop-icon">📁</div>
+                <div class="drag-drop-text">Drag & Drop Files Here</div>
+                <div class="drag-drop-subtext">or click to browse files</div>
+                <input type="file" class="file-input" id="fileInput" multiple accept=".pdf,.docx,.doc,.txt,.rtf">
+                <button class="upload-btn" id="uploadBtn" disabled>Start Batch Upload</button>
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing your files...</p>
+            </div>
+            
+            <div class="error-message" id="errorMessage"></div>
+            <div class="success-message" id="successMessage"></div>
+        </div>
+
+        <div class="job-queue" id="jobQueue">
+            <div class="job-header">
+                <div class="job-title">Batch Job: <span id="jobId">-</span></div>
+                <div class="job-status" id="jobStatus">pending</div>
+            </div>
+            
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">0% Complete</div>
+            </div>
+            
+            <div class="file-list" id="fileList">
+                <!-- File items will be dynamically added here -->
+            </div>
+            
+            <div class="job-actions">
+                <button class="action-btn download-btn" id="downloadBtn" style="display: none;">Download Results</button>
+                <button class="action-btn cancel-btn" id="cancelBtn">Cancel Job</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentJobId = null;
+        let selectedFiles = [];
+        let uploadInProgress = false;
+
+        // DOM elements
+        const dragDropArea = document.getElementById('dragDropArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const loading = document.getElementById('loading');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const jobQueue = document.getElementById('jobQueue');
+        const jobId = document.getElementById('jobId');
+        const jobStatus = document.getElementById('jobStatus');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const fileList = document.getElementById('fileList');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+
+        // Drag and drop functionality
+        dragDropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dragDropArea.classList.add('dragover');
+        });
+
+        dragDropArea.addEventListener('dragleave', () => {
+            dragDropArea.classList.remove('dragover');
+        });
+
+        dragDropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragDropArea.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files);
+            handleFileSelection(files);
+        });
+
+        dragDropArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            handleFileSelection(files);
+        });
+
+        function handleFileSelection(files) {
+            selectedFiles = files.filter(file => {
+                const extension = file.name.split('.').pop().toLowerCase();
+                return ['pdf', 'docx', 'doc', 'txt', 'rtf'].includes(extension);
+            });
+
+            if (selectedFiles.length > 0) {
+                uploadBtn.disabled = false;
+                showMessage(`Selected ${selectedFiles.length} files for upload`, 'success');
+            } else {
+                uploadBtn.disabled = true;
+                showMessage('Please select valid files (PDF, DOCX, DOC, TXT, RTF)', 'error');
+            }
+        }
+
+        // Upload functionality
+        uploadBtn.addEventListener('click', async () => {
+            if (uploadInProgress || selectedFiles.length === 0) return;
+
+            uploadInProgress = true;
+            uploadBtn.disabled = true;
+            loading.style.display = 'block';
+            hideMessages();
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files[]', file);
+            });
+
+            try {
+                const response = await fetch('/batch-upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentJobId = result.job_id;
+                    showJobQueue(result);
+                    startStatusPolling();
+                    showMessage(result.message, 'success');
+                } else {
+                    showMessage(result.error || 'Upload failed', 'error');
+                }
+            } catch (error) {
+                showMessage('Upload failed: ' + error.message, 'error');
+            } finally {
+                uploadInProgress = false;
+                uploadBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+
+        function showJobQueue(data) {
+            jobId.textContent = data.job_id;
+            jobQueue.classList.add('active');
+            
+            // Clear existing files
+            fileList.innerHTML = '';
+            
+            // Add file items
+            data.files.forEach(file => {
+                const fileItem = createFileItem(file);
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        function createFileItem(file) {
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            item.innerHTML = `
+                <div class="file-info">
+                    <div class="file-icon">📄</div>
+                    <div class="file-details">
+                        <h4>${file.filename}</h4>
+                        <p>${formatFileSize(file.size)}</p>
+                    </div>
+                </div>
+                <div class="file-status ${file.status}">${file.status}</div>
+            `;
+            return item;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Status polling
+        function startStatusPolling() {
+            if (!currentJobId) return;
+            
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/batch-status/${currentJobId}`);
+                    const status = await response.json();
+                    
+                    updateJobStatus(status);
+                    
+                    if (status.status === 'completed' || status.status === 'failed') {
+                        clearInterval(pollInterval);
+                    }
+                } catch (error) {
+                    console.error('Status polling error:', error);
+                }
+            }, 2000);
+        }
+
+        function updateJobStatus(status) {
+            jobStatus.textContent = status.status;
+            jobStatus.className = `job-status ${status.status}`;
+            
+            progressFill.style.width = `${status.progress}%`;
+            progressText.textContent = `${status.progress}% Complete`;
+            
+            if (status.status === 'completed') {
+                downloadBtn.style.display = 'inline-block';
+                showMessage('Batch processing completed!', 'success');
+            } else if (status.status === 'failed') {
+                showMessage('Batch processing failed', 'error');
+            }
+        }
+
+        // Utility functions
+        function showMessage(message, type) {
+            const element = document.getElementById(type + 'Message');
+            element.textContent = message;
+            element.style.display = 'block';
+            
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        }
+
+        function hideMessages() {
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        }
+
+        // Cancel job functionality
+        cancelBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to cancel this job?')) {
+                jobQueue.classList.remove('active');
+                currentJobId = null;
+                showMessage('Job cancelled', 'success');
+            }
+        });
+
+        // Download functionality
+        downloadBtn.addEventListener('click', async () => {
+            if (!currentJobId) return;
+            
+            try {
+                const response = await fetch(`/batch-download/${currentJobId}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Handle download
+                    showMessage('Download started', 'success');
+                } else {
+                    showMessage(result.error || 'Download failed', 'error');
+                }
+            } catch (error) {
+                showMessage('Download failed: ' + error.message, 'error');
+            }
+        });
+    </script>
+</body>
+</html> 

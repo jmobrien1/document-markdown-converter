@@ -120,6 +120,14 @@ def create_app(config_name='default', for_worker=False):
         except ImportError as e:
             app.logger.warning(f"API documentation blueprint registration failed: {str(e)}")
 
+        # Register uploads blueprint
+        try:
+            from .uploads import uploads as uploads_blueprint
+            app.register_blueprint(uploads_blueprint, url_prefix='/uploads')
+            app.logger.info("Uploads blueprint registered successfully")
+        except ImportError as e:
+            app.logger.warning(f"Uploads blueprint registration failed: {str(e)}")
+
         # User Loader for Flask-Login
         from .models import User
         @login_manager.user_loader
