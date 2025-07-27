@@ -131,12 +131,27 @@ def create_app(config_name='default', for_worker=False):
             try:
                 import sys
                 import os
-                sys.path.append(os.path.join(os.path.dirname(__file__), 'uploads'))
+                # Add the app directory to Python path
+                app_dir = os.path.dirname(__file__)
+                if app_dir not in sys.path:
+                    sys.path.insert(0, app_dir)
+                # Try direct import
                 from uploads import uploads as uploads_blueprint
                 app.register_blueprint(uploads_blueprint, url_prefix='/uploads')
                 app.logger.info("Uploads blueprint registered successfully (alternative path)")
             except ImportError as e2:
                 app.logger.warning(f"Uploads blueprint alternative registration failed: {str(e2)}")
+                # Try creating a minimal blueprint as fallback
+                try:
+                    from flask import Blueprint
+                    fallback_uploads = Blueprint('uploads', __name__)
+                    @fallback_uploads.route('/batch-uploader')
+                    def fallback_batch_uploader():
+                        return "Uploads blueprint not available", 503
+                    app.register_blueprint(fallback_uploads, url_prefix='/uploads')
+                    app.logger.info("Uploads blueprint registered with fallback")
+                except Exception as e3:
+                    app.logger.warning(f"Uploads blueprint fallback registration failed: {str(e3)}")
 
         # User Loader for Flask-Login
         from .models import User
