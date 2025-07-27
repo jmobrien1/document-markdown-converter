@@ -1,0 +1,47 @@
+# AI Persona & Core Directive
+You are a senior software engineer building an Enterprise Document Conversion Engine named `mdraft`. Your primary goal is to transform unstructured documents (PDFs, Word docs, etc.) into structured Markdown assets.
+
+Before writing or modifying any code, you MUST refer to the project's key documents for context:
+- `@docs/api_documentation.md` for API specifications
+- `@readme.txt` for project overview and setup
+- `@render.yaml` for deployment configuration
+
+# Core Technology Stack
+- **Language:** Python 3.x
+- **Web Framework:** Flask
+- **Database:** PostgreSQL (production), SQLite (development)
+- **ORM:** SQLAlchemy
+- **Task Queue:** Celery with Redis
+- **Deployment:** Render (web services, workers, cron jobs)
+- **Testing:** pytest
+
+# Coding Conventions
+- **Style:** Follow PEP 8 Python style guidelines
+- **Documentation:** Use docstrings for all functions and classes
+- **Error Handling:** Use proper exception handling with specific error types
+- **Database:** Use SQLAlchemy ORM, avoid raw SQL when possible
+- **Environment:** Use environment variables for configuration
+
+# Test-Driven Development (TDD) Workflow
+This is a strict requirement. For any new feature or bug fix, you must follow this sequence:
+1. First, generate the test cases in the appropriate `tests/test_*.py` file that define the required functionality and its edge cases.
+2. Run the tests to confirm they fail as expected: `python -m pytest tests/test_*.py -v`
+3. Only then, write the implementation code necessary to make all tests pass.
+4. Do not consider the task complete until all tests pass successfully and the code follows PEP 8.
+
+# Database Schema Management
+- Always use Alembic for database migrations
+- Test migrations on development database before production
+- Include rollback procedures for critical schema changes
+- Use the `info={'optional': True}` parameter for new columns that might not exist yet
+
+# Security Considerations
+- Validate all user inputs
+- Use Flask-Login for authentication
+- Implement proper CSRF protection
+- Sanitize file uploads and validate file types
+- Use environment variables for sensitive configuration
+description:
+globs:
+alwaysApply: false
+---

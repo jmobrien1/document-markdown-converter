@@ -1,0 +1,52 @@
+# Flask Application Standards
+When working on Flask application files, adhere to the following Flask-specific rules.
+
+# Application Structure
+- **Blueprint Pattern:** Use Flask blueprints for organizing routes (`app/auth/`, `app/main/`, `app/api/`)
+- **Factory Pattern:** Use application factory pattern in `app/__init__.py`
+- **Configuration:** Use environment-based configuration in `config.py`
+
+# Route Design
+- **HTTP Methods:** Use appropriate HTTP methods (GET, POST, PUT, DELETE)
+- **Status Codes:** Return proper HTTP status codes (200, 201, 400, 401, 404, 500)
+- **JSON Responses:** Return consistent JSON structure for API endpoints
+- **Error Handling:** Use Flask error handlers for consistent error responses
+
+# Database Integration
+- **Session Management:** Always use `db.session` for database operations
+- **Transactions:** Use proper transaction management with commit/rollback
+- **Query Optimization:** Use SQLAlchemy query optimization techniques
+- **Lazy Loading:** Be aware of lazy loading issues with `current_user` relationships
+
+# Authentication & Authorization
+- **Flask-Login:** Use `@login_required` decorator for protected routes
+- **User Sessions:** Handle `current_user` properly, especially in detached session scenarios
+- **Admin Access:** Use `@admin_required` decorator for admin-only routes
+- **API Keys:** Implement proper API key validation for external access
+
+# File Handling
+- **Upload Security:** Validate file types, sizes, and content
+- **Storage:** Use secure file storage with proper path handling
+- **Cleanup:** Implement proper file cleanup for failed conversions
+- **Async Processing:** Use Celery for long-running file conversion tasks
+
+# Error Handling Patterns
+```python
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({'error': 'Not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return jsonify({'error': 'Internal server error'}), 500
+```
+
+# Environment Variables
+- **Required:** DATABASE_URL, SECRET_KEY, CELERY_BROKER_URL
+- **Optional:** MAIL_SERVER, STRIPE_SECRET_KEY, ADMIN_EMAIL
+- **Validation:** Always check for required environment variables on startup
+description:
+globs:
+alwaysApply: false
+---

@@ -1,0 +1,50 @@
+# Deployment & Production Standards
+When working on deployment and production configuration files, adhere to the following standards.
+
+# Render Platform Configuration
+- **Services:** Web service, Celery worker, cron jobs
+- **Environment Variables:** All sensitive data must be environment variables
+- **Database:** Use Render's managed PostgreSQL service
+- **Redis:** Use Render's managed Redis service for Celery broker
+- **Scaling:** Configure appropriate instance types and scaling rules
+
+# Environment Variables
+- **Production:** Never hardcode production values
+- **Secrets:** Use Render's environment variable management
+- **Database URLs:** Use Render's internal database URLs for services
+- **API Keys:** Store all external API keys as environment variables
+
+# Build & Deployment
+- **Requirements:** Keep requirements files up to date and minimal
+- **Dependencies:** Use specific versions, not ranges
+- **Build Scripts:** Ensure build scripts are idempotent and handle errors
+- **Health Checks:** Implement proper health check endpoints
+
+# Cron Jobs
+- **Scheduling:** Use proper cron syntax for scheduled tasks
+- **Error Handling:** Implement proper error handling and logging
+- **Database Connections:** Use direct database connections, not Celery for cron jobs
+- **Monitoring:** Set up proper monitoring and alerting
+
+# Database Migrations
+- **Production:** Always test migrations on staging first
+- **Backup:** Ensure database backups before major migrations
+- **Rollback:** Have rollback procedures for critical changes
+- **Schema:** Keep schema changes backward compatible when possible
+
+# Security in Production
+- **HTTPS:** Always use HTTPS in production
+- **Headers:** Set proper security headers
+- **CORS:** Configure CORS appropriately for production
+- **Rate Limiting:** Implement rate limiting for API endpoints
+- **File Uploads:** Validate and sanitize all file uploads
+
+# Monitoring & Logging
+- **Log Levels:** Use appropriate log levels (DEBUG, INFO, WARNING, ERROR)
+- **Structured Logging:** Use structured logging for better analysis
+- **Error Tracking:** Implement proper error tracking and alerting
+- **Performance:** Monitor application performance and database queries
+description:
+globs:
+alwaysApply: false
+---

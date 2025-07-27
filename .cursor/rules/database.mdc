@@ -1,0 +1,65 @@
+# Database & ORM Standards
+When working on database models, migrations, and database-related code, adhere to the following standards.
+
+# SQLAlchemy Model Design
+- **Naming:** Use singular form for model names (User, not Users)
+- **Relationships:** Define relationships with appropriate backref and lazy loading
+- **Constraints:** Use database constraints for data integrity
+- **Indexes:** Add indexes for frequently queried columns
+- **Timestamps:** Include created_at and updated_at timestamps where appropriate
+
+# Model Structure
+```python
+class User(db.Model):
+    __tablename__ = 'users'
+    
+    # Primary key
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Required fields
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    
+    # Optional fields with defaults
+    is_active = db.Column(db.Boolean, default=True)
+    
+    # Relationships
+    conversions = db.relationship('Conversion', backref='user', lazy='dynamic')
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+```
+
+# Migration Best Practices
+- **Alembic:** Use Alembic for all database schema changes
+- **Backward Compatibility:** Make schema changes backward compatible when possible
+- **Data Migration:** Handle data migration for schema changes
+- **Testing:** Test migrations on development database first
+- **Rollback:** Always include rollback procedures
+
+# Session Management
+- **Context:** Always use Flask app context for database operations
+- **Transactions:** Use proper transaction management
+- **Detached Instances:** Handle detached SQLAlchemy instances properly
+- **Lazy Loading:** Be aware of lazy loading issues, especially with `current_user`
+
+# Query Optimization
+- **Eager Loading:** Use `joinedload()` or `subqueryload()` for related data
+- **Filtering:** Use database-level filtering, not Python-level
+- **Pagination:** Implement proper pagination for large datasets
+- **Indexes:** Ensure proper indexes for query performance
+
+# Error Handling
+- **Integrity Errors:** Handle database integrity errors gracefully
+- **Connection Errors:** Implement proper connection error handling
+- **Transaction Rollback:** Always rollback transactions on errors
+- **Validation:** Use SQLAlchemy validators for data validation
+
+# Schema Evolution
+- **New Columns:** Use `info={'optional': True}` for new columns that might not exist
+- **Column Removal:** Never remove columns without proper migration
+- **Type Changes:** Handle type changes carefully with data migration
+- **Constraints:** Add constraints gradually to avoid breaking existing data
+description:
+globs:
+alwaysApply: false
+---
