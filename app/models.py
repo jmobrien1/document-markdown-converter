@@ -1,5 +1,5 @@
 # app/models.py
-# Enhanced with freemium features and anonymous usage tracking
+# Enhanced with freemium features, subscription management, and anonymous usage tracking
 
 from datetime import datetime, timedelta, timezone
 from flask_sqlalchemy import SQLAlchemy
@@ -33,7 +33,7 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_active = db.Column(db.Boolean, default=True)
 
-    # Premium features
+    # Premium features (legacy - maintained for backward compatibility)
     is_premium = db.Column(db.Boolean, default=False)
     is_admin = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
     premium_expires = db.Column(db.DateTime, nullable=True)
@@ -41,7 +41,14 @@ class User(db.Model):
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
     api_key = db.Column(db.String(64), unique=True, nullable=True, index=True)
     
-    # Trial features (optional - will be added by migration)
+    # New subscription management fields
+    subscription_status = db.Column(db.String(50), default='trial')  # trial, active, past_due, canceled, incomplete
+    current_tier = db.Column(db.String(50), default='free')  # free, starter, pro, enterprise
+    subscription_start_date = db.Column(db.DateTime, nullable=True)
+    last_payment_date = db.Column(db.DateTime, nullable=True)
+    next_payment_date = db.Column(db.DateTime, nullable=True)
+    
+    # Trial features (enhanced for reverse trial logic)
     trial_start_date = db.Column(db.DateTime, nullable=True, info={'optional': True})
     trial_end_date = db.Column(db.DateTime, nullable=True, info={'optional': True})
     on_trial = db.Column(db.Boolean, default=True, info={'optional': True})
@@ -207,6 +214,66 @@ class User(db.Model):
         self.api_key = None
         db.session.commit()
 
+    # New subscription-related methods
+    def is_in_trial(self):
+        """Check if user is currently in trial period."""
+        if not self.trial_end_date:
+            return False
+        # Ensure both datetimes are timezone-aware
+        now = datetime.now(timezone.utc)
+        trial_end = self.trial_end_date
+        if trial_end.tzinfo is None:
+            trial_end = trial_end.replace(tzinfo=timezone.utc)
+        return now < trial_end
+    
+    def trial_days_remaining(self):
+        """Get the number of days remaining in the trial."""
+        if not self.trial_end_date:
+            return 0
+        # Ensure both datetimes are timezone-aware
+        now = datetime.now(timezone.utc)
+        trial_end = self.trial_end_date
+        if trial_end.tzinfo is None:
+            trial_end = trial_end.replace(tzinfo=timezone.utc)
+        remaining = trial_end - now
+        return max(0, remaining.days)
+    
+    def has_active_subscription(self):
+        """Check if user has an active subscription."""
+        return self.subscription_status in ['active', 'trialing']
+    
+    def can_access_pro_features(self):
+        """Check if user can access Pro features."""
+        return (self.has_active_subscription() or 
+                self.is_premium or 
+                (self.is_in_trial() and self.current_tier in ['pro', 'enterprise']))
+    
+    def start_trial(self, tier='pro', days=7):
+        """Start a trial period for the user."""
+        now = datetime.now(timezone.utc)
+        self.trial_start_date = now
+        self.trial_end_date = now + timedelta(days=days)
+        self.subscription_status = 'trial'
+        self.current_tier = tier
+        self.on_trial = True
+        db.session.commit()
+    
+    def expire_trial(self):
+        """Expire the trial and downgrade user."""
+        self.subscription_status = 'canceled'
+        self.current_tier = 'free'
+        self.on_trial = False
+        self.trial_end_date = datetime.now(timezone.utc)
+        db.session.commit()
+    
+    def setup_premium_user(self):
+        """Setup subscription fields for existing premium users."""
+        if self.is_premium and self.subscription_status == 'trial':
+            self.subscription_status = 'active'
+            self.current_tier = 'pro'
+            self.subscription_start_date = self.created_at
+            db.session.commit()
+
     def __repr__(self):
         return f'<User {self.email}>'
 
@@ -351,3 +418,90 @@ class AnonymousUsage(db.Model):
 
     def __repr__(self):
         return f'<AnonymousUsage {self.session_id} - {self.conversions_today}/day>'
+
+
+class Subscription(db.Model):
+    """Model to track Stripe subscriptions."""
+    __tablename__ = 'subscriptions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=False)
+    stripe_customer_id = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(50), nullable=False)  # active, past_due, canceled, incomplete, trialing
+    tier = db.Column(db.String(50), nullable=False)  # starter, pro, enterprise
+    current_period_start = db.Column(db.DateTime, nullable=False)
+    current_period_end = db.Column(db.DateTime, nullable=False)
+    trial_end = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    
+    # Relationships
+    user = db.relationship('User', backref=db.backref('subscriptions', lazy='dynamic'))
+    invoices = db.relationship('Invoice', backref='subscription', lazy='dynamic')
+    
+    def is_active(self):
+        """Check if subscription is active."""
+        return self.status in ['active', 'trialing']
+    
+    def is_trialing(self):
+        """Check if subscription is in trial period."""
+        return self.status == 'trialing'
+    
+    def trial_days_remaining(self):
+        """Get days remaining in trial."""
+        if not self.trial_end:
+            return 0
+        # Ensure both datetimes are timezone-aware
+        now = datetime.now(timezone.utc)
+        trial_end = self.trial_end
+        if trial_end.tzinfo is None:
+            trial_end = trial_end.replace(tzinfo=timezone.utc)
+        remaining = trial_end - now
+        return max(0, remaining.days)
+    
+    def days_until_renewal(self):
+        """Get days until next renewal."""
+        # Ensure both datetimes are timezone-aware
+        now = datetime.now(timezone.utc)
+        period_end = self.current_period_end
+        if period_end.tzinfo is None:
+            period_end = period_end.replace(tzinfo=timezone.utc)
+        remaining = period_end - now
+        return max(0, remaining.days)
+    
+    def paid_invoices(self):
+        """Get all paid invoices for this subscription."""
+        return self.invoices.filter_by(status='paid')
+    
+    def total_paid(self):
+        """Get total amount paid for this subscription."""
+        return sum(invoice.amount for invoice in self.paid_invoices())
+    
+    def __repr__(self):
+        return f'<Subscription {self.stripe_subscription_id} - {self.status}>'
+
+
+class Invoice(db.Model):
+    """Model to track Stripe invoices."""
+    __tablename__ = 'invoices'
+
+    id = db.Column(db.Integer, primary_key=True)
+    subscription_id = db.Column(db.Integer, db.ForeignKey('subscriptions.id'), nullable=False)
+    stripe_invoice_id = db.Column(db.String(255), unique=True, nullable=False)
+    amount = db.Column(db.Integer, nullable=False)  # Amount in cents
+    currency = db.Column(db.String(3), default='usd')
+    status = db.Column(db.String(50), nullable=False)  # paid, open, void, draft, uncollectible
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    paid_at = db.Column(db.DateTime, nullable=True)
+    
+    def is_paid(self):
+        """Check if invoice is paid."""
+        return self.status == 'paid'
+    
+    def amount_in_dollars(self):
+        """Get amount in dollars."""
+        return self.amount / 100
+    
+    def __repr__(self):
+        return f'<Invoice {self.stripe_invoice_id} - {self.status}>'
