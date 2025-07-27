@@ -61,16 +61,16 @@ class User(db.Model):
     
     @classmethod
     def get_user_safely(cls, user_id):
-        """Get user safely, handling missing trial columns."""
+        """Get user safely, handling missing subscription columns."""
         try:
             # Try to get user with all columns first
             return cls.query.get(user_id)
         except Exception as e:
-            if 'trial_start_date' in str(e) or 'trial_end_date' in str(e) or 'on_trial' in str(e):
+            if any(col in str(e) for col in ['subscription_status', 'current_tier', 'trial_start_date', 'trial_end_date', 'on_trial']):
                 # Rollback the failed transaction first
                 db.session.rollback()
                 
-                # If trial columns don't exist, query only the core columns
+                # If subscription columns don't exist, query only the core columns
                 from sqlalchemy import text
                 try:
                     result = db.session.execute(
@@ -97,6 +97,13 @@ class User(db.Model):
                         user.stripe_customer_id = result.stripe_customer_id
                         user.stripe_subscription_id = result.stripe_subscription_id
                         user.api_key = result.api_key
+                        
+                        # Set default values for missing subscription columns
+                        user.subscription_status = 'trial'
+                        user.current_tier = 'free'
+                        user.on_trial = True
+                        user.pro_pages_processed_current_month = 0
+                        
                         return user
                 except Exception as fallback_error:
                     # If even the fallback fails, rollback again and try a simpler approach

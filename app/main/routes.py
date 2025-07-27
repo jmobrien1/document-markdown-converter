@@ -126,7 +126,7 @@ def convert():
     # Get user info for logging
     user_email = 'Anonymous'
     if current_user and current_user.is_authenticated:
-        user = User.query.get(current_user.id)
+        user = User.get_user_safely(current_user.id)
         user_email = user.email if user else 'Unknown'
     
     current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {user_email}")
@@ -251,7 +251,7 @@ def conversion_stats():
     try:
         if current_user.is_authenticated:
             # Ensure we have a fresh user object bound to the session
-            user = User.query.get(current_user.id)
+            user = User.get_user_safely(current_user.id)
             if not user:
                 return jsonify({'error': 'User not found'}), 404
             
@@ -308,7 +308,7 @@ def conversion_history():
     
     try:
         # Ensure we have a fresh user object bound to the session
-        user = User.query.get(current_user.id)
+        user = User.get_user_safely(current_user.id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
         

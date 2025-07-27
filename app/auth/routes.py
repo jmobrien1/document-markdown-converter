@@ -120,7 +120,7 @@ def login():
 def logout():
     """User logout endpoint."""
     # Ensure we have a fresh user object bound to the session
-    user = User.query.get(current_user.id)
+    user = User.get_user_safely(current_user.id)
     user_email = user.email if user else 'User'
     logout_user()
     flash(f'Goodbye, {user_email}!', 'info')
@@ -132,7 +132,7 @@ def logout():
 def account():
     """User account dashboard."""
     # Ensure we have a fresh user object bound to the session
-    user = User.query.get(current_user.id)
+    user = User.get_user_safely(current_user.id)
     if not user:
         flash('User not found', 'error')
         return redirect(url_for('main.index'))
@@ -191,7 +191,7 @@ def test_email():
     """Test email functionality."""
     try:
         # Ensure we have a fresh user object bound to the session
-        user = User.query.get(current_user.id)
+        user = User.get_user_safely(current_user.id)
         if not user:
             flash('User not found', 'error')
             return redirect(url_for('auth.account'))
@@ -209,7 +209,7 @@ def generate_api_key():
     """Generate a new API key for the current user."""
     try:
         # Ensure we have a fresh user object bound to the session
-        user = User.query.get(current_user.id)
+        user = User.get_user_safely(current_user.id)
         if not user:
             flash('User not found', 'error')
             return redirect(url_for('auth.account'))
@@ -226,7 +226,7 @@ def revoke_api_key():
     """Revoke the current API key."""
     try:
         # Ensure we have a fresh user object bound to the session
-        user = User.query.get(current_user.id)
+        user = User.get_user_safely(current_user.id)
         if not user:
             flash('User not found', 'error')
             return redirect(url_for('auth.account'))
@@ -242,7 +242,7 @@ def user_status():
     """API endpoint to get current user status."""
     if current_user.is_authenticated:
         # Ensure we have a fresh user object bound to the session
-        user = User.query.get(current_user.id)
+        user = User.get_user_safely(current_user.id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
@@ -290,7 +290,7 @@ def user_status():
 def upgrade():
     """Upgrade to premium page."""
     # Ensure we have a fresh user object bound to the session
-    user = User.query.get(current_user.id)
+    user = User.get_user_safely(current_user.id)
     if not user:
         flash('User not found', 'error')
         return redirect(url_for('auth.account'))
@@ -313,7 +313,7 @@ def create_checkout_session():
     
     try:
         # Ensure we have a fresh user object bound to the session
-        user = User.query.get(current_user.id)
+        user = User.get_user_safely(current_user.id)
         if not user:
             flash('User not found', 'error')
             return redirect(url_for('auth.upgrade'))
@@ -354,7 +354,7 @@ def stripe_success():
 def billing_portal():
     """Redirect user to Stripe Customer Billing Portal."""
     # Ensure we have a fresh user object bound to the session
-    user = User.query.get(current_user.id)
+    user = User.get_user_safely(current_user.id)
     if not user:
         flash('User not found', 'error')
         return redirect(url_for('auth.account'))
