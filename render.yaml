@@ -80,7 +80,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python expire_trials_direct.py
+    startCommand: python scripts/run_cron_tasks.py expire_trials
     schedule: "0 0 * * *"  # Daily at midnight UTC
     envVars:
       - key: FLASK_APP
@@ -105,7 +105,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python reset_monthly_usage_direct.py
+    startCommand: python scripts/run_cron_tasks.py reset_monthly_usage
     schedule: "0 0 1 * *"  # First day of every month at midnight UTC
     envVars:
       - key: FLASK_APP
@@ -130,7 +130,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python redis_health_check_direct.py
+    startCommand: python scripts/run_cron_tasks.py redis_health_check
     schedule: "*/30 * * * *"  # Every 30 minutes
     envVars:
       - key: FLASK_APP
