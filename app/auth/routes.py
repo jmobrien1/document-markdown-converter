@@ -187,6 +187,7 @@ def account():
             'pro_conversions_count': pro_conversions_count,
             'recent_conversions': recent_conversions,
             'pro_pages_processed': getattr(user, 'pro_pages_processed_current_month', 0), # CRITICAL FIX
+            'trial_days_remaining': user.trial_days_remaining,
             'monthly_allowance': 1000 
         }
         return render_template('auth/account.html', **context)
