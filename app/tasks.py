@@ -183,20 +183,22 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
         
         processor_name = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
         
-        # Configure the batch process request
-        batch_input_config = documentai.BatchProcessRequest.BatchInputConfig(
+        # Configure the batch process request with correct API structure
+        input_config = documentai.BatchDocumentsInputConfig(
             gcs_source=input_gcs_uri,
             mime_type="application/pdf"
         )
         
-        batch_output_config = documentai.BatchProcessRequest.BatchOutputConfig(
-            gcs_destination=output_gcs_uri
+        output_config = documentai.DocumentOutputConfig(
+            gcs_output_config=documentai.DocumentOutputConfig.GcsOutputConfig(
+                gcs_uri=output_gcs_uri
+            )
         )
         
         request = documentai.BatchProcessRequest(
             name=processor_name,
-            input_configs=[batch_input_config],
-            output_config=batch_output_config
+            input_documents=input_config,
+            document_output_config=output_config
         )
         
         print("--- [Celery Task] Starting batch processing...")
