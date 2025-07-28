@@ -377,6 +377,12 @@ def conversion_history():
 
 # (Removed /health, /health/web, and /health/worker routes; now in app/health/routes.py)
 
+@main.route('/pricing')
+def pricing():
+    """Display tiered pricing page."""
+    subscription_tiers = current_app.config.get('SUBSCRIPTION_TIERS', {})
+    return render_template('pricing.html', subscription_tiers=subscription_tiers)
+
 @main.app_errorhandler(413)
 def request_entity_too_large(e):
     """Custom error handler for 413 Request Entity Too Large."""

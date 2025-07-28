@@ -71,6 +71,37 @@ class Config:
     STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
     STRIPE_PRICE_ID = os.environ.get('STRIPE_PRICE_ID')
     STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET')
+    
+    # --- Subscription Tiers Configuration ---
+    SUBSCRIPTION_TIERS = {
+        'pro': {
+            'name': 'Mdraft Pro',
+            'price_id': os.environ.get('STRIPE_PRO_PRICE_ID', 'price_pro_placeholder'),
+            'monthly_price': '$9.99',
+            'features': [
+                'Advanced OCR with Google Document AI',
+                '1000 pages per month',
+                'Batch processing',
+                'Priority support',
+                'API access',
+                'Advanced export formats (JSON, TXT)'
+            ]
+        },
+        'enterprise': {
+            'name': 'Mdraft Enterprise',
+            'price_id': os.environ.get('STRIPE_ENTERPRISE_PRICE_ID', 'price_enterprise_placeholder'),
+            'monthly_price': '$29.99',
+            'features': [
+                'Everything in Pro',
+                'Unlimited pages per month',
+                'Custom integrations',
+                'Dedicated support',
+                'White-label options',
+                'Advanced analytics',
+                'Team management'
+            ]
+        }
+    }
 
     # --- Database Configuration ---
     # Use PostgreSQL in production (Render), SQLite in development
