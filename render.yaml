@@ -80,7 +80,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python scripts/run_cron_tasks.py expire_trials
+    startCommand: celery -A celery_worker.celery call app.tasks.expire_trials
     schedule: "0 0 * * *"  # Daily at midnight UTC
     envVars:
       - key: FLASK_APP
