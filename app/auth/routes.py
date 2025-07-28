@@ -137,96 +137,64 @@ def logout():
 @auth.route('/account')
 @login_required
 def account():
-    """User account dashboard."""
+    """
+    User account page with dashboard and statistics.
+    Handles cases for new users with no conversions gracefully.
+    """
     try:
-        # Get user directly from database to ensure fresh session
-        user = User.query.get(current_user.id)
-        if not user:
-            flash('User not found', 'error')
-            return redirect(url_for('main.index'))
+        user = db.session.merge(current_user)
         
-        # Ensure user is properly bound to session
-        user = db.session.merge(user)
-        
-        # Get user statistics using the fresh user object
-        total_conversions = user.conversions.count()
-        daily_conversions = user.get_daily_conversions()
+        # Initialize all statistics with safe, default values
+        total_conversions = 0
+        daily_conversions = 0
+        success_rate = 0
+        avg_processing_time = 0.0
+        pro_conversions_count = 0
+        recent_conversions = [] # CRITICAL: Default to an empty list
 
-        # Get recent conversions - ensure it's always a list
-        try:
-            # Use the already calculated total_conversions
-            if total_conversions > 0:
-                recent_conversions = user.conversions.order_by(
-                    Conversion.created_at.desc()
-                ).limit(10).all()
-                # Ensure it's a list, not a single value or None
-                if not isinstance(recent_conversions, list):
-                    recent_conversions = []
-            else:
-                # User has no conversions - return empty list
-                recent_conversions = []
-        except Exception as e:
-            current_app.logger.error(f"Error getting recent conversions: {e}")
-            recent_conversions = []
+        # Safely query for total conversions
+        if user:
+            total_conversions = user.conversions.count()
 
-        # Calculate success rate - ensure it's a number
-        try:
+        if total_conversions > 0:
+            # If conversions exist, calculate real statistics
+            today_utc = datetime.now(timezone.utc).date()
+            daily_conversions = db.session.query(Conversion).filter(
+                Conversion.user_id == user.id,
+                db.func.date(Conversion.created_at) == today_utc
+            ).count()
+
             successful_conversions = user.conversions.filter_by(status='completed').count()
-            success_rate = (successful_conversions / total_conversions * 100) if total_conversions > 0 else 0
-            # Ensure it's a number, not a float that might be passed as iterable
-            success_rate = float(success_rate) if success_rate is not None else 0.0
-        except Exception as e:
-            current_app.logger.error(f"Error calculating success rate: {e}")
-            success_rate = 0.0
-
-        # Calculate Pro conversions count - ensure it's a number
-        try:
-            pro_conversions_count = user.conversions.filter_by(conversion_type='pro').count()
-            pro_conversions_count = int(pro_conversions_count) if pro_conversions_count is not None else 0
-        except Exception as e:
-            current_app.logger.error(f"Error calculating pro conversions count: {e}")
-            pro_conversions_count = 0
-
-        # Calculate average processing time for completed conversions - ensure it's a number
-        try:
-            completed_conversions = user.conversions.filter_by(status='completed').filter(
-                Conversion.processing_time.isnot(None)
-            ).all()
+            if successful_conversions > 0:
+                 success_rate = round((successful_conversions / total_conversions) * 100)
             
-            if completed_conversions and isinstance(completed_conversions, list):
-                total_time = sum(conv.processing_time for conv in completed_conversions if conv.processing_time is not None)
-                avg_processing_time = total_time / len(completed_conversions) if completed_conversions else 0.0
-            else:
-                avg_processing_time = 0.0
-            # Ensure it's a number
-            avg_processing_time = float(avg_processing_time) if avg_processing_time is not None else 0.0
-        except Exception as e:
-            current_app.logger.error(f"Error calculating average processing time: {e}")
-            avg_processing_time = 0.0
+            avg_time_result = db.session.query(db.func.avg(Conversion.processing_time)).filter(
+                Conversion.user_id == user.id,
+                Conversion.status == 'completed'
+            ).scalar()
+            if avg_time_result is not None:
+                avg_processing_time = round(avg_time_result, 2)
+            
+            pro_conversions_count = user.conversions.filter_by(conversion_type='pro').count()
+            recent_conversions = user.conversions.order_by(Conversion.created_at.desc()).limit(10).all()
 
-        # Monthly allowance for Pro users
-        from app.tasks import MONTHLY_PAGE_ALLOWANCE
-        monthly_allowance = MONTHLY_PAGE_ALLOWANCE
-        
-        # Generate API key if user doesn't have one
-        if not user.api_key:
-            user.generate_api_key()
-        
-        return render_template('auth/account.html',
-                             user=user,
-                             total_conversions=total_conversions,
-                             daily_conversions=daily_conversions,
-                             recent_conversions=recent_conversions,
-                             success_rate=round(success_rate, 1),
-                             pro_conversions_count=pro_conversions_count,
-                             avg_processing_time=round(avg_processing_time, 1),
-                             trial_days_remaining=user.trial_days_remaining,
-                             pro_pages_processed=getattr(user, 'pro_pages_processed_current_month', 0),
-                             monthly_allowance=monthly_allowance)
+        # Prepare context for rendering with safely calculated values
+        context = {
+            'user': user,
+            'total_conversions': total_conversions,
+            'daily_conversions': daily_conversions,
+            'success_rate': success_rate,
+            'avg_processing_time': avg_processing_time,
+            'pro_conversions_count': pro_conversions_count,
+            'recent_conversions': recent_conversions,
+            'pro_pages_used': getattr(user, 'pro_pages_processed_current_month', 0),
+            'monthly_allowance': 1000 
+        }
+        return render_template('auth/account.html', **context)
+
     except Exception as e:
-        # Log the error for debugging
-        current_app.logger.error(f"Error in account route: {e}")
-        flash('An error occurred loading your account. Please try again.', 'error')
+        current_app.logger.error(f"Error in account route for user {getattr(current_user, 'id', 'anonymous')}: {e}", exc_info=True)
+        flash('An error occurred while loading your account page. Please try again later.', 'error')
         return redirect(url_for('main.index'))
 
 
