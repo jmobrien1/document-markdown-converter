@@ -178,7 +178,7 @@ def account():
             pro_conversions_count = user.conversions.filter_by(conversion_type='pro').count()
             recent_conversions = user.conversions.order_by(Conversion.created_at.desc()).limit(10).all()
 
-        # Prepare context for rendering with safely calculated values
+        # Prepare context, ensuring all required keys are present
         context = {
             'user': user,
             'total_conversions': total_conversions,
@@ -187,7 +187,7 @@ def account():
             'avg_processing_time': avg_processing_time,
             'pro_conversions_count': pro_conversions_count,
             'recent_conversions': recent_conversions,
-            'pro_pages_used': getattr(user, 'pro_pages_processed_current_month', 0),
+            'pro_pages_processed': getattr(user, 'pro_pages_processed_current_month', 0), # CRITICAL FIX
             'monthly_allowance': 1000 
         }
         return render_template('auth/account.html', **context)
