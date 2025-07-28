@@ -194,6 +194,58 @@ def get_storage_client():
         current_app.logger.error(f"Failed to create storage client: {e}")
         raise Exception(f"Could not authenticate with Google Cloud Storage: {e}")
 
+def get_accurate_pdf_page_count(file_stream, filename):
+    """
+    Get accurate PDF page count using pypdf library.
+    
+    Args:
+        file_stream: File stream object
+        filename (str): Original filename
+        
+    Returns:
+        int: Actual number of pages in the PDF, or 1 for non-PDF files
+    """
+    try:
+        # Only count pages for PDF files
+        if not filename.lower().endswith('.pdf'):
+            return 1
+            
+        # Try to import pypdf
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            # Fallback to PyPDF2 if pypdf not available
+            try:
+                from PyPDF2 import PdfReader
+            except ImportError:
+                # Final fallback - estimate from file size
+                current_app.logger.warning("pypdf/PyPDF2 not available, using file size estimation")
+                file_stream.seek(0, 2)  # Seek to end
+                file_size = file_stream.tell()
+                file_stream.seek(0)  # Reset to beginning
+                estimated_pages = max(1, file_size // 70000)
+                return estimated_pages
+        
+        # Use pypdf to get accurate page count
+        file_stream.seek(0)  # Reset to beginning
+        pdf_reader = PdfReader(file_stream)
+        page_count = len(pdf_reader.pages)
+        current_app.logger.info(f"Accurate PDF page count for {filename}: {page_count} pages")
+        return page_count
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting PDF page count for {filename}: {e}")
+        # Fallback to file size estimation
+        try:
+            file_stream.seek(0, 2)  # Seek to end
+            file_size = file_stream.tell()
+            file_stream.seek(0)  # Reset to beginning
+            estimated_pages = max(1, file_size // 70000)
+            current_app.logger.warning(f"Using fallback page estimation for {filename}: {estimated_pages} pages")
+            return estimated_pages
+        except:
+            return 1  # Default to 1 page if all else fails
+
 @main.route('/')
 def index():
     """Renders the main page with the file upload form."""
@@ -319,13 +371,16 @@ def convert():
     user_id = current_user.id if current_user and current_user.is_authenticated else None
     session_id = session.get('session_id') if not current_user or not current_user.is_authenticated else None
     
-    # Get file size
+    # Get file size and accurate page count
     file.seek(0, 2)  # Seek to end
     file_size = file.tell()
     file.seek(0)  # Reset to beginning
     
-    # Estimate if this will be a batch job (for user feedback)
-    is_large_file = file_size > 1750000  # ~25 pages * 70KB = ~1.75MB
+    # Get accurate page count for PDF files
+    page_count = get_accurate_pdf_page_count(file, filename)
+    
+    # Determine if this will be a batch job based on actual page count
+    is_large_file = page_count > 10  # Google DocAI sync API limit
     
     # Create conversion record with proper error handling
     try:
@@ -357,13 +412,14 @@ def convert():
         usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
         usage.increment_usage()
 
-    # Start the conversion task
+    # Start the conversion task with accurate page count
     task = convert_file_task.delay(
         bucket_name,
         blob_name,
         filename,
         use_pro_converter,
-        conversion.id
+        conversion.id,
+        page_count  # Pass accurate page count to the task
     )
 
     # Store the Celery job ID in the Conversion record

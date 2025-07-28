@@ -75,24 +75,48 @@ def scan_file_for_viruses(file_path):
         current_app.logger.error(f"Error during virus scan: {e}")
         return False, f"Virus scan error: {str(e)}"
 
-def get_pdf_page_count(file_path):
+def get_accurate_pdf_page_count(file_path):
     """
-    Estimate PDF page count using a simple file size heuristic.
+    Get accurate PDF page count using pypdf library.
 
     Args:
         file_path (str): Path to the PDF file.
 
     Returns:
-        int: Estimated number of pages in the PDF.
+        int: Actual number of pages in the PDF.
     """
     try:
-        # Simple heuristic: file size estimation
-        # Rough estimate: 1 page ≈ 50-100KB for typical PDFs
-        file_size = os.path.getsize(file_path)
-        estimated_pages = max(1, file_size // 70000)  # Conservative estimate
-        return estimated_pages
-    except:
-        return 1  # Default to 1 page if estimation fails
+        # Try to import pypdf
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            # Fallback to PyPDF2 if pypdf not available
+            try:
+                from PyPDF2 import PdfReader
+            except ImportError:
+                # Final fallback to file size estimation
+                current_app.logger.warning("pypdf/PyPDF2 not available, using file size estimation")
+                file_size = os.path.getsize(file_path)
+                estimated_pages = max(1, file_size // 70000)
+                return estimated_pages
+        
+        # Use pypdf to get accurate page count
+        with open(file_path, 'rb') as file:
+            pdf_reader = PdfReader(file)
+            page_count = len(pdf_reader.pages)
+            current_app.logger.info(f"Accurate PDF page count: {page_count} pages")
+            return page_count
+            
+    except Exception as e:
+        current_app.logger.error(f"Error getting PDF page count: {e}")
+        # Fallback to file size estimation
+        try:
+            file_size = os.path.getsize(file_path)
+            estimated_pages = max(1, file_size // 70000)
+            current_app.logger.warning(f"Using fallback page estimation: {estimated_pages} pages")
+            return estimated_pages
+        except:
+            return 1  # Default to 1 page if all else fails
 
 def process_with_docai(credentials_path, project_id, location, processor_id, file_path, mime_type):
     """
@@ -227,7 +251,7 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
         raise e
 
 @celery.task(bind=True)
-def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None):
+def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None):
     """
     Celery task to perform file conversion, update the Conversion record, and handle errors robustly.
     Enhanced with virus scanning and security logging.
@@ -239,12 +263,13 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
         original_filename (str): Original filename of the uploaded file.
         use_pro_converter (bool, optional): Whether to use the Pro (Document AI) converter. Defaults to False.
         conversion_id (int, optional): ID of the Conversion record to update. Defaults to None.
+        page_count (int, optional): Accurate page count for PDF files. Defaults to None.
 
     Returns:
         dict: Result dictionary with status, markdown content (if successful), and filename.
     """
     print("\n\n--- [Celery Task] NEW TASK RECEIVED ---")
-    print(f"    Filename: '{original_filename}' | Pro mode: {use_pro_converter}")
+    print(f"    Filename: '{original_filename}' | Pro mode: {use_pro_converter} | Pages: {page_count}")
     temp_file_path = None
     start_time = time.time()
     
@@ -329,19 +354,21 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         # Check monthly usage limit
                         current_usage = getattr(user, 'pro_pages_processed_current_month', 0)
                         
-                        # Estimate pages for this job
-                        file_extension = os.path.splitext(original_filename)[1].lower()
-                        if file_extension == '.pdf':
-                            estimated_pages = get_pdf_page_count(temp_file_path)
-                        else:
-                            estimated_pages = 1  # Images and other files count as 1 page
+                        # Use the accurate page count passed to the task
+                        if page_count is None:
+                            # Fallback to getting page count if not passed
+                            file_extension = os.path.splitext(original_filename)[1].lower()
+                            if file_extension == '.pdf':
+                                page_count = get_accurate_pdf_page_count(temp_file_path)
+                            else:
+                                page_count = 1  # Images and other files count as 1 page
                         
                         # Check if this job would exceed the monthly limit
-                        if current_usage + estimated_pages > MONTHLY_PAGE_ALLOWANCE:
+                        if current_usage + page_count > MONTHLY_PAGE_ALLOWANCE:
                             remaining_pages = MONTHLY_PAGE_ALLOWANCE - current_usage
-                            raise Exception(f"Monthly limit exceeded. This job would use {estimated_pages} pages, but you only have {remaining_pages} pages remaining this month. Please upgrade to Pro+ or wait until next month's reset.")
+                            raise Exception(f"Monthly limit exceeded. This job would use {page_count} pages, but you only have {remaining_pages} pages remaining this month. Please upgrade to Pro+ or wait until next month's reset.")
                         
-                        print(f"--- [Celery Task] Usage check passed: {current_usage} + {estimated_pages} = {current_usage + estimated_pages} pages (limit: {MONTHLY_PAGE_ALLOWANCE})")
+                        print(f"--- [Celery Task] Usage check passed: {current_usage} + {page_count} = {current_usage + page_count} pages (limit: {MONTHLY_PAGE_ALLOWANCE})")
                 
                 # Check if file type is supported by Document AI
                 file_extension = os.path.splitext(original_filename)[1].lower()
@@ -377,16 +404,20 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                     }
                     mime_type = mime_type_map.get(file_extension, 'application/pdf')
                     
-                    # Only use page estimation for PDFs
+                    # Only use page count for PDFs
                     if file_extension == '.pdf':
-                        print("--- [Celery Task] DEBUG: Calling get_pdf_page_count...")
-                        estimated_pages = get_pdf_page_count(temp_file_path)
-                        print(f"--- [Celery Task] Estimated pages: {estimated_pages}")
-                        print(f"--- [Celery Task] DEBUG: File size used for estimation: {file_size}")
-                        print(f"--- [Celery Task] DEBUG: Calculation: {file_size} / 70000 = {file_size // 70000}")
+                        # Use the accurate page count passed to the task
+                        if page_count is None:
+                            # Fallback to getting page count if not passed
+                            page_count = get_accurate_pdf_page_count(temp_file_path)
                         
-                        if estimated_pages > 25:  # Use batch processing for files likely >30 pages
-                            print("--- [Celery Task] Large document detected - using BATCH processing")
+                        print(f"--- [Celery Task] Using accurate page count: {page_count} pages")
+                        print(f"--- [Celery Task] DEBUG: File size: {file_size} bytes")
+                        
+                        # Google Document AI sync API has a 10-page limit
+                        # Use batch processing for documents > 10 pages
+                        if page_count > 10:
+                            print(f"--- [Celery Task] Large document detected ({page_count} pages) - using BATCH processing")
                             
                             # Create unique GCS paths for batch processing
                             batch_id = str(uuid.uuid4())
@@ -419,8 +450,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                                 pass  # Don't fail the task if cleanup fails
                             
                         else:
-                            print("--- [Celery Task] Small document - using synchronous processing")
-                            print(f"--- [Celery Task] DEBUG: {estimated_pages} <= 25, using sync processing")
+                            print(f"--- [Celery Task] Small document ({page_count} pages) - using synchronous processing")
                             # Use existing synchronous processing for small files
                             markdown_content = process_with_docai(
                                 credentials_path, project_id, location, processor_id, 
@@ -451,14 +481,21 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                     if use_pro_converter and conversion.user_id:
                         user = User.get_user_safely(conversion.user_id)
                         if user:
-                            # Estimate pages processed (for now, use file size heuristic)
-                            pages_processed = get_pdf_page_count(temp_file_path) if file_extension == '.pdf' else 1
+                            # Use the accurate page count passed to the task
+                            if page_count is None:
+                                # Fallback to getting page count if not passed
+                                file_extension = os.path.splitext(original_filename)[1].lower()
+                                pages_processed = get_accurate_pdf_page_count(temp_file_path) if file_extension == '.pdf' else 1
+                            else:
+                                pages_processed = page_count
+                            
                             # Only set pages_processed if the column exists
                             try:
                                 conversion.pages_processed = pages_processed
                                 # Update user's monthly usage
                                 current_usage = getattr(user, 'pro_pages_processed_current_month', 0)
                                 user.pro_pages_processed_current_month = current_usage + pages_processed
+                                print(f"--- [Celery Task] Updated usage: {current_usage} + {pages_processed} = {current_usage + pages_processed}")
                             except Exception as e:
                                 print(f"--- [Celery Task] Warning: Could not update pages_processed: {e}")
                     
