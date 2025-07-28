@@ -248,7 +248,14 @@ def user_status():
         
         # Get user's conversion stats using the fresh user object
         daily_conversions = user.get_daily_conversions()
-        total_conversions = user.conversions.count()
+        
+        # Handle total conversions count safely
+        if hasattr(user, '_conversion_ids'):
+            # Fallback case - use the pre-loaded conversion IDs
+            total_conversions = len(user._conversion_ids)
+        else:
+            # Normal case with relationship loaded
+            total_conversions = user.conversions.count()
 
         return jsonify({
             'authenticated': True,

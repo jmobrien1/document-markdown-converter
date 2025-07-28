@@ -63,8 +63,9 @@ class User(db.Model):
     def get_user_safely(cls, user_id):
         """Get user safely, handling missing subscription columns."""
         try:
-            # Try to get user with all columns first
-            return cls.query.get(user_id)
+            # Try to get user with all columns first, with eager loading
+            from sqlalchemy.orm import joinedload
+            return cls.query.options(joinedload(cls.conversions)).get(user_id)
         except Exception as e:
             if any(col in str(e) for col in ['subscription_status', 'current_tier', 'trial_start_date', 'trial_end_date', 'on_trial']):
                 # Rollback the failed transaction first
@@ -103,6 +104,15 @@ class User(db.Model):
                         user.current_tier = 'free'
                         user.on_trial = True
                         user.pro_pages_processed_current_month = 0
+                        
+                        # Load conversions separately to avoid DetachedInstanceError
+                        conversions_result = db.session.execute(
+                            text("SELECT id FROM conversions WHERE user_id = :user_id"),
+                            {'user_id': user_id}
+                        ).fetchall()
+                        
+                        # Create a simple list of conversion IDs to avoid relationship issues
+                        user._conversion_ids = [row.id for row in conversions_result]
                         
                         return user
                 except Exception as fallback_error:
@@ -164,6 +174,22 @@ class User(db.Model):
     def get_daily_conversions(self):
         """Get number of conversions today."""
         today = datetime.now(timezone.utc).date()
+        
+        # Handle case where conversions relationship is not loaded
+        if hasattr(self, '_conversion_ids'):
+            # Use raw SQL for fallback case
+            from sqlalchemy import text
+            result = db.session.execute(
+                text("""
+                    SELECT COUNT(*) FROM conversions 
+                    WHERE user_id = :user_id 
+                    AND DATE(created_at) = :today
+                """),
+                {'user_id': self.id, 'today': today}
+            ).fetchone()
+            return result[0] if result else 0
+        
+        # Normal case with relationship loaded
         return self.conversions.filter(
             db.func.date(Conversion.created_at) == today
         ).count()
@@ -204,7 +230,13 @@ class User(db.Model):
             if not hasattr(self, 'on_trial') or not self.on_trial or not hasattr(self, 'trial_end_date') or not self.trial_end_date:
                 return 0
             
-            remaining = self.trial_end_date - datetime.now(timezone.utc)
+            # Ensure both datetimes are timezone-aware
+            now = datetime.now(timezone.utc)
+            trial_end = self.trial_end_date
+            if trial_end.tzinfo is None:
+                trial_end = trial_end.replace(tzinfo=timezone.utc)
+            
+            remaining = trial_end - now
             return max(0, remaining.days)
         except:
             return 0
