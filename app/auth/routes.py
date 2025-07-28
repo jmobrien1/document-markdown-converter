@@ -152,27 +152,51 @@ def account():
         total_conversions = user.conversions.count()
         daily_conversions = user.get_daily_conversions()
 
-        # Get recent conversions
-        recent_conversions = user.conversions.order_by(
-            Conversion.created_at.desc()
-        ).limit(10).all()
+        # Get recent conversions - ensure it's always a list
+        try:
+            recent_conversions = user.conversions.order_by(
+                Conversion.created_at.desc()
+            ).limit(10).all()
+            # Ensure it's a list, not a single value
+            if not isinstance(recent_conversions, list):
+                recent_conversions = []
+        except Exception as e:
+            current_app.logger.error(f"Error getting recent conversions: {e}")
+            recent_conversions = []
 
-        # Calculate success rate
-        successful_conversions = user.conversions.filter_by(status='completed').count()
-        success_rate = (successful_conversions / total_conversions * 100) if total_conversions > 0 else 0
+        # Calculate success rate - ensure it's a number
+        try:
+            successful_conversions = user.conversions.filter_by(status='completed').count()
+            success_rate = (successful_conversions / total_conversions * 100) if total_conversions > 0 else 0
+            # Ensure it's a number, not a float that might be passed as iterable
+            success_rate = float(success_rate) if success_rate is not None else 0.0
+        except Exception as e:
+            current_app.logger.error(f"Error calculating success rate: {e}")
+            success_rate = 0.0
 
-        # Calculate Pro conversions count
-        pro_conversions_count = user.conversions.filter_by(conversion_type='pro').count()
+        # Calculate Pro conversions count - ensure it's a number
+        try:
+            pro_conversions_count = user.conversions.filter_by(conversion_type='pro').count()
+            pro_conversions_count = int(pro_conversions_count) if pro_conversions_count is not None else 0
+        except Exception as e:
+            current_app.logger.error(f"Error calculating pro conversions count: {e}")
+            pro_conversions_count = 0
 
-        # Calculate average processing time for completed conversions
-        completed_conversions = user.conversions.filter_by(status='completed').filter(
-            Conversion.processing_time.isnot(None)
-        ).all()
-        
-        if completed_conversions:
-            total_time = sum(conv.processing_time for conv in completed_conversions)
-            avg_processing_time = total_time / len(completed_conversions)
-        else:
+        # Calculate average processing time for completed conversions - ensure it's a number
+        try:
+            completed_conversions = user.conversions.filter_by(status='completed').filter(
+                Conversion.processing_time.isnot(None)
+            ).all()
+            
+            if completed_conversions and isinstance(completed_conversions, list):
+                total_time = sum(conv.processing_time for conv in completed_conversions if conv.processing_time is not None)
+                avg_processing_time = total_time / len(completed_conversions) if completed_conversions else 0.0
+            else:
+                avg_processing_time = 0.0
+            # Ensure it's a number
+            avg_processing_time = float(avg_processing_time) if avg_processing_time is not None else 0.0
+        except Exception as e:
+            current_app.logger.error(f"Error calculating average processing time: {e}")
             avg_processing_time = 0.0
 
         # Monthly allowance for Pro users

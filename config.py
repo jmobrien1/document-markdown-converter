@@ -28,6 +28,9 @@ class Config:
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
     
+    # Fix for CPendingDeprecationWarning - explicitly set the new configuration
+    CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+    
     # For cron jobs, ensure we have proper Redis configuration
     if not os.environ.get('CELERY_BROKER_URL') and os.environ.get('RENDER'):
         # We're on Render but no Redis URL is set - this is an error
