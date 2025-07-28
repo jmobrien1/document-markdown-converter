@@ -2,6 +2,7 @@
 # Enhanced with Stripe payment integration - NO MODULE-LEVEL STRIPE IMPORT
 
 import re
+from datetime import datetime, timedelta, timezone
 from flask import render_template, redirect, request, url_for, flash, jsonify, session, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from . import auth
@@ -420,7 +421,7 @@ def billing_portal():
 
 @auth.route('/stripe-webhook', methods=['POST'])
 def stripe_webhook():
-    """Listen for events from Stripe."""
+    """Comprehensive webhook handler for the entire Stripe subscription lifecycle."""
     try:
         # Import stripe ONLY when this function is called
         import stripe
@@ -437,39 +438,193 @@ def stripe_webhook():
             payload=payload, sig_header=sig_header, secret=webhook_secret
         )
     except ValueError as e:
-        # Invalid payload
+        current_app.logger.error(f"Invalid payload in webhook: {e}")
         return 'Invalid payload', 400
     except stripe.error.SignatureVerificationError as e:
-        # Invalid signature
+        current_app.logger.error(f"Invalid signature in webhook: {e}")
         return 'Invalid signature', 400
 
-    # Handle the checkout.session.completed event
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        user_id = session.get('client_reference_id')
-        stripe_customer_id = session.get('customer')
-        stripe_subscription_id = session.get('subscription')
+    event_type = event['type']
+    current_app.logger.info(f"Processing Stripe webhook event: {event_type}")
 
-        user = User.query.get(user_id)
-        if user:
-            user.is_premium = True
-            user.stripe_customer_id = stripe_customer_id
-            user.stripe_subscription_id = stripe_subscription_id
-            db.session.commit()
-            current_app.logger.info(f"User {user_id} successfully upgraded to Pro.")
+    try:
+        # 1. Handle invoice.payment_succeeded
+        if event_type == 'invoice.payment_succeeded':
+            invoice = event['data']['object']
+            customer_id = invoice.get('customer')
+            subscription_id = invoice.get('subscription')
+            amount_paid = invoice.get('amount_paid', 0) / 100  # Convert from cents
+            
+            try:
+                user = User.query.filter_by(stripe_customer_id=customer_id).first()
+                if user:
+                    # Update subscription status and payment dates
+                    user.subscription_status = 'active'
+                    user.last_payment_date = datetime.now(timezone.utc)
+                    
+                    # Determine tier based on subscription
+                    if subscription_id:
+                        try:
+                            subscription = stripe.Subscription.retrieve(subscription_id)
+                            price_id = subscription.get('items', {}).get('data', [{}])[0].get('price', {}).get('id')
+                            
+                            # Map price ID to tier (you may need to adjust these based on your Stripe setup)
+                            if 'pro' in price_id.lower():
+                                user.current_tier = 'pro'
+                            elif 'enterprise' in price_id.lower():
+                                user.current_tier = 'enterprise'
+                            else:
+                                user.current_tier = 'pro'  # Default fallback
+                        except Exception as e:
+                            current_app.logger.error(f"Error retrieving subscription {subscription_id}: {e}")
+                            user.current_tier = 'pro'  # Default fallback
+                    
+                    # Set subscription start date if not already set
+                    if not user.subscription_start_date:
+                        user.subscription_start_date = datetime.now(timezone.utc)
+                    
+                    # Ensure premium status
+                    user.is_premium = True
+                    user.on_trial = False
+                    
+                    db.session.commit()
+                    current_app.logger.info(f"Payment succeeded for user {user.email}: ${amount_paid}")
+                else:
+                    current_app.logger.warning(f"Payment succeeded for unknown customer: {customer_id}")
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Error processing payment_succeeded for customer {customer_id}: {e}")
 
-    # Handle subscription cancellation
-    if event['type'] == 'customer.subscription.deleted':
-        subscription = event['data']['object']
-        stripe_subscription_id = subscription.get('id')
+        # 2. Handle invoice.payment_failed
+        elif event_type == 'invoice.payment_failed':
+            invoice = event['data']['object']
+            customer_id = invoice.get('customer')
+            amount_due = invoice.get('amount_due', 0) / 100  # Convert from cents
+            
+            try:
+                user = User.query.filter_by(stripe_customer_id=customer_id).first()
+                if user:
+                    current_app.logger.warning(
+                        f"Payment failed for user {user.email} (ID: {user.id}). "
+                        f"Amount due: ${amount_due}. Customer ID: {customer_id}"
+                    )
+                    # Note: We don't downgrade immediately on payment failure
+                    # Stripe will handle retries and send subscription.updated events
+                else:
+                    current_app.logger.warning(f"Payment failed for unknown customer: {customer_id}")
+            except Exception as e:
+                current_app.logger.error(f"Error processing payment_failed for customer {customer_id}: {e}")
 
-        user = User.query.filter_by(stripe_subscription_id=stripe_subscription_id).first()
-        if user:
-            user.is_premium = False
-            # Optionally clear stripe IDs
-            # user.stripe_customer_id = None
-            # user.stripe_subscription_id = None
-            db.session.commit()
-            current_app.logger.info(f"User {user.id} subscription canceled.")
+        # 3. Handle customer.subscription.updated (Primary state synchronization)
+        elif event_type == 'customer.subscription.updated':
+            subscription = event['data']['object']
+            subscription_id = subscription.get('id')
+            status = subscription.get('status')
+            customer_id = subscription.get('customer')
+            
+            try:
+                user = User.query.filter_by(stripe_customer_id=customer_id).first()
+                if user:
+                    if status == 'active':
+                        # Subscription is active - ensure user has premium access
+                        try:
+                            user.is_premium = True
+                            user.on_trial = False
+                            user.subscription_status = 'active'
+                            db.session.commit()
+                            current_app.logger.info(f"Subscription activated for user {user.email}")
+                        except Exception as e:
+                            db.session.rollback()
+                            current_app.logger.error(f"Error activating subscription for user {user.id}: {e}")
+                    
+                    elif status in ['past_due', 'unpaid']:
+                        # Subscription is past due - downgrade user
+                        try:
+                            user.is_premium = False
+                            user.on_trial = False
+                            user.subscription_status = 'past_due'
+                            db.session.commit()
+                            current_app.logger.warning(f"Subscription downgraded for user {user.email} (status: {status})")
+                        except Exception as e:
+                            db.session.rollback()
+                            current_app.logger.error(f"Error downgrading subscription for user {user.id}: {e}")
+                    
+                    elif status == 'canceled':
+                        # Subscription is canceled
+                        try:
+                            user.is_premium = False
+                            user.on_trial = False
+                            user.subscription_status = 'canceled'
+                            db.session.commit()
+                            current_app.logger.info(f"Subscription canceled for user {user.email}")
+                        except Exception as e:
+                            db.session.rollback()
+                            current_app.logger.error(f"Error canceling subscription for user {user.id}: {e}")
+                else:
+                    current_app.logger.warning(f"Subscription updated for unknown customer: {customer_id}")
+            except Exception as e:
+                current_app.logger.error(f"Error processing subscription.updated for customer {customer_id}: {e}")
+
+        # 4. Handle customer.subscription.deleted (Consolidated logic)
+        elif event_type == 'customer.subscription.deleted':
+            subscription = event['data']['object']
+            subscription_id = subscription.get('id')
+            customer_id = subscription.get('customer')
+            
+            try:
+                user = User.query.filter_by(stripe_customer_id=customer_id).first()
+                if user:
+                    try:
+                        user.is_premium = False
+                        user.on_trial = False
+                        user.subscription_status = 'canceled'
+                        # Optionally clear stripe IDs (uncomment if needed)
+                        # user.stripe_customer_id = None
+                        # user.stripe_subscription_id = None
+                        db.session.commit()
+                        current_app.logger.info(f"Subscription deleted for user {user.email}")
+                    except Exception as e:
+                        db.session.rollback()
+                        current_app.logger.error(f"Error processing subscription deletion for user {user.id}: {e}")
+                else:
+                    current_app.logger.warning(f"Subscription deleted for unknown customer: {customer_id}")
+            except Exception as e:
+                current_app.logger.error(f"Error processing subscription.deleted for customer {customer_id}: {e}")
+
+        # 5. Handle checkout.session.completed (Legacy support)
+        elif event_type == 'checkout.session.completed':
+            session = event['data']['object']
+            user_id = session.get('client_reference_id')
+            stripe_customer_id = session.get('customer')
+            stripe_subscription_id = session.get('subscription')
+
+            try:
+                user = User.query.get(user_id)
+                if user:
+                    try:
+                        user.is_premium = True
+                        user.stripe_customer_id = stripe_customer_id
+                        user.stripe_subscription_id = stripe_subscription_id
+                        user.subscription_status = 'active'
+                        user.subscription_start_date = datetime.now(timezone.utc)
+                        user.last_payment_date = datetime.now(timezone.utc)
+                        user.on_trial = False
+                        db.session.commit()
+                        current_app.logger.info(f"Checkout completed for user {user.email}")
+                    except Exception as e:
+                        db.session.rollback()
+                        current_app.logger.error(f"Error processing checkout completion for user {user_id}: {e}")
+                else:
+                    current_app.logger.warning(f"Checkout completed for unknown user: {user_id}")
+            except Exception as e:
+                current_app.logger.error(f"Error processing checkout.session.completed: {e}")
+
+        else:
+            # Log unhandled event types for monitoring
+            current_app.logger.info(f"Unhandled Stripe webhook event type: {event_type}")
+
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error in webhook handler: {e}")
+        return 'Internal server error', 500
 
     return 'OK', 200
