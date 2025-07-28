@@ -63,9 +63,8 @@ class User(db.Model):
     def get_user_safely(cls, user_id):
         """Get user safely, handling missing subscription columns."""
         try:
-            # Try to get user with all columns first, with eager loading
-            from sqlalchemy.orm import joinedload
-            user = cls.query.options(joinedload(cls.conversions)).get(user_id)
+            # Try to get user with all columns first (no eager loading for dynamic relationship)
+            user = cls.query.get(user_id)
             if user:
                 # Ensure the user is properly bound to the session
                 return db.session.merge(user)

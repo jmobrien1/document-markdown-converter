@@ -62,6 +62,9 @@ def signup():
             db.session.add(user)
             db.session.commit()
 
+            # Ensure user is properly bound to session before login
+            user = db.session.merge(user)
+
             # Log the user in
             login_user(user, remember=True)
             flash('Account created successfully! Welcome to mdraft.', 'success')
@@ -101,6 +104,9 @@ def login():
         if not user.is_active:
             flash('Account is disabled', 'error')
             return render_template('login.html')
+
+        # Ensure user is properly bound to session before login
+        user = db.session.merge(user)
 
         # Login successful
         login_user(user, remember=remember)
