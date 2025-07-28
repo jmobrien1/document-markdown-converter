@@ -123,11 +123,38 @@ def convert():
     # Check if the user requested a pro conversion
     use_pro_converter = request.form.get('pro_conversion') == 'on'
     
-    # Get user info for logging
+    # Get user info for logging and Pro access check
     user_email = 'Anonymous'
+    user = None
     if current_user and current_user.is_authenticated:
         user = User.get_user_safely(current_user.id)
         user_email = user.email if user else 'Unknown'
+    
+    # Block Pro conversions for users without access
+    if use_pro_converter:
+        if not current_user or not current_user.is_authenticated:
+            return jsonify({
+                'error': 'Pro conversions require a free account. Please sign up to access advanced features.',
+                'upgrade_required': True,
+                'upgrade_url': url_for('auth.signup')
+            }), 403
+        
+        if not user or not user.has_pro_access:
+            # Check if user has trial days remaining
+            trial_days = user.trial_days_remaining if user else 0
+            if trial_days > 0:
+                return jsonify({
+                    'error': f'Your trial has expired. You had {trial_days} days remaining. Please upgrade to continue using Pro features.',
+                    'upgrade_required': True,
+                    'upgrade_url': url_for('auth.upgrade'),
+                    'trial_expired': True
+                }), 403
+            else:
+                return jsonify({
+                    'error': 'Pro conversions require an active subscription or trial. Please upgrade to access advanced features.',
+                    'upgrade_required': True,
+                    'upgrade_url': url_for('auth.upgrade')
+                }), 403
     
     current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {user_email}")
     

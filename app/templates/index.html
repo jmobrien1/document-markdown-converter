@@ -237,8 +237,56 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        .segmented-control button:hover:not(.active) {
+        .segmented-control button:hover:not(.active):not(.disabled) {
             background-color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .segmented-control button.disabled { 
+            opacity: 0.5; 
+            cursor: not-allowed; 
+            background-color: var(--surface-3); 
+        }
+        
+        /* Upgrade prompt styles */
+        .upgrade-prompt {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border: 1px solid #f59e0b;
+        }
+        
+        .upgrade-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+        
+        .upgrade-icon {
+            font-size: 16px;
+        }
+        
+        .upgrade-text {
+            flex: 1;
+            color: #92400e;
+            font-weight: 500;
+        }
+        
+        .upgrade-btn {
+            background: #f59e0b;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+        
+        .upgrade-btn:hover {
+            background: #d97706;
+            color: white;
         }
 
         .converter-details {
@@ -598,6 +646,12 @@
         });
 
         proBtn.addEventListener('click', () => {
+            // Prevent clicking if disabled
+            if (proBtn.classList.contains('disabled')) {
+                showUpgradePrompt('Pro features require an active subscription or trial.', '{{ url_for("auth.upgrade") }}');
+                return;
+            }
+            
             if (proBtn.classList.contains('active')) return; // Do nothing if already active
             proBtn.classList.add('active');
             standardBtn.classList.remove('active');
@@ -613,9 +667,30 @@
 
         // Check user status for Pro
         let isProUser = false;
+        let userStatus = null;
         fetch('/user-status').then(r => r.json()).then(data => {
+            userStatus = data;
             isProUser = data.has_pro_access;
-            if (isProUser) {
+            
+            // Disable Pro tab for users without access
+            if (!isProUser) {
+                proBtn.disabled = true;
+                proBtn.classList.add('disabled');
+                proBtn.title = 'Pro features require an active subscription or trial';
+                
+                // Add upgrade prompt to Pro details
+                const proDetails = document.getElementById('pro-details');
+                const upgradePrompt = document.createElement('div');
+                upgradePrompt.className = 'upgrade-prompt';
+                upgradePrompt.innerHTML = `
+                    <div class="upgrade-banner">
+                        <span class="upgrade-icon">🔒</span>
+                        <span class="upgrade-text">Pro features require an active subscription</span>
+                        <a href="{{ url_for('auth.upgrade') }}" class="upgrade-btn">Upgrade Now</a>
+                    </div>
+                `;
+                proDetails.appendChild(upgradePrompt);
+            } else {
                 fileInput.setAttribute('multiple', 'multiple');
                 fileLabel.innerHTML = '<strong>Click to select files</strong> or drag and drop';
             }
@@ -671,6 +746,14 @@
                     
                     if (!startResponse.ok) {
                         const errorData = await startResponse.json();
+                        
+                        // Handle upgrade required responses
+                        if (startResponse.status === 403 && errorData.upgrade_required) {
+                            showUpgradePrompt(errorData.error, errorData.upgrade_url);
+                            resetUI();
+                            return;
+                        }
+                        
                         throw new Error(errorData.error || `HTTP error! status: ${startResponse.status}`);
                     }
 
@@ -943,6 +1026,119 @@
             successMessage.textContent = message;
             successMessage.style.display = 'block';
             errorMessage.style.display = 'none';
+        }
+        
+        function showUpgradePrompt(message, upgradeUrl) {
+            // Create a modal-like upgrade prompt
+            const upgradeModal = document.createElement('div');
+            upgradeModal.className = 'upgrade-modal';
+            upgradeModal.innerHTML = `
+                <div class="upgrade-modal-content">
+                    <div class="upgrade-modal-header">
+                        <span class="upgrade-modal-icon">🔒</span>
+                        <h3>Upgrade Required</h3>
+                    </div>
+                    <div class="upgrade-modal-body">
+                        <p>${message}</p>
+                        <div class="upgrade-modal-actions">
+                            <a href="${upgradeUrl}" class="upgrade-modal-btn primary">Upgrade Now</a>
+                            <button class="upgrade-modal-btn secondary" onclick="this.parentElement.parentElement.parentElement.parentElement.remove()">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add styles
+            upgradeModal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            `;
+            
+            const content = upgradeModal.querySelector('.upgrade-modal-content');
+            content.style.cssText = `
+                background: white;
+                padding: 30px;
+                border-radius: 12px;
+                max-width: 400px;
+                width: 90%;
+                text-align: center;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            `;
+            
+            const header = upgradeModal.querySelector('.upgrade-modal-header');
+            header.style.cssText = `
+                margin-bottom: 20px;
+            `;
+            
+            const icon = upgradeModal.querySelector('.upgrade-modal-icon');
+            icon.style.cssText = `
+                font-size: 48px;
+                display: block;
+                margin-bottom: 10px;
+            `;
+            
+            const title = upgradeModal.querySelector('h3');
+            title.style.cssText = `
+                margin: 0;
+                color: #1f2937;
+                font-size: 24px;
+                font-weight: 600;
+            `;
+            
+            const body = upgradeModal.querySelector('.upgrade-modal-body');
+            body.style.cssText = `
+                margin-bottom: 20px;
+            `;
+            
+            const paragraph = upgradeModal.querySelector('p');
+            paragraph.style.cssText = `
+                margin: 0 0 20px 0;
+                color: #6b7280;
+                line-height: 1.5;
+            `;
+            
+            const actions = upgradeModal.querySelector('.upgrade-modal-actions');
+            actions.style.cssText = `
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+            `;
+            
+            const buttons = upgradeModal.querySelectorAll('.upgrade-modal-btn');
+            buttons.forEach(btn => {
+                btn.style.cssText = `
+                    padding: 10px 20px;
+                    border-radius: 6px;
+                    text-decoration: none;
+                    font-weight: 600;
+                    border: none;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: all 0.2s ease;
+                `;
+                
+                if (btn.classList.contains('primary')) {
+                    btn.style.cssText += `
+                        background: #f59e0b;
+                        color: white;
+                    `;
+                } else {
+                    btn.style.cssText += `
+                        background: #f3f4f6;
+                        color: #374151;
+                    `;
+                }
+            });
+            
+            document.body.appendChild(upgradeModal);
         }
 
         function hideMessages() {
