@@ -933,19 +933,27 @@
                     const resp = await fetch(`/status/${jobId}`);
                     const data = await resp.json();
                     
-                    if (data.state === 'SUCCESS' && data.result && data.result.markdown) {
+                    if (data.state === 'SUCCESS' && data.has_result) {
+                        // Fetch the full result from the separate result endpoint
+                        const resultResp = await fetch(`/result/${jobId}`);
+                        const resultData = await resultResp.json();
                         
-                        // Store the markdown result in the card for later use
-                        card.dataset.markdownResult = data.result.markdown;
-                        
-                        // Update card to success state
-                        updateCardStatus(card, 'success', 'Completed');
-                        
-                        // Update download button
-                        const downloadBtn = card.querySelector('.download-file-btn');
-                        downloadBtn.onclick = () => downloadFileResult(fileName, data.result.markdown);
-                        
-                        done = true;
+                        if (resultData.markdown) {
+                            // Store the markdown result in the card for later use
+                            card.dataset.markdownResult = resultData.markdown;
+                            
+                            // Update card to success state
+                            updateCardStatus(card, 'success', 'Completed');
+                            
+                            // Update download button
+                            const downloadBtn = card.querySelector('.download-file-btn');
+                            downloadBtn.onclick = () => downloadFileResult(fileName, resultData.markdown);
+                            
+                            done = true;
+                        } else {
+                            updateCardStatus(card, 'failed', 'No result data available');
+                            done = true;
+                        }
                     } else if (data.state === 'FAILURE') {
                         updateCardStatus(card, 'failed', data.error || 'Unknown error');
                         done = true;
@@ -965,9 +973,18 @@
                     const statusResponse = await fetch(statusUrl);
                     const data = await statusResponse.json();
 
-                    if (data.state === 'SUCCESS') {
+                    if (data.state === 'SUCCESS' && data.has_result) {
                         clearInterval(pollingInterval);
-                        handleSuccess(data.result);
+                        // Fetch the full result from the separate result endpoint
+                        const jobId = statusUrl.split('/').pop();
+                        const resultResponse = await fetch(`/result/${jobId}`);
+                        const resultData = await resultResponse.json();
+                        
+                        if (resultData.markdown) {
+                            handleSuccess(resultData);
+                        } else {
+                            handleFailure('No result data available');
+                        }
                     } else if (data.state === 'FAILURE') {
                         clearInterval(pollingInterval);
                         handleFailure(data.error);

@@ -396,25 +396,69 @@ def convert():
 def task_status(job_id):
     """
     Endpoint for the client to poll for the status of a background task.
-    Enhanced to show progress for batch processing.
+    Returns lightweight status information only - no large payloads.
     """
     task = convert_file_task.AsyncResult(job_id)
     
     if task.state == 'PENDING':
-        response = {'state': task.state, 'status': 'Pending...'}
+        response = {
+            'state': task.state, 
+            'status': 'Pending...',
+            'progress': 0
+        }
     elif task.state == 'PROGRESS':
-        response = {'state': task.state, 'status': task.info.get('status', 'Processing...')}
+        progress_info = task.info.get('status', 'Processing...')
+        progress_percent = task.info.get('progress', 0) if isinstance(task.info, dict) else 0
+        response = {
+            'state': task.state, 
+            'status': progress_info,
+            'progress': progress_percent
+        }
     elif task.state == 'SUCCESS':
-        # task.info contains the result dictionary from the Celery task
-        # which includes: {'status': 'SUCCESS', 'markdown': '...', 'filename': '...'}
-        response = {'state': 'SUCCESS', 'result': task.info}
+        # Only return lightweight success info - no large markdown content
+        result_info = task.info if task.info else {}
+        response = {
+            'state': 'SUCCESS',
+            'status': 'Conversion completed successfully',
+            'progress': 100,
+            'filename': result_info.get('filename', 'Unknown'),
+            'markdown_length': len(result_info.get('markdown', '')) if result_info.get('markdown') else 0,
+            'has_result': True
+        }
     else: # 'FAILURE'
+        error_info = task.info if task.info else {}
         response = {
             'state': 'FAILURE',
-            'status': str(task.info),
-            'error': task.info.get('error', 'An unknown error occurred.')
+            'status': 'Conversion failed',
+            'progress': 0,
+            'error': error_info.get('error', 'An unknown error occurred.') if isinstance(error_info, dict) else str(error_info)
         }
         
+    return jsonify(response)
+
+@main.route('/result/<job_id>')
+def task_result(job_id):
+    """
+    Endpoint to retrieve the full conversion result (including markdown content).
+    Only called when status indicates SUCCESS.
+    """
+    task = convert_file_task.AsyncResult(job_id)
+    
+    if task.state != 'SUCCESS':
+        return jsonify({
+            'error': 'Result not ready yet. Check status first.',
+            'state': task.state
+        }), 400
+    
+    # Return the full result with markdown content
+    result_info = task.info if task.info else {}
+    response = {
+        'state': 'SUCCESS',
+        'markdown': result_info.get('markdown', ''),
+        'filename': result_info.get('filename', 'Unknown'),
+        'status': result_info.get('status', 'SUCCESS')
+    }
+    
     return jsonify(response)
 
 @main.route('/stats')
