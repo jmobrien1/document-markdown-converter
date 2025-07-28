@@ -154,12 +154,12 @@ def account():
 
         # Get recent conversions - ensure it's always a list
         try:
-            # Check if user has any conversions first
-            if user.conversions.count() > 0:
+            # Use the already calculated total_conversions
+            if total_conversions > 0:
                 recent_conversions = user.conversions.order_by(
                     Conversion.created_at.desc()
                 ).limit(10).all()
-                # Ensure it's a list, not a single value
+                # Ensure it's a list, not a single value or None
                 if not isinstance(recent_conversions, list):
                     recent_conversions = []
             else:
