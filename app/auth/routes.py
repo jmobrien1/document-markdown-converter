@@ -54,9 +54,9 @@ def signup():
             user = User(email=email)
             user.password = password  # Use the User model's password setter
             
-            # Set trial dates (7-day trial)
+            # Set trial dates (14-day trial)
             user.trial_start_date = datetime.now(timezone.utc)
-            user.trial_end_date = user.trial_start_date + timedelta(days=7)
+            user.trial_end_date = user.trial_start_date + timedelta(days=14)
             user.on_trial = True
 
             db.session.add(user)

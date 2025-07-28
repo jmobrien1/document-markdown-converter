@@ -531,6 +531,7 @@ def expire_trials():
             expired_count = 0
             for user in expired_users:
                 user.on_trial = False
+                user.subscription_status = 'free'
                 expired_count += 1
             
             if expired_count > 0:
