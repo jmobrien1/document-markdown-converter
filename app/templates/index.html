@@ -745,17 +745,24 @@
                     <div class="status-text">Uploading...</div>
                 </div>
                 <div class="action-buttons-section">
-                    <button class="file-action-btn copy-file-btn" onclick="copyFileResult('${file.name}')">
+                    <button class="file-action-btn copy-file-btn" data-filename="${file.name}">
                         📋 Copy
                     </button>
                     <a class="file-action-btn download-file-btn" href="#" download>
                         💾 Download
                     </a>
-                    <button class="file-action-btn view-result-btn" onclick="viewFileResult('${file.name}')">
+                    <button class="file-action-btn view-result-btn" data-filename="${file.name}">
                         👁️ View
                     </button>
                 </div>
             `;
+            
+            // Add event listeners properly
+            const copyBtn = card.querySelector('.copy-file-btn');
+            const viewBtn = card.querySelector('.view-result-btn');
+            
+            copyBtn.addEventListener('click', () => copyFileResult(file.name));
+            viewBtn.addEventListener('click', () => viewFileResult(file.name));
             
             return card;
         }
