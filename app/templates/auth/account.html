@@ -429,7 +429,7 @@
                     <span class="usage-count">{{ pro_pages_processed }} / {{ monthly_allowance }}</span>
                 </div>
                 <div class="usage-progress">
-                    <div class="usage-progress-bar" style="width: {{ (pro_pages_processed / monthly_allowance * 100) | min(100) }}%"></div>
+                    <div class="usage-progress-bar" style="width: {% set width = (pro_pages_processed / monthly_allowance * 100) %}{{ width if width <= 100 else 100 }}%"></div>
                 </div>
                 <div class="usage-footer">
                     {% if pro_pages_processed >= monthly_allowance %}
