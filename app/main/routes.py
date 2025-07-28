@@ -5,6 +5,7 @@ import os
 import uuid
 import tempfile
 import json
+import struct
 from datetime import datetime, timezone
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
@@ -23,6 +24,123 @@ except ImportError:
 from ..models import User, AnonymousUsage, Conversion
 from .. import db
 from . import main
+
+# File signature definitions for magic number validation
+FILE_SIGNATURES = {
+    # PDF files
+    'pdf': [b'%PDF'],
+    
+    # Microsoft Office files
+    'doc': [b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1'],  # OLE2 compound document
+    'docx': [b'PK\x03\x04'],  # ZIP archive (Office Open XML)
+    'xlsx': [b'PK\x03\x04'],  # ZIP archive (Office Open XML)
+    'pptx': [b'PK\x03\x04'],  # ZIP archive (Office Open XML)
+    
+    # Image files
+    'png': [b'\x89PNG\r\n\x1a\n'],
+    'jpg': [b'\xFF\xD8\xFF'],
+    'jpeg': [b'\xFF\xD8\xFF'],
+    'gif': [b'GIF87a', b'GIF89a'],
+    'bmp': [b'BM'],
+    'tiff': [b'II*\x00', b'MM\x00*'],
+    'tif': [b'II*\x00', b'MM\x00*'],
+    'webp': [b'RIFF'],
+    
+    # Text files
+    'txt': [],  # No specific signature, will be validated by content analysis
+    'html': [b'<!DOCTYPE', b'<html', b'<HTML'],
+    'htm': [b'<!DOCTYPE', b'<html', b'<HTML'],
+    
+    # Other supported formats
+    'csv': [],  # No specific signature
+    'json': [b'{', b'['],  # JSON starts with { or [
+    'xml': [b'<?xml', b'<xml'],
+    'zip': [b'PK\x03\x04'],
+    'epub': [b'PK\x03\x04'],  # EPUB is a ZIP archive
+}
+
+def validate_file_signature(file_stream, filename):
+    """
+    Validate file signature (magic number) against file extension.
+    
+    Args:
+        file_stream: File stream object
+        filename: Original filename with extension
+        
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    try:
+        # Get file extension
+        file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+        
+        if file_extension not in FILE_SIGNATURES:
+            return False, f"Unsupported file type: {file_extension}"
+        
+        # Read first 8 bytes for signature checking
+        file_stream.seek(0)
+        header = file_stream.read(8)
+        file_stream.seek(0)  # Reset position
+        
+        # Get expected signatures for this file type
+        expected_signatures = FILE_SIGNATURES.get(file_extension, [])
+        
+        # If no specific signature is defined (like for .txt), accept the file
+        if not expected_signatures:
+            return True, None
+        
+        # Check if any of the expected signatures match
+        for signature in expected_signatures:
+            if header.startswith(signature):
+                return True, None
+        
+        # If we get here, no signature matched
+        return False, f"File signature does not match extension. Expected {file_extension} format."
+        
+    except Exception as e:
+        current_app.logger.error(f"Error validating file signature: {e}")
+        return False, "Error validating file format"
+
+def validate_file_content(file_stream, filename):
+    """
+    Additional content validation for text-based files.
+    
+    Args:
+        file_stream: File stream object
+        filename: Original filename with extension
+        
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    try:
+        file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+        
+        # For text files, check if content is readable
+        if file_extension in ['txt', 'csv', 'json', 'xml', 'html', 'htm']:
+            file_stream.seek(0)
+            content = file_stream.read(1024)  # Read first 1KB
+            
+            # Check if content is readable text (not binary)
+            try:
+                content.decode('utf-8')
+            except UnicodeDecodeError:
+                return False, f"File appears to be binary, not valid {file_extension} content"
+            
+            # For JSON files, validate JSON structure
+            if file_extension == 'json':
+                try:
+                    json.loads(content.decode('utf-8'))
+                except json.JSONDecodeError:
+                    return False, "Invalid JSON format"
+            
+            file_stream.seek(0)  # Reset position
+            return True, None
+        
+        return True, None
+        
+    except Exception as e:
+        current_app.logger.error(f"Error validating file content: {e}")
+        return False, "Error validating file content"
 
 def allowed_file(filename):
     """Check if the file's extension is in the allowed set."""
@@ -102,6 +220,7 @@ def convert():
     Handles file upload, checks for pro conversion flag, and starts the task.
     Now supports both authenticated and anonymous users with rate limiting.
     Enhanced for batch processing of large documents.
+    Enhanced with comprehensive file validation and security checks.
     """
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
@@ -110,6 +229,27 @@ def convert():
     
     if file.filename == '' or not allowed_file(file.filename):
         return jsonify({'error': 'Invalid or no selected file'}), 400
+
+    # SECURITY: Comprehensive file validation
+    try:
+        # Validate file signature (magic number)
+        is_valid_signature, signature_error = validate_file_signature(file, file.filename)
+        if not is_valid_signature:
+            current_app.logger.warning(f"File signature validation failed: {signature_error} for file: {file.filename}")
+            return jsonify({'error': signature_error}), 400
+        
+        # Validate file content for text-based files
+        is_valid_content, content_error = validate_file_content(file, file.filename)
+        if not is_valid_content:
+            current_app.logger.warning(f"File content validation failed: {content_error} for file: {file.filename}")
+            return jsonify({'error': content_error}), 400
+        
+        # Log successful validation
+        current_app.logger.info(f"File validation passed for: {file.filename}")
+        
+    except Exception as e:
+        current_app.logger.error(f"Error during file validation: {e}")
+        return jsonify({'error': 'Error validating file format'}), 400
 
     # Check conversion limits
     can_convert, limit_error = check_conversion_limits()

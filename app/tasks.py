@@ -6,6 +6,8 @@ import time
 import tempfile
 import json
 import uuid
+import subprocess
+import shutil
 from google.cloud import storage, documentai
 from google.oauth2 import service_account
 from google.api_core import exceptions as google_exceptions
@@ -25,6 +27,53 @@ MONTHLY_PAGE_ALLOWANCE = 1000  # Pages per month for Pro users
 
 # Configuration constants
 MONTHLY_PAGE_ALLOWANCE = 1000  # Pages per month for Pro users
+
+def scan_file_for_viruses(file_path):
+    """
+    Scan a file for viruses using ClamAV.
+    
+    Args:
+        file_path (str): Path to the file to scan
+        
+    Returns:
+        tuple: (is_clean, scan_result_message)
+    """
+    try:
+        # Check if ClamAV is available
+        if not shutil.which('clamscan'):
+            current_app.logger.warning("ClamAV not found, skipping virus scan")
+            return True, "ClamAV not available, scan skipped"
+        
+        # Run ClamAV scan
+        result = subprocess.run(
+            ['clamscan', '--no-summary', '--infected', file_path],
+            capture_output=True,
+            text=True,
+            timeout=30  # 30 second timeout
+        )
+        
+        # Check scan results
+        if result.returncode == 0:
+            # File is clean
+            current_app.logger.info(f"Virus scan passed for file: {file_path}")
+            return True, "File scanned successfully, no threats detected"
+        elif result.returncode == 1:
+            # Virus detected
+            current_app.logger.error(f"VIRUS DETECTED in file: {file_path}")
+            current_app.logger.error(f"ClamAV output: {result.stdout}")
+            return False, f"Virus detected: {result.stdout.strip()}"
+        else:
+            # Scan error
+            current_app.logger.error(f"Virus scan error for file: {file_path}")
+            current_app.logger.error(f"ClamAV error: {result.stderr}")
+            return False, f"Virus scan error: {result.stderr.strip()}"
+            
+    except subprocess.TimeoutExpired:
+        current_app.logger.error(f"Virus scan timeout for file: {file_path}")
+        return False, "Virus scan timeout"
+    except Exception as e:
+        current_app.logger.error(f"Error during virus scan: {e}")
+        return False, f"Virus scan error: {str(e)}"
 
 def get_pdf_page_count(file_path):
     """
@@ -106,161 +155,82 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
         output_gcs_uri (str): GCS URI for output files.
 
     Returns:
-        str: Extracted text content from the batch processing results.
+        str: Extracted text content from the document.
 
     Raises:
-        Exception: If batch processing fails or no text is extracted.
+        Exception: If the Document AI API call fails.
     """
-    print("--- [Celery Task] Starting Document AI BATCH processing...")
+    print("--- [Celery Task] Inside process_with_docai_batch helper function.")
+    opts = {"api_endpoint": f"{location}-documentai.googleapis.com"}
     
     try:
-        # Initialize Document AI client with proper credentials
-        client_options = {"api_endpoint": f"{location}-documentai.googleapis.com"}
-        
-        # Load credentials from file
+        # Load credentials from file for batch processing
         credentials = service_account.Credentials.from_service_account_file(credentials_path)
         
         client = documentai.DocumentProcessorServiceClient(
-            client_options=client_options,
+            client_options=opts,
             credentials=credentials
         )
         
-        # Prepare batch processing request
         processor_name = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
         
-        # Create the batch process request using correct structure
-        request = {
-            "name": processor_name,
-            "input_documents": {
-                "gcs_prefix": {
-                    "gcs_uri_prefix": input_gcs_uri
-                }
-            },
-            "document_output_config": {
-                "gcs_output_config": {
-                    "gcs_uri": output_gcs_uri
-                }
-            }
-        }
-        
-        print(f"--- [Celery Task] Submitting batch job for processor: {processor_name}")
-        print(f"--- [Celery Task] DEBUG: Input URI: {input_gcs_uri}")
-        print(f"--- [Celery Task] DEBUG: Output URI: {output_gcs_uri}")
-        
-        # Submit batch processing job
-        operation = client.batch_process_documents(request=request)
-        
-        print(f"--- [Celery Task] Batch job submitted. Operation name: {operation.operation.name}")
-        
-        # Update task progress
-        current_task.update_state(
-            state='PROGRESS',
-            meta={'status': 'Large document submitted for batch processing...'}
+        # Configure the batch process request
+        batch_input_config = documentai.BatchProcessRequest.BatchInputConfig(
+            gcs_source=input_gcs_uri,
+            mime_type="application/pdf"
         )
         
-        # Poll for completion (with timeout)
-        max_wait_time = 600  # 10 minutes max wait
-        poll_interval = 30   # Check every 30 seconds
-        elapsed_time = 0
+        batch_output_config = documentai.BatchProcessRequest.BatchOutputConfig(
+            gcs_destination=output_gcs_uri
+        )
         
-        while not operation.done() and elapsed_time < max_wait_time:
-            print(f"--- [Celery Task] Batch processing in progress... ({elapsed_time}s)")
-            current_task.update_state(
-                state='PROGRESS',
-                meta={'status': f'Processing large document... ({elapsed_time // 60}m {elapsed_time % 60}s)'}
-            )
-            time.sleep(poll_interval)
-            elapsed_time += poll_interval
+        request = documentai.BatchProcessRequest(
+            name=processor_name,
+            input_configs=[batch_input_config],
+            output_config=batch_output_config
+        )
         
-        if not operation.done():
-            raise Exception("Batch processing timed out after 10 minutes")
+        print("--- [Celery Task] Starting batch processing...")
         
-        print("--- [Celery Task] Batch processing completed!")
+        # Start the batch process
+        operation = client.batch_process_documents(request=request)
         
-        # Get the result
-        result = operation.result()
-        print(f"--- [Celery Task] DEBUG: Operation result type: {type(result)}")
+        print("--- [Celery Task] Waiting for batch processing to complete...")
         
-        # Download the processed results from GCS
+        # Wait for the operation to complete
+        operation.result()
+        
+        print("--- [Celery Task] Batch processing completed.")
+        
+        # Download and process the results
         storage_client = storage.Client.from_service_account_json(credentials_path)
+        bucket = storage_client.bucket(project_id)
         
-        # The output will be in the specified GCS output location
-        bucket_name = output_gcs_uri.split('/')[2]
-        output_prefix = '/'.join(output_gcs_uri.split('/')[3:])
+        # List all output files
+        blobs = bucket.list_blobs(prefix=output_gcs_uri.replace(f"gs://{project_id}/", ""))
         
-        print(f"--- [Celery Task] DEBUG: Looking for output files in bucket: {bucket_name}")
-        print(f"--- [Celery Task] DEBUG: Output prefix: {output_prefix}")
-        
-        bucket = storage_client.bucket(bucket_name)
-        
-        # List ALL files in output directory
-        blobs = list(bucket.list_blobs(prefix=output_prefix))
-        print(f"--- [Celery Task] DEBUG: Found {len(blobs)} files in output directory")
-        
-        for blob in blobs:
-            print(f"--- [Celery Task] DEBUG: Found file: {blob.name} (size: {blob.size} bytes)")
-        
-        extracted_text = ""
-        json_files_found = 0
-        
+        combined_text = ""
         for blob in blobs:
             if blob.name.endswith('.json'):
-                json_files_found += 1
-                print(f"--- [Celery Task] DEBUG: Processing JSON file: {blob.name}")
+                # Download and parse the JSON result
+                content = blob.download_as_text()
+                result = json.loads(content)
                 
-                try:
-                    # Download and parse the JSON result
-                    json_content = blob.download_as_text()
-                    print(f"--- [Celery Task] DEBUG: Downloaded JSON content length: {len(json_content)}")
-                    
-                    doc_data = json.loads(json_content)
-                    print(f"--- [Celery Task] DEBUG: JSON keys: {list(doc_data.keys())}")
-                    
-                    # Extract text from Document AI batch response
-                    # The text is directly in the 'text' field for batch processing
-                    if 'text' in doc_data:
-                        text_content = doc_data['text']
-                        print(f"--- [Celery Task] DEBUG: Found text content, length: {len(text_content)}")
-                        extracted_text += text_content
-                        extracted_text += "\n\n"
-                    elif 'document' in doc_data and 'text' in doc_data['document']:
-                        # Fallback for synchronous format
-                        text_content = doc_data['document']['text']
-                        print(f"--- [Celery Task] DEBUG: Found text content in document.text, length: {len(text_content)}")
-                        extracted_text += text_content
-                        extracted_text += "\n\n"
-                    else:
-                        print(f"--- [Celery Task] DEBUG: No text field found in JSON structure")
-                        # Show what structure we do have
-                        if 'document' in doc_data:
-                            print(f"--- [Celery Task] DEBUG: Document keys: {list(doc_data['document'].keys())}")
-                        else:
-                            print(f"--- [Celery Task] DEBUG: Available top-level keys: {list(doc_data.keys())}")
-                        
-                except Exception as e:
-                    print(f"--- [Celery Task] DEBUG: Error processing JSON file {blob.name}: {e}")
+                # Extract text from the result
+                if 'document' in result and 'text' in result['document']:
+                    combined_text += result['document']['text'] + "\n"
         
-        print(f"--- [Celery Task] DEBUG: Processed {json_files_found} JSON files")
-        print(f"--- [Celery Task] DEBUG: Total extracted text length: {len(extracted_text)}")
-        
-        if not extracted_text.strip():
-            # More detailed error information
-            error_msg = f"No text extracted from batch processing results. Found {len(blobs)} files, {json_files_found} JSON files"
-            if blobs:
-                error_msg += f". Files found: {[blob.name for blob in blobs[:5]]}"  # Show first 5 files
-            raise Exception(error_msg)
-        
-        print(f"--- [Celery Task] Successfully extracted {len(extracted_text)} characters from batch processing")
-        return extracted_text.strip()
+        return combined_text.strip()
         
     except Exception as e:
-        print(f"--- [Celery Task] Batch processing error: {str(e)}")
-        raise Exception(f"Document AI batch processing failed: {str(e)}")
+        print(f"--- [Celery Task] Document AI batch processing error: {str(e)}")
+        raise e
 
 @celery.task(bind=True)
 def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None):
     """
     Celery task to perform file conversion, update the Conversion record, and handle errors robustly.
+    Enhanced with virus scanning and security logging.
 
     Args:
         self: Celery task instance (provided by Celery).
@@ -277,6 +247,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
     print(f"    Filename: '{original_filename}' | Pro mode: {use_pro_converter}")
     temp_file_path = None
     start_time = time.time()
+    
     try:
         with current_app.app_context():
             # Get credentials
@@ -309,6 +280,41 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
             # DEBUG: Check file size
             file_size = os.path.getsize(temp_file_path)
             print(f"--- [Celery Task] DEBUG: Downloaded file size: {file_size} bytes")
+            
+            # SECURITY: Virus scanning before processing
+            print("--- [Celery Task] Starting virus scan...")
+            is_clean, scan_result = scan_file_for_viruses(temp_file_path)
+            
+            if not is_clean:
+                # Log security event
+                current_app.logger.error(f"SECURITY EVENT: Virus detected in file {original_filename}")
+                current_app.logger.error(f"Scan result: {scan_result}")
+                
+                # Update conversion record with failure
+                if conversion_id:
+                    conversion = Conversion.get_conversion_safely(conversion_id)
+                    if conversion:
+                        conversion.status = 'failed'
+                        conversion.error_message = f"Security scan failed: {scan_result}"
+                        conversion.completed_at = datetime.now(timezone.utc)
+                        conversion.processing_time = time.time() - start_time
+                        db.session.commit()
+                
+                # Clean up infected file
+                try:
+                    os.unlink(temp_file_path)
+                    current_app.logger.info(f"Deleted infected file: {temp_file_path}")
+                except Exception as e:
+                    current_app.logger.error(f"Error deleting infected file: {e}")
+                
+                # Return security failure
+                return {
+                    'status': 'FAILURE',
+                    'error': f'Security scan failed: {scan_result}',
+                    'filename': original_filename
+                }
+            
+            print("--- [Celery Task] Virus scan passed.")
             
             # Process the file
             if use_pro_converter:
@@ -450,56 +456,69 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                             # Only set pages_processed if the column exists
                             try:
                                 conversion.pages_processed = pages_processed
-                            except:
-                                pass  # Column doesn't exist yet
-                            
-                            # Atomically increment user's monthly usage
-                            try:
-                                user.pro_pages_processed_current_month += pages_processed
-                                print(f"--- [Celery Task] Tracked {pages_processed} pages for user {user.email}")
-                            except:
-                                pass  # Column doesn't exist yet
+                                # Update user's monthly usage
+                                current_usage = getattr(user, 'pro_pages_processed_current_month', 0)
+                                user.pro_pages_processed_current_month = current_usage + pages_processed
+                            except Exception as e:
+                                print(f"--- [Celery Task] Warning: Could not update pages_processed: {e}")
                     
                     db.session.commit()
-                    
-                    # Send email notification if user is logged in
-                    if conversion.user_id:
-                        try:
-                            user = User.get_user_safely(conversion.user_id)
-                            if user and user.email:
-                                send_conversion_complete_email(user.email, original_filename)
-                        except Exception as e:
-                            print(f"--- [Celery Task] Email notification failed: {str(e)}")
-                            # Don't fail the task if email fails
-        print("--- [Celery Task] Conversion completed successfully!")
-        return {
-            'status': 'SUCCESS',
-            'markdown': markdown_content,
-            'filename': original_filename
-        }
+            
+            # Clean up temporary file
+            if temp_file_path and os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+                print("--- [Celery Task] Temporary file cleaned up.")
+            
+            # Clean up temporary credentials file
+            if credentials_path and os.path.exists(credentials_path):
+                os.unlink(credentials_path)
+                print("--- [Celery Task] Temporary credentials cleaned up.")
+            
+            print("--- [Celery Task] SUCCESS: Conversion completed successfully.")
+            
+            return {
+                'status': 'SUCCESS',
+                'markdown': markdown_content,
+                'filename': original_filename
+            }
+            
     except Exception as e:
-        error_msg = str(e)
-        print(f"--- [Celery Task] !!! AN ERROR OCCURRED !!!")
-        print(f"Error Type: {type(e).__name__}")
-        print(f"Error Details: {error_msg}")
-        with current_app.app_context():
-            if conversion_id:
+        print(f"--- [Celery Task] ERROR: {str(e)}")
+        
+        # Update conversion record with failure
+        if conversion_id:
+            try:
                 conversion = Conversion.get_conversion_safely(conversion_id)
                 if conversion:
                     conversion.status = 'failed'
-                    conversion.error_message = error_msg
+                    conversion.error_message = str(e)
+                    conversion.completed_at = datetime.now(timezone.utc)
+                    conversion.processing_time = time.time() - start_time
                     db.session.commit()
+            except Exception as db_error:
+                print(f"--- [Celery Task] Error updating conversion record: {db_error}")
+        
+        # Clean up temporary file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+                print("--- [Celery Task] Temporary file cleaned up after error.")
+            except Exception as cleanup_error:
+                print(f"--- [Celery Task] Error cleaning up temporary file: {cleanup_error}")
+        
+        # Clean up temporary credentials file
+        if 'credentials_path' in locals() and credentials_path and os.path.exists(credentials_path):
+            try:
+                os.unlink(credentials_path)
+                print("--- [Celery Task] Temporary credentials cleaned up after error.")
+            except Exception as cleanup_error:
+                print(f"--- [Celery Task] Error cleaning up temporary credentials: {cleanup_error}")
+        
         return {
             'status': 'FAILURE',
-            'error': f'A server error occurred: {type(e).__name__}'
+            'error': str(e),
+            'filename': original_filename
         }
-    finally:
-        # Cleanup
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.unlink(temp_file_path)
-        if 'temp_creds' in locals() and os.path.exists(temp_creds.name):
-            os.unlink(temp_creds.name)
-        print("--- [Celery Task] Cleanup complete. Task finished. ---\n")
 
 
 @celery.task
