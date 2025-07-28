@@ -65,7 +65,11 @@ class User(db.Model):
         try:
             # Try to get user with all columns first, with eager loading
             from sqlalchemy.orm import joinedload
-            return cls.query.options(joinedload(cls.conversions)).get(user_id)
+            user = cls.query.options(joinedload(cls.conversions)).get(user_id)
+            if user:
+                # Ensure the user is properly bound to the session
+                return db.session.merge(user)
+            return None
         except Exception as e:
             if any(col in str(e) for col in ['subscription_status', 'current_tier', 'trial_start_date', 'trial_end_date', 'on_trial']):
                 # Rollback the failed transaction first
@@ -113,6 +117,9 @@ class User(db.Model):
                         
                         # Create a simple list of conversion IDs to avoid relationship issues
                         user._conversion_ids = [row.id for row in conversions_result]
+                        
+                        # Merge the user object into the session to ensure it's properly bound
+                        user = db.session.merge(user)
                         
                         return user
                 except Exception as fallback_error:

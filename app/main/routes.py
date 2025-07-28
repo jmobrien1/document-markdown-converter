@@ -128,7 +128,12 @@ def convert():
     user = None
     if current_user and current_user.is_authenticated:
         user = User.get_user_safely(current_user.id)
-        user_email = user.email if user else 'Unknown'
+        if user:
+            # Ensure user is properly bound to session
+            user = db.session.merge(user)
+            user_email = user.email
+        else:
+            user_email = 'Unknown'
     
     # Block Pro conversions for users without access
     if use_pro_converter:

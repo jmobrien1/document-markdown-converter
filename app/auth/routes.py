@@ -131,58 +131,67 @@ def logout():
 @login_required
 def account():
     """User account dashboard."""
-    # Ensure we have a fresh user object bound to the session
-    user = User.get_user_safely(current_user.id)
-    if not user:
-        flash('User not found', 'error')
+    try:
+        # Get user directly from database to ensure fresh session
+        user = User.query.get(current_user.id)
+        if not user:
+            flash('User not found', 'error')
+            return redirect(url_for('main.index'))
+        
+        # Ensure user is properly bound to session
+        user = db.session.merge(user)
+        
+        # Get user statistics using the fresh user object
+        total_conversions = user.conversions.count()
+        daily_conversions = user.get_daily_conversions()
+
+        # Get recent conversions
+        recent_conversions = user.conversions.order_by(
+            Conversion.created_at.desc()
+        ).limit(10).all()
+
+        # Calculate success rate
+        successful_conversions = user.conversions.filter_by(status='completed').count()
+        success_rate = (successful_conversions / total_conversions * 100) if total_conversions > 0 else 0
+
+        # Calculate Pro conversions count
+        pro_conversions_count = user.conversions.filter_by(conversion_type='pro').count()
+
+        # Calculate average processing time for completed conversions
+        completed_conversions = user.conversions.filter_by(status='completed').filter(
+            Conversion.processing_time.isnot(None)
+        ).all()
+        
+        if completed_conversions:
+            total_time = sum(conv.processing_time for conv in completed_conversions)
+            avg_processing_time = total_time / len(completed_conversions)
+        else:
+            avg_processing_time = 0.0
+
+        # Monthly allowance for Pro users
+        from app.tasks import MONTHLY_PAGE_ALLOWANCE
+        monthly_allowance = MONTHLY_PAGE_ALLOWANCE
+        
+        # Generate API key if user doesn't have one
+        if not user.api_key:
+            user.generate_api_key()
+        
+        return render_template('auth/account.html',
+                             user=user,
+                             total_conversions=total_conversions,
+                             daily_conversions=daily_conversions,
+                             recent_conversions=recent_conversions,
+                             success_rate=round(success_rate, 1),
+                             pro_conversions_count=pro_conversions_count,
+                             avg_processing_time=round(avg_processing_time, 1),
+                             trial_days_remaining=user.trial_days_remaining,
+                             pro_pages_processed=getattr(user, 'pro_pages_processed_current_month', 0),
+                             monthly_allowance=monthly_allowance)
+    except Exception as e:
+        # Log the error for debugging
+        current_app.logger.error(f"Error in account route: {e}")
+        flash('An error occurred loading your account. Please try again.', 'error')
         return redirect(url_for('main.index'))
-    
-    # Get user statistics using the fresh user object
-    total_conversions = user.conversions.count()
-    daily_conversions = user.get_daily_conversions()
-
-    # Get recent conversions
-    recent_conversions = user.conversions.order_by(
-        Conversion.created_at.desc()
-    ).limit(10).all()
-
-    # Calculate success rate
-    successful_conversions = user.conversions.filter_by(status='completed').count()
-    success_rate = (successful_conversions / total_conversions * 100) if total_conversions > 0 else 0
-
-    # Calculate Pro conversions count
-    pro_conversions_count = user.conversions.filter_by(conversion_type='pro').count()
-
-    # Calculate average processing time for completed conversions
-    completed_conversions = user.conversions.filter_by(status='completed').filter(
-        Conversion.processing_time.isnot(None)
-    ).all()
-    
-    if completed_conversions:
-        total_time = sum(conv.processing_time for conv in completed_conversions)
-        avg_processing_time = total_time / len(completed_conversions)
-    else:
-        avg_processing_time = 0.0
-
-    # Monthly allowance for Pro users
-    from app.tasks import MONTHLY_PAGE_ALLOWANCE
-    monthly_allowance = MONTHLY_PAGE_ALLOWANCE
-    
-    # Generate API key if user doesn't have one
-    if not user.api_key:
-        user.generate_api_key()
-    
-    return render_template('auth/account.html',
-                         user=user,
-                         total_conversions=total_conversions,
-                         daily_conversions=daily_conversions,
-                         recent_conversions=recent_conversions,
-                         success_rate=round(success_rate, 1),
-                         pro_conversions_count=pro_conversions_count,
-                         avg_processing_time=round(avg_processing_time, 1),
-                         trial_days_remaining=user.trial_days_remaining,
-                         pro_pages_processed=getattr(user, 'pro_pages_processed_current_month', 0),
-                         monthly_allowance=monthly_allowance)
 
 
 @auth.route('/test-email')
@@ -195,6 +204,9 @@ def test_email():
         if not user:
             flash('User not found', 'error')
             return redirect(url_for('auth.account'))
+        
+        # Ensure user is properly bound to session
+        user = db.session.merge(user)
         
         from app.email import send_conversion_complete_email
         send_conversion_complete_email(user.email, "test-file.pdf")
@@ -214,6 +226,9 @@ def generate_api_key():
             flash('User not found', 'error')
             return redirect(url_for('auth.account'))
         
+        # Ensure user is properly bound to session
+        user = db.session.merge(user)
+        
         user.generate_api_key()
         flash('New API key generated successfully!', 'success')
     except Exception as e:
@@ -231,6 +246,9 @@ def revoke_api_key():
             flash('User not found', 'error')
             return redirect(url_for('auth.account'))
         
+        # Ensure user is properly bound to session
+        user = db.session.merge(user)
+        
         user.revoke_api_key()
         flash('API key revoked successfully!', 'success')
     except Exception as e:
@@ -245,6 +263,9 @@ def user_status():
         user = User.get_user_safely(current_user.id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
+        
+        # Ensure user is properly bound to session
+        user = db.session.merge(user)
         
         # Get user's conversion stats using the fresh user object
         daily_conversions = user.get_daily_conversions()
@@ -301,6 +322,9 @@ def upgrade():
     if not user:
         flash('User not found', 'error')
         return redirect(url_for('auth.account'))
+    
+    # Ensure user is properly bound to session
+    user = db.session.merge(user)
     
     if user.is_premium:
         flash('You are already on the Pro plan!', 'info')
