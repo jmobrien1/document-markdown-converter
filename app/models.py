@@ -265,17 +265,7 @@ class User(db.Model):
             trial_end = trial_end.replace(tzinfo=timezone.utc)
         return now < trial_end
     
-    def trial_days_remaining(self):
-        """Get the number of days remaining in the trial."""
-        if not self.trial_end_date:
-            return 0
-        # Ensure both datetimes are timezone-aware
-        now = datetime.now(timezone.utc)
-        trial_end = self.trial_end_date
-        if trial_end.tzinfo is None:
-            trial_end = trial_end.replace(tzinfo=timezone.utc)
-        remaining = trial_end - now
-        return max(0, remaining.days)
+
     
     def has_active_subscription(self):
         """Check if user has an active subscription."""
