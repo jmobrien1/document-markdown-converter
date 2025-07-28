@@ -210,21 +210,8 @@ def get_accurate_pdf_page_count(file_stream, filename):
         if not filename.lower().endswith('.pdf'):
             return 1
             
-        # Try to import pypdf
-        try:
-            from pypdf import PdfReader
-        except ImportError:
-            # Fallback to PyPDF2 if pypdf not available
-            try:
-                from PyPDF2 import PdfReader
-            except ImportError:
-                # Final fallback - estimate from file size
-                current_app.logger.warning("pypdf/PyPDF2 not available, using file size estimation")
-                file_stream.seek(0, 2)  # Seek to end
-                file_size = file_stream.tell()
-                file_stream.seek(0)  # Reset to beginning
-                estimated_pages = max(1, file_size // 70000)
-                return estimated_pages
+        # Import pypdf for accurate page counting
+        from pypdf import PdfReader
         
         # Use pypdf to get accurate page count
         file_stream.seek(0)  # Reset to beginning
@@ -233,18 +220,12 @@ def get_accurate_pdf_page_count(file_stream, filename):
         current_app.logger.info(f"Accurate PDF page count for {filename}: {page_count} pages")
         return page_count
         
+    except ImportError:
+        current_app.logger.error("pypdf library not available - this should not happen in production")
+        raise Exception("PDF page counting library not available. Please contact support.")
     except Exception as e:
         current_app.logger.error(f"Error getting PDF page count for {filename}: {e}")
-        # Fallback to file size estimation
-        try:
-            file_stream.seek(0, 2)  # Seek to end
-            file_size = file_stream.tell()
-            file_stream.seek(0)  # Reset to beginning
-            estimated_pages = max(1, file_size // 70000)
-            current_app.logger.warning(f"Using fallback page estimation for {filename}: {estimated_pages} pages")
-            return estimated_pages
-        except:
-            return 1  # Default to 1 page if all else fails
+        raise Exception(f"Error reading PDF file: {str(e)}")
 
 @main.route('/')
 def index():

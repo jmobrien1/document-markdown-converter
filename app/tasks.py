@@ -86,19 +86,8 @@ def get_accurate_pdf_page_count(file_path):
         int: Actual number of pages in the PDF.
     """
     try:
-        # Try to import pypdf
-        try:
-            from pypdf import PdfReader
-        except ImportError:
-            # Fallback to PyPDF2 if pypdf not available
-            try:
-                from PyPDF2 import PdfReader
-            except ImportError:
-                # Final fallback to file size estimation
-                current_app.logger.warning("pypdf/PyPDF2 not available, using file size estimation")
-                file_size = os.path.getsize(file_path)
-                estimated_pages = max(1, file_size // 70000)
-                return estimated_pages
+        # Import pypdf for accurate page counting
+        from pypdf import PdfReader
         
         # Use pypdf to get accurate page count
         with open(file_path, 'rb') as file:
@@ -107,16 +96,12 @@ def get_accurate_pdf_page_count(file_path):
             current_app.logger.info(f"Accurate PDF page count: {page_count} pages")
             return page_count
             
+    except ImportError:
+        current_app.logger.error("pypdf library not available - this should not happen in production")
+        raise Exception("PDF page counting library not available. Please contact support.")
     except Exception as e:
         current_app.logger.error(f"Error getting PDF page count: {e}")
-        # Fallback to file size estimation
-        try:
-            file_size = os.path.getsize(file_path)
-            estimated_pages = max(1, file_size // 70000)
-            current_app.logger.warning(f"Using fallback page estimation: {estimated_pages} pages")
-            return estimated_pages
-        except:
-            return 1  # Default to 1 page if all else fails
+        raise Exception(f"Error reading PDF file: {str(e)}")
 
 def process_with_docai(credentials_path, project_id, location, processor_id, file_path, mime_type):
     """
@@ -356,7 +341,8 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         
                         # Use the accurate page count passed to the task
                         if page_count is None:
-                            # Fallback to getting page count if not passed
+                            # This should not happen in production, but handle gracefully
+                            current_app.logger.warning("No page count passed to task - getting from file")
                             file_extension = os.path.splitext(original_filename)[1].lower()
                             if file_extension == '.pdf':
                                 page_count = get_accurate_pdf_page_count(temp_file_path)
@@ -408,8 +394,13 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                     if file_extension == '.pdf':
                         # Use the accurate page count passed to the task
                         if page_count is None:
-                            # Fallback to getting page count if not passed
-                            page_count = get_accurate_pdf_page_count(temp_file_path)
+                            # This should not happen in production, but handle gracefully
+                            current_app.logger.warning("No page count passed to task - getting from file")
+                            file_extension = os.path.splitext(original_filename)[1].lower()
+                            if file_extension == '.pdf':
+                                page_count = get_accurate_pdf_page_count(temp_file_path)
+                            else:
+                                page_count = 1  # Images and other files count as 1 page
                         
                         print(f"--- [Celery Task] Using accurate page count: {page_count} pages")
                         print(f"--- [Celery Task] DEBUG: File size: {file_size} bytes")
@@ -483,7 +474,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         if user:
                             # Use the accurate page count passed to the task
                             if page_count is None:
-                                # Fallback to getting page count if not passed
+                                # This should not happen in production, but handle gracefully
                                 file_extension = os.path.splitext(original_filename)[1].lower()
                                 pages_processed = get_accurate_pdf_page_count(temp_file_path) if file_extension == '.pdf' else 1
                             else:

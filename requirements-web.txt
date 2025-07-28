@@ -15,6 +15,7 @@ click
 pytest
 pytest-flask
 markitdown[all]
+pypdf==4.2.0
 
 python-json-logger
 Flask-Mail==0.9.1
