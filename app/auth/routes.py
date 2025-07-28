@@ -154,11 +154,16 @@ def account():
 
         # Get recent conversions - ensure it's always a list
         try:
-            recent_conversions = user.conversions.order_by(
-                Conversion.created_at.desc()
-            ).limit(10).all()
-            # Ensure it's a list, not a single value
-            if not isinstance(recent_conversions, list):
+            # Check if user has any conversions first
+            if user.conversions.count() > 0:
+                recent_conversions = user.conversions.order_by(
+                    Conversion.created_at.desc()
+                ).limit(10).all()
+                # Ensure it's a list, not a single value
+                if not isinstance(recent_conversions, list):
+                    recent_conversions = []
+            else:
+                # User has no conversions - return empty list
                 recent_conversions = []
         except Exception as e:
             current_app.logger.error(f"Error getting recent conversions: {e}")
