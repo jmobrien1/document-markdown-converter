@@ -139,7 +139,7 @@ def logout():
 def account():
     """
     User account page with dashboard and statistics.
-    Handles cases for new users with no conversions gracefully.
+    Handles all data requirements for the template gracefully.
     """
     try:
         user = db.session.merge(current_user)
@@ -150,9 +150,8 @@ def account():
         success_rate = 0
         avg_processing_time = 0.0
         pro_conversions_count = 0
-        recent_conversions = [] # CRITICAL: Default to an empty list
+        recent_conversions = [] # Default to an empty list for loops
 
-        # Safely query for total conversions
         if user:
             total_conversions = user.conversions.count()
 
