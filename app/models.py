@@ -206,21 +206,23 @@ class User(db.Model):
     
     @property
     def has_pro_access(self):
-        """Check if user has Pro access (either premium or on trial)."""
-        if self.is_premium:
-            return True
-        
-        # Check if user is on trial and trial hasn't expired
-        # Handle case where trial fields don't exist yet (graceful degradation)
+        """Check if user has Pro access (prioritizing trial status over legacy premium)."""
+        # First check if user is on trial and trial hasn't expired
         try:
-            # Check if trial columns exist before accessing them
-            if (check_column_exists('users', 'on_trial') and 
-                check_column_exists('users', 'trial_end_date') and
-                hasattr(self, 'on_trial') and self.on_trial and 
+            if (hasattr(self, 'on_trial') and self.on_trial and 
                 hasattr(self, 'trial_end_date') and self.trial_end_date):
-                return datetime.now(timezone.utc) < self.trial_end_date
+                # Ensure both datetimes are timezone-aware
+                now = datetime.now(timezone.utc)
+                trial_end = self.trial_end_date
+                if trial_end.tzinfo is None:
+                    trial_end = trial_end.replace(tzinfo=timezone.utc)
+                return now < trial_end
         except:
             pass
+        
+        # Fallback to legacy premium check
+        if self.is_premium:
+            return True
         
         return False
     
