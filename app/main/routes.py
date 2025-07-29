@@ -338,13 +338,13 @@ def convert():
     
     try:
         # Validate credentials before queuing task
-        credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
         if not credentials_json:
-            current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable not set")
+            current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
             return jsonify({'error': 'Google Cloud credentials not configured. Please contact support.'}), 500
         
         if not credentials_json.strip():
-            current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable is empty")
+            current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable is empty")
             return jsonify({'error': 'Google Cloud credentials are empty. Please contact support.'}), 500
         
         # Basic JSON validation
