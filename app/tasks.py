@@ -382,47 +382,37 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         # Use batch processing for documents > 10 pages
                         if page_count > 10:
                             print(f"--- [Celery Task] Large document detected ({page_count} pages) - using BATCH processing")
-                            
                             # Create unique GCS paths for batch processing
                             batch_id = str(uuid.uuid4())
                             print(f"--- [Celery Task] DEBUG: Generated batch ID: {batch_id}")
-                            
                             # Upload file to GCS input location for batch processing
                             input_blob_name = f"batch-input/{batch_id}/{original_filename}"
                             print(f"--- [Celery Task] DEBUG: Uploading to batch input: {input_blob_name}")
                             input_blob = bucket.blob(input_blob_name)
                             input_blob.upload_from_filename(temp_file_path)
-                            
                             input_gcs_uri = f"gs://{bucket_name}/batch-input/{batch_id}/"
                             output_gcs_uri = f"gs://{bucket_name}/batch-output/{batch_id}/"
                             print(f"--- [Celery Task] DEBUG: Input URI: {input_gcs_uri}")
                             print(f"--- [Celery Task] DEBUG: Output URI: {output_gcs_uri}")
-                            
                             # Process with batch API
                             processor = DocumentAIProcessor(credentials_path, project_id, location, processor_id)
                             batch_result = processor.process_with_docai_batch(input_gcs_uri, output_gcs_uri)
-                            
                             if batch_result is True:
                                 # Batch processing succeeded, download results
                                 storage_client = storage.Client.from_service_account_json(credentials_path)
                                 bucket = storage_client.bucket(project_id)
-                                
                                 # List all output files
                                 blobs = bucket.list_blobs(prefix=output_gcs_uri.replace(f"gs://{project_id}/", ""))
-                                
                                 combined_text = ""
                                 for blob in blobs:
                                     if blob.name.endswith('.json'):
                                         # Download and parse the JSON result
                                         content = blob.download_as_text()
                                         result = json.loads(content)
-                                        
                                         # Extract text from the result
                                         if 'document' in result and 'text' in result['document']:
                                             combined_text += result['document']['text'] + "\n"
-                                
                                 markdown_content = combined_text.strip()
-                                
                                 # Clean up batch files
                                 try:
                                     for blob_cleanup in bucket.list_blobs(prefix=f"batch-input/{batch_id}/"):
