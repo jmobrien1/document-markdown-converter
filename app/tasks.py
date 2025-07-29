@@ -151,97 +151,143 @@ def process_with_docai(credentials_path, project_id, location, processor_id, fil
         print(f"--- [Celery Task] Document AI API error: {str(e)}")
         raise e
 
-def process_with_docai_batch(credentials_path, project_id, location, processor_id, input_gcs_uri, output_gcs_uri):
-    """
-    Process large documents using Google Document AI batch processing.
+class DocumentAIProcessor:
+    def __init__(self, credentials_path, project_id, location, processor_id):
+        self.credentials_path = credentials_path
+        self.project_id = project_id
+        self.location = location
+        self.processor_id = processor_id
+        self.opts = {"api_endpoint": f"{location}-documentai.googleapis.com"}
+        self.processor_name = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
 
-    Args:
-        credentials_path (str): Path to the service account credentials JSON file.
-        project_id (str): Google Cloud project ID.
-        location (str): Processor region.
-        processor_id (str): Document AI processor ID.
-        input_gcs_uri (str): GCS URI for input files.
-        output_gcs_uri (str): GCS URI for output files.
-
-    Returns:
-        str: Extracted text content from the document.
-
-    Raises:
-        Exception: If the Document AI API call fails.
-    """
-    print("--- [Celery Task] Inside process_with_docai_batch helper function.")
-    opts = {"api_endpoint": f"{location}-documentai.googleapis.com"}
-    
-    try:
-        # Load credentials from file for batch processing
-        credentials = service_account.Credentials.from_service_account_file(credentials_path)
-        
-        client = documentai.DocumentProcessorServiceClient(
-            client_options=opts,
-            credentials=credentials
-        )
-        
-        processor_name = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
-        
-        # Configure the batch process request with correct API structure
-        gcs_document = documentai.GcsDocument(
-            gcs_uri=input_gcs_uri,
-            mime_type="application/pdf"
-        )
-        gcs_documents = documentai.GcsDocuments(
-            documents=[gcs_document]
-        )
-        input_config = documentai.BatchDocumentsInputConfig(
-            gcs_documents=gcs_documents
-        )
-        
-        output_config = documentai.DocumentOutputConfig(
-            gcs_output_config=documentai.DocumentOutputConfig.GcsOutputConfig(
-                gcs_uri=output_gcs_uri
+    def process_with_docai_batch(self, input_gcs_uri, output_gcs_uri):
+        """
+        Process document using Google Document AI batch processing with comprehensive error handling.
+        """
+        try:
+            from google.cloud import documentai
+            
+            # Configure the batch process request with correct API structure
+            gcs_document = documentai.GcsDocument(
+                gcs_uri=input_gcs_uri,
+                mime_type="application/pdf"
             )
-        )
-        
-        request = documentai.BatchProcessRequest(
-            name=processor_name,
-            input_documents=input_config,
-            document_output_config=output_config
-        )
-        
-        print("--- [Celery Task] Starting batch processing...")
-        
-        # Start the batch process
-        operation = client.batch_process_documents(request=request)
-        
-        print("--- [Celery Task] Waiting for batch processing to complete...")
-        
-        # Wait for the operation to complete
-        operation.result()
-        
-        print("--- [Celery Task] Batch processing completed.")
-        
-        # Download and process the results
-        storage_client = storage.Client.from_service_account_json(credentials_path)
-        bucket = storage_client.bucket(project_id)
-        
-        # List all output files
-        blobs = bucket.list_blobs(prefix=output_gcs_uri.replace(f"gs://{project_id}/", ""))
-        
-        combined_text = ""
-        for blob in blobs:
-            if blob.name.endswith('.json'):
-                # Download and parse the JSON result
-                content = blob.download_as_text()
-                result = json.loads(content)
+            gcs_documents = documentai.GcsDocuments(
+                documents=[gcs_document]
+            )
+            input_config = documentai.BatchDocumentsInputConfig(
+                gcs_documents=gcs_documents
+            )
+            
+            output_config = documentai.DocumentOutputConfig(
+                gcs_output_config=documentai.DocumentOutputConfig.GcsOutputConfig(
+                    gcs_uri=output_gcs_uri
+                )
+            )
+            
+            request = documentai.BatchProcessRequest(
+                name=self.processor_name,
+                input_documents=input_config,
+                document_output_config=output_config
+            )
+            
+            # Execute batch processing with timeout and retry logic
+            client = documentai.DocumentProcessorServiceClient()
+            
+            # First attempt with standard timeout
+            try:
+                current_app.logger.info(f"Starting batch processing for {input_gcs_uri}")
+                operation = client.batch_process_documents(request=request)
                 
-                # Extract text from the result
-                if 'document' in result and 'text' in result['document']:
-                    combined_text += result['document']['text'] + "\n"
-        
-        return combined_text.strip()
-        
-    except Exception as e:
-        print(f"--- [Celery Task] Document AI batch processing error: {str(e)}")
-        raise e
+                # Wait for operation to complete with timeout
+                result = operation.result(timeout=300)  # 5 minute timeout
+                current_app.logger.info(f"Batch processing completed successfully for {input_gcs_uri}")
+                return True
+                
+            except Exception as batch_error:
+                current_app.logger.warning(f"Batch processing failed for {input_gcs_uri}: {batch_error}")
+                
+                # Check if it's a quota or API limit error
+                error_str = str(batch_error).lower()
+                if any(keyword in error_str for keyword in ['quota', 'limit', 'rate', '400', 'failed to process']):
+                    current_app.logger.warning(f"Document AI API limits exceeded for {input_gcs_uri}, attempting synchronous fallback")
+                    
+                    # Fallback to synchronous processing
+                    try:
+                        return self.process_with_docai_sync_fallback(input_gcs_uri, self.processor_name)
+                    except Exception as sync_error:
+                        current_app.logger.error(f"Synchronous fallback also failed for {input_gcs_uri}: {sync_error}")
+                        raise Exception(f"Both batch and synchronous processing failed: {batch_error}. Fallback error: {sync_error}")
+                else:
+                    # Re-raise the original error for non-quota issues
+                    raise batch_error
+                    
+        except ImportError:
+            raise Exception("Google Cloud Document AI library not available")
+        except Exception as e:
+            current_app.logger.error(f"Document AI batch processing error for {input_gcs_uri}: {e}")
+            raise Exception(f"Document AI batch processing failed: {str(e)}")
+    
+    def process_with_docai_sync_fallback(self, input_gcs_uri, processor_name):
+        """
+        Fallback to synchronous Document AI processing when batch fails.
+        """
+        try:
+            from google.cloud import documentai
+            from google.cloud import storage
+            
+            # Download file from GCS for synchronous processing
+            storage_client = storage.Client()
+            bucket_name = input_gcs_uri.split('/')[2]
+            blob_name = '/'.join(input_gcs_uri.split('/')[3:])
+            
+            bucket = storage_client.bucket(bucket_name)
+            blob = bucket.blob(blob_name)
+            
+            # Download to temporary file
+            import tempfile
+            import os
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                blob.download_to_filename(temp_file.name)
+                temp_file_path = temp_file.name
+            
+            try:
+                # Process with synchronous API
+                with open(temp_file_path, 'rb') as file:
+                    content = file.read()
+                
+                # Create synchronous request
+                document = documentai.Document(content=content, mime_type='application/pdf')
+                request = documentai.ProcessRequest(
+                    name=processor_name,
+                    document=document
+                )
+                
+                # Process synchronously
+                client = documentai.DocumentProcessorServiceClient()
+                result = client.process_document(request=request)
+                
+                current_app.logger.info(f"Synchronous processing completed successfully for {input_gcs_uri}")
+                
+                # Extract text from result
+                document = result.document
+                text = document.text
+                
+                # Clean up temporary file
+                os.unlink(temp_file_path)
+                
+                return text
+                
+            except Exception as sync_error:
+                # Clean up temporary file on error
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+                raise sync_error
+                
+        except Exception as e:
+            current_app.logger.error(f"Synchronous fallback processing failed for {input_gcs_uri}: {e}")
+            raise Exception(f"Synchronous fallback failed: {str(e)}")
 
 @celery.task(bind=True)
 def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None):
@@ -434,27 +480,41 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                             print(f"--- [Celery Task] DEBUG: Output URI: {output_gcs_uri}")
                             
                             # Process with batch API
-                            markdown_content = process_with_docai_batch(
-                                credentials_path, project_id, location, processor_id,
-                                input_gcs_uri, output_gcs_uri
-                            )
+                            processor = DocumentAIProcessor(credentials_path, project_id, location, processor_id)
+                            batch_result = processor.process_with_docai_batch(input_gcs_uri, output_gcs_uri)
                             
-                            # Clean up batch files
-                            try:
-                                for blob_cleanup in bucket.list_blobs(prefix=f"batch-input/{batch_id}/"):
-                                    blob_cleanup.delete()
-                                for blob_cleanup in bucket.list_blobs(prefix=f"batch-output/{batch_id}/"):
-                                    blob_cleanup.delete()
-                            except:
-                                pass  # Don't fail the task if cleanup fails
-                            
-                        else:
-                            print(f"--- [Celery Task] Small document ({page_count} pages) - using synchronous processing")
-                            # Use existing synchronous processing for small files
-                            markdown_content = process_with_docai(
-                                credentials_path, project_id, location, processor_id, 
-                                temp_file_path, mime_type
-                            )
+                            if batch_result is True:
+                                # Batch processing succeeded, download results
+                                storage_client = storage.Client.from_service_account_json(credentials_path)
+                                bucket = storage_client.bucket(project_id)
+                                
+                                # List all output files
+                                blobs = bucket.list_blobs(prefix=output_gcs_uri.replace(f"gs://{project_id}/", ""))
+                                
+                                combined_text = ""
+                                for blob in blobs:
+                                    if blob.name.endswith('.json'):
+                                        # Download and parse the JSON result
+                                        content = blob.download_as_text()
+                                        result = json.loads(content)
+                                        
+                                        # Extract text from the result
+                                        if 'document' in result and 'text' in result['document']:
+                                            combined_text += result['document']['text'] + "\n"
+                                
+                                markdown_content = combined_text.strip()
+                                
+                                # Clean up batch files
+                                try:
+                                    for blob_cleanup in bucket.list_blobs(prefix=f"batch-input/{batch_id}/"):
+                                        blob_cleanup.delete()
+                                    for blob_cleanup in bucket.list_blobs(prefix=f"batch-output/{batch_id}/"):
+                                        blob_cleanup.delete()
+                                except:
+                                    pass  # Don't fail the task if cleanup fails
+                            else:
+                                # Synchronous fallback returned text directly
+                                markdown_content = batch_result
                     else:
                         # For images and HTML, use synchronous processing
                         print("--- [Celery Task] Image/HTML file - using synchronous processing")
