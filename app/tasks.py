@@ -317,9 +317,10 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
             # Get credentials
             print("--- [Celery Task] DEBUG: Getting credentials...")
             credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-            if credentials_path:
-                # Create temporary credentials file
-                credentials_json = credentials_path
+            if credentials_path and os.path.exists(credentials_path):
+                # Read credentials file content
+                with open(credentials_path, 'r') as f:
+                    credentials_json = f.read()
                 temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
                 temp_creds.write(credentials_json)
                 temp_creds.close()
