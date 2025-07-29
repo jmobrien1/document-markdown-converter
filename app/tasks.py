@@ -424,6 +424,13 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                             else:
                                 # This should never happen - batch_result should always be True or raise an exception
                                 raise Exception("Unexpected batch processing result - should be True or raise exception")
+                        else:
+                            # For PDFs <= 10 pages, use synchronous processing
+                            print(f"--- [Celery Task] Small PDF detected ({page_count} pages) - using SYNCHRONOUS processing")
+                            markdown_content = process_with_docai(
+                                credentials_path, project_id, location, processor_id, 
+                                temp_file_path, mime_type
+                            )
                     else:
                         # For images and HTML, use synchronous processing
                         print("--- [Celery Task] Image/HTML file - using synchronous processing")
