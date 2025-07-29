@@ -205,89 +205,15 @@ class DocumentAIProcessor:
                 return True
                 
             except Exception as batch_error:
-                current_app.logger.warning(f"Batch processing failed for {input_gcs_uri}: {batch_error}")
-                
-                # Check if it's a quota or API limit error
-                error_str = str(batch_error).lower()
-                if any(keyword in error_str for keyword in ['quota', 'limit', 'rate', '400', 'failed to process']):
-                    current_app.logger.warning(f"Document AI API limits exceeded for {input_gcs_uri}, attempting synchronous fallback")
-                    
-                    # Fallback to synchronous processing
-                    try:
-                        return self.process_with_docai_sync_fallback(input_gcs_uri, self.processor_name)
-                    except Exception as sync_error:
-                        current_app.logger.error(f"Synchronous fallback also failed for {input_gcs_uri}: {sync_error}")
-                        raise Exception(f"Both batch and synchronous processing failed: {batch_error}. Fallback error: {sync_error}")
-                else:
-                    # Re-raise the original error for non-quota issues
-                    raise batch_error
+                current_app.logger.error(f"Batch processing failed for {input_gcs_uri}: {batch_error}")
+                # Remove flawed fallback logic - let the real error surface
+                raise batch_error
                     
         except ImportError:
             raise Exception("Google Cloud Document AI library not available")
         except Exception as e:
             current_app.logger.error(f"Document AI batch processing error for {input_gcs_uri}: {e}")
             raise Exception(f"Document AI batch processing failed: {str(e)}")
-    
-    def process_with_docai_sync_fallback(self, input_gcs_uri, processor_name):
-        """
-        Fallback to synchronous Document AI processing when batch fails.
-        """
-        try:
-            from google.cloud import documentai
-            from google.cloud import storage
-            
-            # Download file from GCS for synchronous processing
-            storage_client = storage.Client()
-            bucket_name = input_gcs_uri.split('/')[2]
-            blob_name = '/'.join(input_gcs_uri.split('/')[3:])
-            
-            bucket = storage_client.bucket(bucket_name)
-            blob = bucket.blob(blob_name)
-            
-            # Download to temporary file
-            import tempfile
-            import os
-            
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-                blob.download_to_filename(temp_file.name)
-                temp_file_path = temp_file.name
-            
-            try:
-                # Process with synchronous API
-                with open(temp_file_path, 'rb') as file:
-                    content = file.read()
-                
-                # Create synchronous request
-                document = documentai.Document(content=content, mime_type='application/pdf')
-                request = documentai.ProcessRequest(
-                    name=processor_name,
-                    document=document
-                )
-                
-                # Process synchronously
-                client = documentai.DocumentProcessorServiceClient()
-                result = client.process_document(request=request)
-                
-                current_app.logger.info(f"Synchronous processing completed successfully for {input_gcs_uri}")
-                
-                # Extract text from result
-                document = result.document
-                text = document.text
-                
-                # Clean up temporary file
-                os.unlink(temp_file_path)
-                
-                return text
-                
-            except Exception as sync_error:
-                # Clean up temporary file on error
-                if os.path.exists(temp_file_path):
-                    os.unlink(temp_file_path)
-                raise sync_error
-                
-        except Exception as e:
-            current_app.logger.error(f"Synchronous fallback processing failed for {input_gcs_uri}: {e}")
-            raise Exception(f"Synchronous fallback failed: {str(e)}")
 
 @celery.task(bind=True)
 def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None, credentials_json=None):
