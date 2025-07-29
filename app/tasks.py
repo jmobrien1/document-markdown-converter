@@ -206,6 +206,51 @@ class DocumentAIProcessor:
                 
             except Exception as batch_error:
                 current_app.logger.error(f"Batch processing failed for {input_gcs_uri}: {batch_error}")
+                
+                # Enhanced error logging: Capture detailed failure information
+                try:
+                    # Check if this is a Google API error with operation metadata
+                    if hasattr(batch_error, 'operation') and batch_error.operation:
+                        operation = batch_error.operation
+                        current_app.logger.error(f"Batch operation metadata: {operation}")
+                        
+                        # Extract individual process statuses if available
+                        if hasattr(operation, 'metadata') and operation.metadata:
+                            metadata = operation.metadata
+                            current_app.logger.error(f"Batch operation metadata: {metadata}")
+                            
+                            # Look for individual process statuses
+                            if hasattr(metadata, 'individual_process_statuses'):
+                                for i, status in enumerate(metadata.individual_process_statuses):
+                                    current_app.logger.error(f"Individual process {i} status: {status}")
+                                    if hasattr(status, 'status') and status.status:
+                                        current_app.logger.error(f"  - Status code: {status.status.code}")
+                                        current_app.logger.error(f"  - Status message: {status.status.message}")
+                                    if hasattr(status, 'input_gcs_source'):
+                                        current_app.logger.error(f"  - Input GCS source: {status.input_gcs_source}")
+                                    if hasattr(status, 'output_gcs_destinations'):
+                                        current_app.logger.error(f"  - Output GCS destinations: {status.output_gcs_destinations}")
+                            
+                            # Also check for common error patterns
+                            if hasattr(metadata, 'state'):
+                                current_app.logger.error(f"Batch operation state: {metadata.state}")
+                            if hasattr(metadata, 'state_message'):
+                                current_app.logger.error(f"Batch operation state message: {metadata.state_message}")
+                    
+                    # Check if this is a Google API error with error details
+                    if hasattr(batch_error, 'error') and batch_error.error:
+                        error = batch_error.error
+                        current_app.logger.error(f"Google API error details: {error}")
+                        if hasattr(error, 'code'):
+                            current_app.logger.error(f"  - Error code: {error.code}")
+                        if hasattr(error, 'message'):
+                            current_app.logger.error(f"  - Error message: {error.message}")
+                        if hasattr(error, 'details'):
+                            current_app.logger.error(f"  - Error details: {error.details}")
+                            
+                except Exception as logging_error:
+                    current_app.logger.error(f"Error while extracting detailed error information: {logging_error}")
+                
                 # Remove flawed fallback logic - let the real error surface
                 raise batch_error
                     
@@ -496,6 +541,28 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
             
     except Exception as e:
         print(f"--- [Celery Task] ERROR: {str(e)}")
+        
+        # Enhanced error logging for Google Document AI errors
+        if "Document AI" in str(e) or "batch processing" in str(e).lower():
+            print(f"--- [Celery Task] DETAILED ERROR ANALYSIS:")
+            print(f"  - Error type: {type(e).__name__}")
+            print(f"  - Error message: {str(e)}")
+            
+            # Check for Google API specific error attributes
+            if hasattr(e, 'code'):
+                print(f"  - Google API error code: {e.code}")
+            if hasattr(e, 'message'):
+                print(f"  - Google API error message: {e.message}")
+            if hasattr(e, 'details'):
+                print(f"  - Google API error details: {e.details}")
+            if hasattr(e, 'reason'):
+                print(f"  - Google API error reason: {e.reason}")
+            
+            # Log additional context
+            print(f"  - File: {original_filename}")
+            print(f"  - Page count: {page_count}")
+            print(f"  - Use Pro converter: {use_pro_converter}")
+            print(f"  - Conversion ID: {conversion_id}")
         
         # Update conversion record with failure
         if conversion_id:
