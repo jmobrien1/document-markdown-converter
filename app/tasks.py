@@ -314,20 +314,51 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
     
     try:
         with current_app.app_context():
-            # Get credentials
+            # Get credentials with comprehensive validation
             print("--- [Celery Task] DEBUG: Getting credentials...")
             credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-            if credentials_path and os.path.exists(credentials_path):
-                # Read credentials file content
+            
+            if not credentials_path:
+                error_msg = "GOOGLE_APPLICATION_CREDENTIALS environment variable not set in worker process"
+                current_app.logger.error(error_msg)
+                raise Exception(error_msg)
+            
+            if not os.path.exists(credentials_path):
+                error_msg = f"Google Cloud credentials file not found at: {credentials_path} in worker process"
+                current_app.logger.error(error_msg)
+                raise Exception(error_msg)
+            
+            # Read and validate credentials content
+            try:
                 with open(credentials_path, 'r') as f:
                     credentials_json = f.read()
-                temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-                temp_creds.write(credentials_json)
-                temp_creds.close()
-                credentials_path = temp_creds.name
-                print(f"--- [Celery Task] Explicitly using credentials from: {credentials_path}")
-            else:
-                raise Exception("Google Cloud credentials not found")
+                
+                if not credentials_json.strip():
+                    error_msg = "Google Cloud credentials file is empty in worker process"
+                    current_app.logger.error(error_msg)
+                    raise Exception(error_msg)
+                
+                # Basic JSON validation
+                import json
+                try:
+                    json.loads(credentials_json)
+                    current_app.logger.info("Google Cloud credentials validated successfully in worker process")
+                except json.JSONDecodeError as e:
+                    error_msg = f"Google Cloud credentials file contains invalid JSON in worker process: {e}"
+                    current_app.logger.error(error_msg)
+                    raise Exception(error_msg)
+                    
+            except Exception as e:
+                error_msg = f"Error reading Google Cloud credentials in worker process: {e}"
+                current_app.logger.error(error_msg)
+                raise Exception(error_msg)
+            
+            # Create temporary credentials file for Google Cloud libraries
+            temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+            temp_creds.write(credentials_json)
+            temp_creds.close()
+            credentials_path = temp_creds.name
+            print(f"--- [Celery Task] Created temporary credentials file: {credentials_path}")
             
             # Download file from GCS
             print("--- [Celery Task] DEBUG: Downloading file from GCS...")
