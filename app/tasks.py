@@ -137,7 +137,7 @@ def process_with_docai(credentials_path, project_id, location, processor_id, fil
             image_content = image.read()
 
         raw_document = documentai.RawDocument(content=image_content, mime_type=mime_type)
-        processor_name = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
+        processor_name = f"projects/{project_id}/locations/{location}/processors/{processor_id}/processorVersions/pretrained-ocr-v2.0-2023-06-02"
         
         print("--- [Celery Task] Sending request to Google Document AI API...")
         
@@ -158,7 +158,7 @@ class DocumentAIProcessor:
         self.location = location
         self.processor_id = processor_id
         self.opts = {"api_endpoint": f"{location}-documentai.googleapis.com"}
-        self.processor_name = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
+        self.processor_name = f"projects/{project_id}/locations/{location}/processors/{processor_id}/processorVersions/pretrained-ocr-v2.0-2023-06-02"
 
     def process_with_docai_batch(self, input_gcs_uri, output_gcs_uri):
         """
