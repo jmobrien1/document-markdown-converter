@@ -432,8 +432,8 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                                 except:
                                     pass  # Don't fail the task if cleanup fails
                             else:
-                                # Synchronous fallback returned text directly
-                                markdown_content = batch_result
+                                # This should never happen - batch_result should always be True or raise an exception
+                                raise Exception("Unexpected batch processing result - should be True or raise exception")
                     else:
                         # For images and HTML, use synchronous processing
                         print("--- [Celery Task] Image/HTML file - using synchronous processing")
