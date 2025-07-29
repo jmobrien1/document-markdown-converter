@@ -185,9 +185,12 @@ def process_with_docai_batch(credentials_path, project_id, location, processor_i
         
         # Configure the batch process request with correct API structure
         gcs_prefix = documentai.GcsPrefix(gcs_uri_prefix=input_gcs_uri)
-        input_config = documentai.BatchDocumentsInputConfig(
+        gcs_documents = documentai.GcsDocuments(
             gcs_prefix=gcs_prefix,
             mime_type="application/pdf"
+        )
+        input_config = documentai.BatchDocumentsInputConfig(
+            gcs_documents=gcs_documents
         )
         
         output_config = documentai.DocumentOutputConfig(
