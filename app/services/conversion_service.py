@@ -1,0 +1,234 @@
+# app/services/conversion_service.py
+# Service layer for document conversion business logic
+
+import os
+import tempfile
+import time
+from datetime import datetime, timezone
+from flask import current_app, jsonify, request
+from werkzeug.utils import secure_filename
+from google.cloud import storage
+from pypdf import PdfReader
+
+from app.models import Conversion, User, AnonymousUsage
+from app.tasks import convert_file_task
+
+
+class ConversionService:
+    """Service class for handling document conversion business logic."""
+    
+    def __init__(self):
+        self.allowed_extensions = {'pdf', 'doc', 'docx', 'txt'}
+        self.max_file_size = 50 * 1024 * 1024  # 50MB
+    
+    def validate_file(self, file):
+        """Validate uploaded file for security and compatibility."""
+        if not file or file.filename == '':
+            return False, "No file selected"
+        
+        # Check file extension
+        filename = secure_filename(file.filename)
+        file_extension = os.path.splitext(filename)[1].lower()
+        
+        if not file_extension or file_extension[1:] not in self.allowed_extensions:
+            return False, f"File type not supported. Allowed types: {', '.join(self.allowed_extensions)}"
+        
+        # Check file size
+        file.seek(0, 2)  # Seek to end
+        file_size = file.tell()
+        file.seek(0)  # Reset to beginning
+        
+        if file_size > self.max_file_size:
+            return False, f"File too large. Maximum size: {self.max_file_size // (1024*1024)}MB"
+        
+        return True, filename
+    
+    def get_pdf_page_count(self, file_path):
+        """Get accurate page count for PDF files."""
+        try:
+            with open(file_path, 'rb') as file:
+                reader = PdfReader(file)
+                return len(reader.pages)
+        except Exception as e:
+            current_app.logger.error(f"Error getting PDF page count: {e}")
+            return 1  # Fallback to 1 page
+    
+    def upload_to_gcs(self, file, filename):
+        """Upload file to Google Cloud Storage."""
+        try:
+            # Get storage client
+            storage_client = storage.Client()
+            bucket_name = os.environ.get('GCS_BUCKET_NAME')
+            bucket = storage_client.bucket(bucket_name)
+            
+            # Create unique blob name
+            import uuid
+            unique_id = str(uuid.uuid4())
+            blob_name = f"uploads/{unique_id}/{filename}"
+            
+            # Upload file
+            blob = bucket.blob(blob_name)
+            blob.upload_from_file(file)
+            
+            return bucket_name, blob_name
+            
+        except Exception as e:
+            current_app.logger.error(f"Error uploading to GCS: {e}")
+            raise Exception("Failed to upload file to cloud storage")
+    
+    def create_conversion_record(self, user_id, session_id, filename, file_size, file_type, use_pro_converter=False):
+        """Create a new conversion record in the database."""
+        try:
+            conversion = Conversion(
+                user_id=user_id,
+                session_id=session_id,
+                original_filename=filename,
+                file_size=file_size,
+                file_type=file_type,
+                conversion_type='pro' if use_pro_converter else 'standard',
+                status='pending'
+            )
+            
+            from app import db
+            db.session.add(conversion)
+            db.session.commit()
+            
+            return conversion
+            
+        except Exception as e:
+            current_app.logger.error(f"Error creating conversion record: {e}")
+            raise Exception("Failed to create conversion record")
+    
+    def check_user_access(self, user, use_pro_converter):
+        """Check if user has access to the requested conversion type."""
+        if not user:
+            # Anonymous user - check limits
+            session_id = request.cookies.get('session_id', 'anonymous')
+            usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
+            
+            if not usage.can_convert():
+                return False, "Daily conversion limit exceeded for anonymous users"
+            
+            return True, None
+        
+        # Logged in user
+        if use_pro_converter and not user.has_pro_access:
+            return False, "Pro access required. Please upgrade to Pro or check your trial status."
+        
+        return True, None
+    
+    def process_conversion(self, file, filename, use_pro_converter=False, user=None):
+        """Main method to process a file conversion."""
+        try:
+            # Validate file
+            is_valid, error_message = self.validate_file(file)
+            if not is_valid:
+                return False, error_message
+            
+            # Check user access
+            can_convert, access_error = self.check_user_access(user, use_pro_converter)
+            if not can_convert:
+                return False, access_error
+            
+            # Get file size
+            file.seek(0, 2)
+            file_size = file.tell()
+            file.seek(0)
+            
+            # Get file type
+            file_extension = os.path.splitext(filename)[1].lower()
+            
+            # Get page count for PDFs
+            page_count = None
+            if file_extension == '.pdf':
+                # Create temporary file to get page count
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                    file.save(temp_file.name)
+                    page_count = self.get_pdf_page_count(temp_file.name)
+                    os.unlink(temp_file.name)
+            
+            # Upload to GCS
+            bucket_name, blob_name = self.upload_to_gcs(file, filename)
+            
+            # Create conversion record
+            user_id = user.id if user else None
+            session_id = request.cookies.get('session_id', 'anonymous')
+            conversion = self.create_conversion_record(
+                user_id, session_id, filename, file_size, file_extension, use_pro_converter
+            )
+            
+            # Get Google Cloud credentials
+            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+            if not credentials_json:
+                return False, "Google Cloud credentials not configured"
+            
+            # Start conversion task
+            task = convert_file_task.delay(
+                bucket_name,
+                blob_name,
+                filename,
+                use_pro_converter,
+                conversion.id,
+                page_count,
+                credentials_json
+            )
+            
+            # Update anonymous usage if applicable
+            if not user:
+                session_id = request.cookies.get('session_id', 'anonymous')
+                usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
+                usage.increment_usage()
+            
+            return True, {
+                'task_id': task.id,
+                'conversion_id': conversion.id,
+                'status': 'queued'
+            }
+            
+        except Exception as e:
+            current_app.logger.error(f"Error in conversion service: {e}")
+            return False, str(e)
+    
+    def get_conversion_status(self, conversion_id):
+        """Get the status of a conversion."""
+        try:
+            conversion = Conversion.get_conversion_safely(conversion_id)
+            if not conversion:
+                return False, "Conversion not found"
+            
+            return True, {
+                'id': conversion.id,
+                'status': conversion.status,
+                'filename': conversion.original_filename,
+                'created_at': conversion.created_at.isoformat() if conversion.created_at else None,
+                'completed_at': conversion.completed_at.isoformat() if conversion.completed_at else None,
+                'error_message': conversion.error_message
+            }
+            
+        except Exception as e:
+            current_app.logger.error(f"Error getting conversion status: {e}")
+            return False, str(e)
+    
+    def get_conversion_result(self, conversion_id):
+        """Get the result of a completed conversion."""
+        try:
+            conversion = Conversion.get_conversion_safely(conversion_id)
+            if not conversion:
+                return False, "Conversion not found"
+            
+            if conversion.status != 'completed':
+                return False, f"Conversion not completed. Status: {conversion.status}"
+            
+            # For now, return basic info - in a real implementation,
+            # you might store the markdown content in the database or retrieve it from storage
+            return True, {
+                'id': conversion.id,
+                'filename': conversion.original_filename,
+                'markdown_length': conversion.markdown_length,
+                'processing_time': conversion.processing_time,
+                'pages_processed': getattr(conversion, 'pages_processed', None)
+            }
+            
+        except Exception as e:
+            current_app.logger.error(f"Error getting conversion result: {e}")
+            return False, str(e) 

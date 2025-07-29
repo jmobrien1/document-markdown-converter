@@ -22,6 +22,7 @@ except ImportError:
     current_user = None
 
 from ..models import User, AnonymousUsage, Conversion
+from ..services.conversion_service import ConversionService
 from .. import db
 from . import main
 
@@ -250,273 +251,101 @@ def index():
 @main.route('/convert', methods=['POST'])
 def convert():
     """
-    Handles file upload, checks for pro conversion flag, and starts the task.
-    Now supports both authenticated and anonymous users with rate limiting.
-    Enhanced for batch processing of large documents.
-    Enhanced with comprehensive file validation and security checks.
+    Handles file upload and conversion using the ConversionService.
+    Lightweight route handler that delegates business logic to the service layer.
     """
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
     
     file = request.files['file']
     
-    if file.filename == '' or not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid or no selected file'}), 400
-
-    # SECURITY: Comprehensive file validation
-    try:
-        # Validate file signature (magic number)
-        is_valid_signature, signature_error = validate_file_signature(file, file.filename)
-        if not is_valid_signature:
-            current_app.logger.warning(f"File signature validation failed: {signature_error} for file: {file.filename}")
-            return jsonify({'error': signature_error}), 400
-        
-        # Validate file content for text-based files
-        is_valid_content, content_error = validate_file_content(file, file.filename)
-        if not is_valid_content:
-            current_app.logger.warning(f"File content validation failed: {content_error} for file: {file.filename}")
-            return jsonify({'error': content_error}), 400
-        
-        # Log successful validation
-        current_app.logger.info(f"File validation passed for: {file.filename}")
-        
-    except Exception as e:
-        current_app.logger.error(f"Error during file validation: {e}")
-        return jsonify({'error': 'Error validating file format'}), 400
-
-    # Check conversion limits
-    can_convert, limit_error = check_conversion_limits()
-    if not can_convert:
-        return jsonify({'error': limit_error}), 429
-
-    filename = secure_filename(file.filename)
-    blob_name = f"uploads/{uuid.uuid4()}_{filename}"
-    bucket_name = current_app.config['GCS_BUCKET_NAME']
-
     # Check if the user requested a pro conversion
     use_pro_converter = request.form.get('pro_conversion') == 'on'
     
-    # Get user info for logging and Pro access check
-    user_email = 'Anonymous'
+    # Get user info
     user = None
     if current_user and current_user.is_authenticated:
         user = User.get_user_safely(current_user.id)
         if user:
-            # Ensure user is properly bound to session
             user = db.session.merge(user)
-            user_email = user.email
-        else:
-            user_email = 'Unknown'
     
-    # Block Pro conversions for users without access
-    if use_pro_converter:
-        if not current_user or not current_user.is_authenticated:
-            return jsonify({
-                'error': 'Pro conversions require a free account. Please sign up to access advanced features.',
-                'upgrade_required': True,
-                'upgrade_url': url_for('auth.signup')
-            }), 403
-        
-        if not user or not user.has_pro_access:
-            # Check if user has trial days remaining
-            trial_days = user.trial_days_remaining if user else 0
-            if trial_days > 0:
-                return jsonify({
-                    'error': f'Your trial has expired. You had {trial_days} days remaining. Please upgrade to continue using Pro features.',
-                    'upgrade_required': True,
-                    'upgrade_url': url_for('auth.upgrade'),
-                    'trial_expired': True
-                }), 403
-            else:
-                return jsonify({
-                    'error': 'Pro conversions require an active subscription or trial. Please upgrade to access advanced features.',
-                    'upgrade_required': True,
-                    'upgrade_url': url_for('auth.upgrade')
-                }), 403
-    
-    current_app.logger.info(f"Convert route called. Pro conversion: {use_pro_converter}, User: {user_email}")
-    
-    try:
-        # Validate credentials before queuing task
-        credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-        if not credentials_json:
-            current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
-            return jsonify({'error': 'Google Cloud credentials not configured. Please contact support.'}), 500
-        
-        if not credentials_json.strip():
-            current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable is empty")
-            return jsonify({'error': 'Google Cloud credentials are empty. Please contact support.'}), 500
-        
-        # Basic JSON validation
-        try:
-            import json
-            json.loads(credentials_json)
-            current_app.logger.info("Google Cloud credentials validated successfully")
-        except json.JSONDecodeError as e:
-            current_app.logger.error(f"Google Cloud credentials contain invalid JSON: {e}")
-            return jsonify({'error': 'Google Cloud credentials contain invalid JSON. Please contact support.'}), 500
-
-        # Get storage client with proper credential handling
-        storage_client = get_storage_client()
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-        blob.upload_from_file(file)
-        current_app.logger.info(f"Successfully uploaded {filename} to GCS bucket {bucket_name}")
-
-    except Exception as e:
-        current_app.logger.error(f"GCS Upload Failed: {e}")
-        return jsonify({'error': 'Could not upload file to cloud storage.'}), 500
-
-    # Create conversion record
-    user_id = current_user.id if current_user and current_user.is_authenticated else None
-    session_id = session.get('session_id') if not current_user or not current_user.is_authenticated else None
-    
-    # Get file size and accurate page count
-    file.seek(0, 2)  # Seek to end
-    file_size = file.tell()
-    file.seek(0)  # Reset to beginning
-    
-    # Get accurate page count for PDF files
-    page_count = get_accurate_pdf_page_count(file, filename)
-    
-    # Determine if this will be a batch job based on actual page count
-    is_large_file = page_count > 10  # Google DocAI sync API limit
-    
-    # Create conversion record with proper error handling
-    try:
-        conversion = Conversion(
-            user_id=user_id,
-            session_id=session_id,
-            original_filename=filename,
-            file_size=file_size,
-            file_type=os.path.splitext(filename)[1].lower(),
-            conversion_type='pro' if use_pro_converter else 'standard',
-            status='pending'
-        )
-        db.session.add(conversion)
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()  # Clean up the failed transaction
-        if 'job_id' in str(e) and 'does not exist' in str(e):
-            print(f"❌ Database schema error: job_id column missing. Error: {str(e)}")
-            return jsonify({
-                'error': 'System maintenance in progress. Please try again in a few minutes.',
-                'details': 'Database schema is being updated.'
-            }), 503
-        else:
-            print(f"❌ Database error during conversion creation: {str(e)}")
-            return jsonify({'error': 'Database error occurred. Please try again.'}), 500
-
-    # Update anonymous usage
-    if not current_user or not current_user.is_authenticated:
-        usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
-        usage.increment_usage()
-
-    # Start the conversion task with accurate page count
-    task = convert_file_task.delay(
-        bucket_name,
-        blob_name,
-        filename,
-        use_pro_converter,
-        conversion.id,
-        page_count,  # Pass accurate page count to the task
-        credentials_json # Pass credentials as a string
+    # Use the ConversionService to handle all business logic
+    conversion_service = ConversionService()
+    success, result = conversion_service.process_conversion(
+        file=file,
+        filename=file.filename,
+        use_pro_converter=use_pro_converter,
+        user=user
     )
-
-    # Store the Celery job ID in the Conversion record
-    try:
-        conversion.job_id = task.id
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()  # Clean up the failed transaction
-        if 'job_id' in str(e) and 'does not exist' in str(e):
-            print(f"⚠️ Warning: job_id column missing, but conversion {conversion.id} was created successfully")
-            # Continue without job_id - the conversion will still work
-        else:
-            print(f"❌ Error storing job_id: {str(e)}")
-            # Continue without job_id - the conversion will still work
-
-    # Provide appropriate user feedback based on file size
-    response_data = {
-        'job_id': task.id,
-        'conversion_id': conversion.id,
-        'status_url': url_for('main.task_status', job_id=task.id),
-        'is_large_file': is_large_file
-    }
     
-    if is_large_file and use_pro_converter:
-        response_data['message'] = 'Large document detected. This may take several minutes to process.'
+    if not success:
+        return jsonify({'error': result}), 400
     
-    return jsonify(response_data), 202
+    return jsonify(result), 200
 
 @main.route('/status/<job_id>')
 def task_status(job_id):
     """
-    Endpoint for the client to poll for the status of a background task.
-    Returns lightweight status information only - no large payloads.
+    Get the status of a conversion task.
+    Uses ConversionService for business logic.
     """
-    task = convert_file_task.AsyncResult(job_id)
-    
-    if task.state == 'PENDING':
-        response = {
-            'state': task.state, 
-            'status': 'Pending...',
-            'progress': 0
-        }
-    elif task.state == 'PROGRESS':
-        progress_info = task.info.get('status', 'Processing...')
-        progress_percent = task.info.get('progress', 0) if isinstance(task.info, dict) else 0
-        response = {
-            'state': task.state, 
-            'status': progress_info,
-            'progress': progress_percent
-        }
-    elif task.state == 'SUCCESS':
-        # Only return lightweight success info - no large markdown content
-        result_info = task.info if task.info else {}
-        response = {
-            'state': 'SUCCESS',
-            'status': 'Conversion completed successfully',
-            'progress': 100,
-            'filename': result_info.get('filename', 'Unknown'),
-            'markdown_length': len(result_info.get('markdown', '')) if result_info.get('markdown') else 0,
-            'has_result': True
-        }
-    else: # 'FAILURE'
-        error_info = task.info if task.info else {}
-        response = {
-            'state': 'FAILURE',
-            'status': 'Conversion failed',
-            'progress': 0,
-            'error': error_info.get('error', 'An unknown error occurred.') if isinstance(error_info, dict) else str(error_info)
-        }
+    try:
+        # For now, we'll use the existing Celery task status
+        # In a full implementation, you might want to store task status in the database
+        from celery.result import AsyncResult
+        task_result = AsyncResult(job_id)
         
-    return jsonify(response)
+        if task_result.ready():
+            if task_result.successful():
+                return jsonify({
+                    'status': 'completed',
+                    'job_id': job_id
+                })
+            else:
+                return jsonify({
+                    'status': 'failed',
+                    'error': str(task_result.result),
+                    'job_id': job_id
+                })
+        else:
+            return jsonify({
+                'status': 'processing',
+                'job_id': job_id
+            })
+            
+    except Exception as e:
+        current_app.logger.error(f"Error getting task status: {e}")
+        return jsonify({'error': 'Error retrieving task status'}), 500
 
 @main.route('/result/<job_id>')
 def task_result(job_id):
     """
-    Endpoint to retrieve the full conversion result (including markdown content).
-    Only called when status indicates SUCCESS.
+    Get the result of a completed conversion task.
+    Uses ConversionService for business logic.
     """
-    task = convert_file_task.AsyncResult(job_id)
-    
-    if task.state != 'SUCCESS':
-        return jsonify({
-            'error': 'Result not ready yet. Check status first.',
-            'state': task.state
-        }), 400
-    
-    # Return the full result with markdown content
-    result_info = task.info if task.info else {}
-    response = {
-        'state': 'SUCCESS',
-        'markdown': result_info.get('markdown', ''),
-        'filename': result_info.get('filename', 'Unknown'),
-        'status': result_info.get('status', 'SUCCESS')
-    }
-    
-    return jsonify(response)
+    try:
+        from celery.result import AsyncResult
+        task_result = AsyncResult(job_id)
+        
+        if not task_result.ready():
+            return jsonify({'error': 'Task not completed yet'}), 202
+        
+        if not task_result.successful():
+            return jsonify({'error': str(task_result.result)}), 400
+        
+        result = task_result.result
+        if isinstance(result, dict) and result.get('status') == 'SUCCESS':
+            return jsonify({
+                'status': 'success',
+                'markdown': result.get('markdown', ''),
+                'filename': result.get('filename', '')
+            })
+        else:
+            return jsonify({'error': 'Task completed but no result available'}), 400
+            
+    except Exception as e:
+        current_app.logger.error(f"Error getting task result: {e}")
+        return jsonify({'error': 'Error retrieving task result'}), 500
 
 @main.route('/stats')
 def conversion_stats():

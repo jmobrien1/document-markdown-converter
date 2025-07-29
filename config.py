@@ -18,7 +18,49 @@ class Config:
         'docx', 'xlsx', 'xls', 'pptx', 'htm', 'csv', 'json', 'xml', 'zip', 'epub'
     }
 
-    # Anonymous user daily conversion limit
+    # --- File Upload Configuration ---
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+    ANONYMOUS_DAILY_LIMIT = 5
+    ANONYMOUS_FILE_SIZE_LIMIT = 10 * 1024 * 1024  # 10MB for anonymous users
+    
+    # --- Trial and Subscription Configuration ---
+    TRIAL_DAYS = 14
+    TRIAL_PAGES_PER_MONTH = 100
+    PRO_PAGES_PER_MONTH = 1000
+    ENTERPRISE_PAGES_PER_MONTH = -1  # Unlimited
+    
+    # --- Conversion Limits ---
+    BATCH_PROCESSING_PAGE_THRESHOLD = 10  # Use batch processing for PDFs > 10 pages
+    BATCH_PROCESSING_TIMEOUT = 600  # 10 minutes
+    SYNCHRONOUS_PROCESSING_TIMEOUT = 300  # 5 minutes
+    
+    # --- Security Configuration ---
+    VIRUS_SCAN_ENABLED = os.environ.get('VIRUS_SCAN_ENABLED', 'false').lower() == 'true'
+    CLAMD_HOST = os.environ.get('CLAMD_HOST', 'localhost')
+    CLAMD_PORT = int(os.environ.get('CLAMD_PORT', 3310))
+    
+    # --- Google Cloud Configuration ---
+    GOOGLE_CLOUD_PROJECT = os.environ.get('GOOGLE_CLOUD_PROJECT')
+    GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME')
+    DOCAI_PROCESSOR_REGION = os.environ.get('DOCAI_PROCESSOR_REGION', 'us')
+    DOCAI_PROCESSOR_ID = os.environ.get('DOCAI_PROCESSOR_ID')
+    DOCAI_PROCESSOR_VERSION = 'pretrained-ocr-v2.0-2023-06-02'
+    
+    # --- API Configuration ---
+    API_RATE_LIMIT = '100 per minute'
+    API_RATE_LIMIT_STORAGE_URL = 'memory://'
+    
+    # --- Session Configuration ---
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    PERMANENT_SESSION_LIFETIME = 30 * 24 * 60 * 60  # 30 days
+    
+    # --- Error Handling Configuration ---
+    MAX_ERROR_MESSAGE_LENGTH = 500
+    LOG_ERROR_DETAILS = os.environ.get('LOG_ERROR_DETAILS', 'true').lower() == 'true'
+    
+    # --- Anonymous user daily conversion limit
     ANONYMOUS_DAILY_LIMIT = 5
 
     # --- Celery Configuration ---
@@ -45,8 +87,6 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER')
 
     # --- Google Cloud Storage Configuration ---
-    GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME')
-
     # Handle Google Cloud credentials for both local development and Render deployment
     if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
         # Render deployment - create temporary credentials file from environment variable
@@ -66,8 +106,8 @@ class Config:
             GCS_CREDENTIALS_PATH = None
 
     # --- Google Document AI Configuration ---
-    DOCAI_PROCESSOR_REGION = os.environ.get('DOCAI_PROCESSOR_REGION', 'us-east4')
-    DOCAI_PROCESSOR_ID = os.environ.get('DOCAI_PROCESSOR_ID')
+    # DOCAI_PROCESSOR_REGION = os.environ.get('DOCAI_PROCESSOR_REGION', 'us-east4')
+    # DOCAI_PROCESSOR_ID = os.environ.get('DOCAI_PROCESSOR_ID')
 
     # --- Stripe Configuration ---
     STRIPE_PUBLIC_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY')

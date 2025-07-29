@@ -12,12 +12,15 @@ from google.cloud import storage, documentai
 from google.oauth2 import service_account
 from google.api_core import exceptions as google_exceptions
 from markitdown import MarkItDown
-from celery import current_task
-from app import celery, db
+from celery import Celery, current_task
 from flask import current_app
+from app import db
 from app.models import Conversion, User, Batch, ConversionJob
 from app.email import send_conversion_complete_email
 from datetime import datetime, timezone
+
+# Create Celery instance
+celery = Celery('mdraft', include=['app.tasks'])
 
 # Configuration constants
 MONTHLY_PAGE_ALLOWANCE = 1000  # Pages per month for Pro users
@@ -270,6 +273,10 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
     
     try:
         with current_app.app_context():
+            # Initialize result variables
+            markdown_content = None
+            structured_json_content = None
+            
             # Validate credentials in worker process
             if not credentials_json:
                 error_msg = "No credentials provided to worker process"
@@ -475,29 +482,77 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         result = operation.result(timeout=600)  # 10 minute timeout
                         print("--- [Celery Task] Batch processing completed successfully")
                         
-                        # Download and process results
+                        # Get operation response and metadata
+                        operation_response = operation.result()
+                        print(f"--- [Celery Task] Operation response: {operation_response}")
+                        
+                        # Get output configuration from operation metadata
+                        if hasattr(operation_response, 'metadata') and operation_response.metadata:
+                            metadata = operation_response.metadata
+                            print(f"--- [Celery Task] Operation metadata: {metadata}")
+                            
+                            # Get output GCS destination from metadata
+                            if hasattr(metadata, 'output_config') and metadata.output_config:
+                                output_config = metadata.output_config
+                                if hasattr(output_config, 'gcs_output_config') and output_config.gcs_output_config:
+                                    gcs_output_config = output_config.gcs_output_config
+                                    if hasattr(gcs_output_config, 'gcs_uri'):
+                                        output_gcs_uri = gcs_output_config.gcs_uri
+                                        print(f"--- [Celery Task] Output GCS URI from metadata: {output_gcs_uri}")
+                                    else:
+                                        # Fallback to our constructed URI
+                                        output_gcs_uri = output_gcs_uri
+                                else:
+                                    # Fallback to our constructed URI
+                                    output_gcs_uri = output_gcs_uri
+                            else:
+                                # Fallback to our constructed URI
+                                output_gcs_uri = output_gcs_uri
+                        else:
+                            # Fallback to our constructed URI
+                            output_gcs_uri = output_gcs_uri
+                        
+                        # List all output blobs in the GCS output directory
                         output_blobs = list(bucket.list_blobs(prefix=output_blob_name))
+                        print(f"--- [Celery Task] Found {len(output_blobs)} output blobs")
+                        
                         if not output_blobs:
                             raise Exception("No output files found from batch processing")
                         
-                        # Download the first output file (should be the processed document)
-                        output_blob = output_blobs[0]
-                        output_temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
-                        output_blob.download_to_filename(output_temp_file.name)
+                        # Process all output files and combine text
+                        combined_text = ""
+                        for i, output_blob in enumerate(output_blobs):
+                            if output_blob.name.endswith('.json'):
+                                print(f"--- [Celery Task] Processing output blob {i+1}/{len(output_blobs)}: {output_blob.name}")
+                                
+                                # Download the JSON result
+                                output_temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
+                                output_blob.download_to_filename(output_temp_file.name)
+                                
+                                try:
+                                    # Parse the JSON result
+                                    import json
+                                    with open(output_temp_file.name, 'r') as f:
+                                        output_data = json.load(f)
+                                    
+                                    # Extract text from the processed document
+                                    if 'document' in output_data and 'text' in output_data['document']:
+                                        document_text = output_data['document']['text']
+                                        combined_text += document_text + "\n"
+                                        print(f"--- [Celery Task] Extracted {len(document_text)} characters from blob {i+1}")
+                                    else:
+                                        print(f"--- [Celery Task] Warning: No text found in blob {i+1}")
+                                
+                                finally:
+                                    # Clean up temporary file
+                                    os.unlink(output_temp_file.name)
                         
-                        # Parse the output JSON to extract text
-                        import json
-                        with open(output_temp_file.name, 'r') as f:
-                            output_data = json.load(f)
-                        
-                        # Extract text from the processed document
-                        if 'document' in output_data and 'text' in output_data['document']:
-                            markdown_content = output_data['document']['text']
+                        # Assign the combined text to markdown_content
+                        if combined_text.strip():
+                            markdown_content = combined_text.strip()
+                            print(f"--- [Celery Task] Successfully extracted {len(markdown_content)} characters from batch processing")
                         else:
-                            raise Exception("Could not extract text from batch processing output")
-                        
-                        # Clean up output file
-                        os.unlink(output_temp_file.name)
+                            raise Exception("No text content extracted from batch processing output")
                         
                         # Clean up batch files
                         try:
@@ -505,8 +560,10 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                                 blob_cleanup.delete()
                             for blob_cleanup in bucket.list_blobs(prefix=f"batch-output/{batch_id}/"):
                                 blob_cleanup.delete()
-                        except:
-                            pass  # Don't fail the task if cleanup fails
+                            print("--- [Celery Task] Cleaned up batch files successfully")
+                        except Exception as cleanup_error:
+                            print(f"--- [Celery Task] Warning: Failed to clean up batch files: {cleanup_error}")
+                            # Don't fail the task if cleanup fails
                         
                     except Exception as batch_error:
                         current_app.logger.error(f"Batch processing failed: {batch_error}")
