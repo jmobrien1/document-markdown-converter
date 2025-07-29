@@ -114,7 +114,7 @@ def create_app(config_name=None):
     @app.errorhandler(400)
     def bad_request(error):
         """Handle 400 Bad Request errors."""
-        if request.is_xhr or request.path.startswith('/api/'):
+        if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
             return jsonify(create_standardized_error_response(
                 "Bad request - invalid data provided",
                 400,
@@ -125,7 +125,7 @@ def create_app(config_name=None):
     @app.errorhandler(403)
     def forbidden(error):
         """Handle 403 Forbidden errors."""
-        if request.is_xhr or request.path.startswith('/api/'):
+        if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
             return jsonify(create_standardized_error_response(
                 "Access forbidden - insufficient permissions",
                 403,
@@ -136,7 +136,7 @@ def create_app(config_name=None):
     @app.errorhandler(404)
     def not_found(error):
         """Handle 404 Not Found errors."""
-        if request.is_xhr or request.path.startswith('/api/'):
+        if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
             return jsonify(create_standardized_error_response(
                 "Resource not found",
                 404,
@@ -147,7 +147,7 @@ def create_app(config_name=None):
     @app.errorhandler(413)
     def request_entity_too_large(error):
         """Handle 413 Request Entity Too Large errors."""
-        if request.is_xhr or request.path.startswith('/api/'):
+        if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
             return jsonify(create_standardized_error_response(
                 f"File too large. Maximum size: {app.config.get('MAX_FILE_SIZE', 50*1024*1024) // (1024*1024)}MB",
                 413,
@@ -158,7 +158,7 @@ def create_app(config_name=None):
     @app.errorhandler(429)
     def too_many_requests(error):
         """Handle 429 Too Many Requests errors."""
-        if request.is_xhr or request.path.startswith('/api/'):
+        if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
             return jsonify(create_standardized_error_response(
                 "Too many requests - please slow down",
                 429,
@@ -169,7 +169,7 @@ def create_app(config_name=None):
     @app.errorhandler(500)
     def internal_server_error(error):
         """Handle 500 Internal Server Error."""
-        if request.is_xhr or request.path.startswith('/api/'):
+        if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
             return jsonify(create_standardized_error_response(
                 "Internal server error - please try again later",
                 500,
