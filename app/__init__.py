@@ -66,6 +66,12 @@ def create_app(config_name=None):
     login_manager.login_message = 'Please log in to access this page.'
     login_manager.login_message_category = 'info'
     
+    @login_manager.user_loader
+    def load_user(user_id):
+        """Load user by ID for Flask-Login."""
+        from .models import User
+        return User.get_user_safely(int(user_id))
+    
     # Check database migration status
     try:
         with app.app_context():
@@ -182,7 +188,7 @@ def create_app(config_name=None):
         """Handle unhandled exceptions."""
         app.logger.error(f"Unhandled exception: {error}")
         
-        if request.is_xhr or request.path.startswith('/api/'):
+        if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
             return jsonify(create_standardized_error_response(
                 "An unexpected error occurred",
                 500,
