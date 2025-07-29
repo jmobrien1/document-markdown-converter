@@ -338,36 +338,23 @@ def convert():
     
     try:
         # Validate credentials before queuing task
-        credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-        if not credentials_path:
-            current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
+        credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        if not credentials_json:
+            current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable not set")
             return jsonify({'error': 'Google Cloud credentials not configured. Please contact support.'}), 500
         
-        if not os.path.exists(credentials_path):
-            current_app.logger.error(f"Google Cloud credentials file not found at: {credentials_path}")
-            return jsonify({'error': 'Google Cloud credentials file not found. Please contact support.'}), 500
+        if not credentials_json.strip():
+            current_app.logger.error("GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable is empty")
+            return jsonify({'error': 'Google Cloud credentials are empty. Please contact support.'}), 500
         
-        # Read and validate credentials content
+        # Basic JSON validation
         try:
-            with open(credentials_path, 'r') as f:
-                credentials_content = f.read()
-            
-            if not credentials_content.strip():
-                current_app.logger.error("Google Cloud credentials file is empty")
-                return jsonify({'error': 'Google Cloud credentials file is empty. Please contact support.'}), 500
-            
-            # Basic JSON validation
             import json
-            try:
-                json.loads(credentials_content)
-                current_app.logger.info("Google Cloud credentials validated successfully")
-            except json.JSONDecodeError as e:
-                current_app.logger.error(f"Google Cloud credentials file contains invalid JSON: {e}")
-                return jsonify({'error': 'Google Cloud credentials file contains invalid JSON. Please contact support.'}), 500
-                
-        except Exception as e:
-            current_app.logger.error(f"Error reading Google Cloud credentials: {e}")
-            return jsonify({'error': 'Error reading Google Cloud credentials. Please contact support.'}), 500
+            json.loads(credentials_json)
+            current_app.logger.info("Google Cloud credentials validated successfully")
+        except json.JSONDecodeError as e:
+            current_app.logger.error(f"Google Cloud credentials contain invalid JSON: {e}")
+            return jsonify({'error': 'Google Cloud credentials contain invalid JSON. Please contact support.'}), 500
 
         # Get storage client with proper credential handling
         storage_client = get_storage_client()
@@ -432,7 +419,8 @@ def convert():
         filename,
         use_pro_converter,
         conversion.id,
-        page_count  # Pass accurate page count to the task
+        page_count,  # Pass accurate page count to the task
+        credentials_json # Pass credentials as a string
     )
 
     # Store the Celery job ID in the Conversion record

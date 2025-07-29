@@ -290,75 +290,36 @@ class DocumentAIProcessor:
             raise Exception(f"Synchronous fallback failed: {str(e)}")
 
 @celery.task(bind=True)
-def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None):
+def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None, credentials_json=None):
     """
-    Celery task to perform file conversion, update the Conversion record, and handle errors robustly.
-    Enhanced with virus scanning and security logging.
-
-    Args:
-        self: Celery task instance (provided by Celery).
-        bucket_name (str): Name of the GCS bucket.
-        blob_name (str): Name of the blob in the bucket.
-        original_filename (str): Original filename of the uploaded file.
-        use_pro_converter (bool, optional): Whether to use the Pro (Document AI) converter. Defaults to False.
-        conversion_id (int, optional): ID of the Conversion record to update. Defaults to None.
-        page_count (int, optional): Accurate page count for PDF files. Defaults to None.
-
-    Returns:
-        dict: Result dictionary with status, markdown content (if successful), and filename.
+    Convert uploaded file to Markdown using Celery background task.
+    Enhanced with comprehensive security scanning, accurate page counting, and robust error handling.
     """
-    print("\n\n--- [Celery Task] NEW TASK RECEIVED ---")
-    print(f"    Filename: '{original_filename}' | Pro mode: {use_pro_converter} | Pages: {page_count}")
-    temp_file_path = None
     start_time = time.time()
     
     try:
         with current_app.app_context():
-            # Get credentials with comprehensive validation
-            print("--- [Celery Task] DEBUG: Getting credentials...")
-            credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-            
-            if not credentials_path:
-                error_msg = "GOOGLE_APPLICATION_CREDENTIALS environment variable not set in worker process"
+            # Validate credentials in worker process
+            if not credentials_json:
+                error_msg = "No credentials provided to worker process"
                 current_app.logger.error(error_msg)
                 raise Exception(error_msg)
             
-            if not os.path.exists(credentials_path):
-                error_msg = f"Google Cloud credentials file not found at: {credentials_path} in worker process"
+            if not credentials_json.strip():
+                error_msg = "Empty credentials provided to worker process"
                 current_app.logger.error(error_msg)
                 raise Exception(error_msg)
             
-            # Read and validate credentials content
-            try:
-                with open(credentials_path, 'r') as f:
-                    credentials_json = f.read()
-                
-                if not credentials_json.strip():
-                    error_msg = "Google Cloud credentials file is empty in worker process"
-                    current_app.logger.error(error_msg)
-                    raise Exception(error_msg)
-                
-                # Basic JSON validation
-                import json
-                try:
-                    json.loads(credentials_json)
-                    current_app.logger.info("Google Cloud credentials validated successfully in worker process")
-                except json.JSONDecodeError as e:
-                    error_msg = f"Google Cloud credentials file contains invalid JSON in worker process: {e}"
-                    current_app.logger.error(error_msg)
-                    raise Exception(error_msg)
-                    
-            except Exception as e:
-                error_msg = f"Error reading Google Cloud credentials in worker process: {e}"
-                current_app.logger.error(error_msg)
-                raise Exception(error_msg)
+            # Create temporary credentials file in worker process
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_creds:
+                temp_creds.write(credentials_json)
+                temp_creds.flush()
+                credentials_path = temp_creds.name
             
-            # Create temporary credentials file for Google Cloud libraries
-            temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-            temp_creds.write(credentials_json)
-            temp_creds.close()
-            credentials_path = temp_creds.name
             print(f"--- [Celery Task] Created temporary credentials file: {credentials_path}")
+            
+            # Set environment variable for Google Cloud libraries
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
             
             # Download file from GCS
             print("--- [Celery Task] DEBUG: Downloading file from GCS...")
@@ -647,6 +608,22 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
             'error': str(e),
             'filename': original_filename
         }
+    finally:
+        # Clean up temporary files
+        if 'temp_file_path' in locals() and temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+                print(f"--- [Celery Task] Cleaned up temporary file: {temp_file_path}")
+            except Exception as e:
+                print(f"--- [Celery Task] Warning: Could not clean up temporary file {temp_file_path}: {e}")
+        
+        # Clean up temporary credentials file
+        if 'credentials_path' in locals() and credentials_path and os.path.exists(credentials_path):
+            try:
+                os.unlink(credentials_path)
+                print(f"--- [Celery Task] Cleaned up temporary credentials file: {credentials_path}")
+            except Exception as e:
+                print(f"--- [Celery Task] Warning: Could not clean up temporary credentials file {credentials_path}: {e}")
 
 
 @celery.task
