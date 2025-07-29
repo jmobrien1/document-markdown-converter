@@ -360,129 +360,231 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         # Use the accurate page count passed to the task
                         if page_count is None:
                             # This should not happen in production, but handle gracefully
-                            current_app.logger.warning("No page count passed to task - getting from file")
                             file_extension = os.path.splitext(original_filename)[1].lower()
-                            if file_extension == '.pdf':
-                                page_count = get_accurate_pdf_page_count(temp_file_path)
-                            else:
-                                page_count = 1  # Images and other files count as 1 page
-                        
-                        # Check if this job would exceed the monthly limit
-                        if current_usage + page_count > MONTHLY_PAGE_ALLOWANCE:
-                            remaining_pages = MONTHLY_PAGE_ALLOWANCE - current_usage
-                            raise Exception(f"Monthly limit exceeded. This job would use {page_count} pages, but you only have {remaining_pages} pages remaining this month. Please upgrade to Pro+ or wait until next month's reset.")
-                        
-                        print(f"--- [Celery Task] Usage check passed: {current_usage} + {page_count} = {current_usage + page_count} pages (limit: {MONTHLY_PAGE_ALLOWANCE})")
-                
-                # Check if file type is supported by Document AI
-                file_extension = os.path.splitext(original_filename)[1].lower()
-                docai_supported_types = {'.pdf', '.gif', '.tiff', '.tif', '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.html'}
-                
-                if file_extension not in docai_supported_types:
-                    print(f"--- [Celery Task] File type {file_extension} not supported by Document AI, falling back to standard converter")
-                    print("--- [Celery Task] Starting STANDARD conversion path (markitdown).")
-                    md = MarkItDown()
-                    result = md.convert(temp_file_path)
-                    markdown_content = result.text_content
-                else:
-                    print("--- [Celery Task] Starting PRO conversion path (Document AI).")
-                    
-                    project_id = os.environ.get('GOOGLE_CLOUD_PROJECT', 'mdraft')
-                    location = os.environ.get('DOCAI_PROCESSOR_REGION', 'us')
-                    processor_id = os.environ.get('DOCAI_PROCESSOR_ID')
-                    
-                    print(f"Using Project ID: {project_id} | Location: {location} | Processor ID: {processor_id}")
-                    
-                    # Determine MIME type based on file extension
-                    mime_type_map = {
-                        '.pdf': 'application/pdf',
-                        '.png': 'image/png',
-                        '.jpg': 'image/jpeg',
-                        '.jpeg': 'image/jpeg',
-                        '.gif': 'image/gif',
-                        '.bmp': 'image/bmp',
-                        '.tiff': 'image/tiff',
-                        '.tif': 'image/tiff',
-                        '.webp': 'image/webp',
-                        '.html': 'text/html'
-                    }
-                    mime_type = mime_type_map.get(file_extension, 'application/pdf')
-                    
-                    # Only use page count for PDFs
-                    if file_extension == '.pdf':
-                        # Use the accurate page count passed to the task
-                        if page_count is None:
-                            # This should not happen in production, but handle gracefully
-                            current_app.logger.warning("No page count passed to task - getting from file")
-                            file_extension = os.path.splitext(original_filename)[1].lower()
-                            if file_extension == '.pdf':
-                                page_count = get_accurate_pdf_page_count(temp_file_path)
-                            else:
-                                page_count = 1  # Images and other files count as 1 page
-                        
-                        print(f"--- [Celery Task] Using accurate page count: {page_count} pages")
-                        print(f"--- [Celery Task] DEBUG: File size: {file_size} bytes")
-                        
-                        # Google Document AI sync API has a 10-page limit
-                        # Use batch processing for documents > 10 pages
-                        if page_count > 10:
-                            print(f"--- [Celery Task] Large document detected ({page_count} pages) - using BATCH processing")
-                            # Create unique GCS paths for batch processing
-                            batch_id = str(uuid.uuid4())
-                            print(f"--- [Celery Task] DEBUG: Generated batch ID: {batch_id}")
-                            # Upload file to GCS input location for batch processing
-                            input_blob_name = f"batch-input/{batch_id}/{original_filename}"
-                            print(f"--- [Celery Task] DEBUG: Uploading to batch input: {input_blob_name}")
-                            input_blob = bucket.blob(input_blob_name)
-                            input_blob.upload_from_filename(temp_file_path)
-                            input_gcs_uri = f"gs://{bucket_name}/batch-input/{batch_id}/"
-                            output_gcs_uri = f"gs://{bucket_name}/batch-output/{batch_id}/"
-                            print(f"--- [Celery Task] DEBUG: Input URI: {input_gcs_uri}")
-                            print(f"--- [Celery Task] DEBUG: Output URI: {output_gcs_uri}")
-                            # Process with batch API
-                            processor = DocumentAIProcessor(credentials_path, project_id, location, processor_id)
-                            batch_result = processor.process_with_docai_batch(input_gcs_uri, output_gcs_uri)
-                            if batch_result is True:
-                                # Batch processing succeeded, download results
-                                storage_client = storage.Client.from_service_account_json(credentials_path)
-                                bucket = storage_client.bucket(project_id)
-                                # List all output files
-                                blobs = bucket.list_blobs(prefix=output_gcs_uri.replace(f"gs://{project_id}/", ""))
-                                combined_text = ""
-                                for blob in blobs:
-                                    if blob.name.endswith('.json'):
-                                        # Download and parse the JSON result
-                                        content = blob.download_as_text()
-                                        result = json.loads(content)
-                                        # Extract text from the result
-                                        if 'document' in result and 'text' in result['document']:
-                                            combined_text += result['document']['text'] + "\n"
-                                markdown_content = combined_text.strip()
-                                # Clean up batch files
-                                try:
-                                    for blob_cleanup in bucket.list_blobs(prefix=f"batch-input/{batch_id}/"):
-                                        blob_cleanup.delete()
-                                    for blob_cleanup in bucket.list_blobs(prefix=f"batch-output/{batch_id}/"):
-                                        blob_cleanup.delete()
-                                except:
-                                    pass  # Don't fail the task if cleanup fails
-                            else:
-                                # This should never happen - batch_result should always be True or raise an exception
-                                raise Exception("Unexpected batch processing result - should be True or raise exception")
+                            pages_processed = get_accurate_pdf_page_count(temp_file_path) if file_extension == '.pdf' else 1
                         else:
-                            # For PDFs <= 10 pages, use synchronous processing
-                            print(f"--- [Celery Task] Small PDF detected ({page_count} pages) - using SYNCHRONOUS processing")
-                            markdown_content = process_with_docai(
-                                credentials_path, project_id, location, processor_id, 
-                                temp_file_path, mime_type
-                            )
-                    else:
-                        # For images and HTML, use synchronous processing
-                        print("--- [Celery Task] Image/HTML file - using synchronous processing")
-                        markdown_content = process_with_docai(
-                            credentials_path, project_id, location, processor_id, 
-                            temp_file_path, mime_type
+                            pages_processed = page_count
+                        
+                        # Check if user has exceeded monthly limit (assuming 1000 pages/month for Pro)
+                        if current_usage + pages_processed > 1000:
+                            raise Exception(f"Monthly usage limit exceeded. Current usage: {current_usage}, attempting: {pages_processed}")
+                
+                print("--- [Celery Task] Starting PRO conversion path (Google Document AI).")
+                
+                # Get Google Cloud configuration from environment
+                project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
+                location = os.environ.get('DOCAI_PROCESSOR_REGION', 'us')
+                processor_id = os.environ.get('DOCAI_PROCESSOR_ID')
+                
+                if not project_id or not processor_id:
+                    raise Exception("Google Cloud configuration missing. Please check GOOGLE_CLOUD_PROJECT and DOCAI_PROCESSOR_ID environment variables.")
+                
+                print(f"--- [Celery Task] Using Google Cloud config: Project={project_id}, Location={location}, Processor={processor_id}")
+                
+                # Determine file type and MIME type
+                file_extension = os.path.splitext(original_filename)[1].lower()
+                if file_extension == '.pdf':
+                    mime_type = 'application/pdf'
+                elif file_extension in ['.jpg', '.jpeg']:
+                    mime_type = 'image/jpeg'
+                elif file_extension == '.png':
+                    mime_type = 'image/png'
+                elif file_extension == '.tiff':
+                    mime_type = 'image/tiff'
+                elif file_extension == '.html':
+                    mime_type = 'text/html'
+                else:
+                    raise Exception(f"Unsupported file type: {file_extension}")
+                
+                # Initialize Google Document AI client with correct regional configuration
+                from google.cloud import documentai
+                from google.api_core.client_options import ClientOptions
+                
+                # CRITICAL FIX: Configure client with explicit regional endpoint
+                api_endpoint = f"{location}-documentai.googleapis.com"
+                client_options = ClientOptions(api_endpoint=api_endpoint)
+                
+                # Load credentials and create client
+                from google.auth import default
+                credentials, project = default()
+                client = documentai.DocumentProcessorServiceClient(
+                    client_options=client_options,
+                    credentials=credentials
+                )
+                
+                print(f"--- [Celery Task] Document AI client initialized with endpoint: {api_endpoint}")
+                
+                # Determine processing path based on page count
+                if page_count and page_count > 10:
+                    print(f"--- [Celery Task] Large document detected ({page_count} pages) - using BATCH processing")
+                    
+                    # BATCH PROCESSING PATH
+                    # For batch processing, use processor path WITHOUT version
+                    processor_path = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
+                    
+                    # Upload file to GCS for batch processing
+                    storage_client = storage.Client.from_service_account_json(credentials_path)
+                    bucket = storage_client.bucket(os.environ.get('GCS_BUCKET_NAME'))
+                    
+                    # Generate unique batch ID
+                    import uuid
+                    batch_id = str(uuid.uuid4())
+                    
+                    # Upload input file
+                    input_blob_name = f"batch-input/{batch_id}/{original_filename}"
+                    input_blob = bucket.blob(input_blob_name)
+                    input_blob.upload_from_filename(temp_file_path)
+                    input_gcs_uri = f"gs://{bucket.name}/{input_blob_name}"
+                    
+                    # Set up output location
+                    output_blob_name = f"batch-output/{batch_id}/"
+                    output_gcs_uri = f"gs://{bucket.name}/{output_blob_name}"
+                    
+                    print(f"--- [Celery Task] Batch processing setup: Input={input_gcs_uri}, Output={output_gcs_uri}")
+                    
+                    try:
+                        # Construct batch request with correct structure
+                        gcs_document = documentai.GcsDocument(
+                            gcs_uri=input_gcs_uri,
+                            mime_type=mime_type
                         )
+                        gcs_documents = documentai.GcsDocuments(
+                            documents=[gcs_document]
+                        )
+                        input_config = documentai.BatchDocumentsInputConfig(
+                            gcs_documents=gcs_documents
+                        )
+                        
+                        gcs_output_config = documentai.DocumentOutputConfig.GcsOutputConfig(
+                            gcs_uri=output_gcs_uri
+                        )
+                        output_config = documentai.DocumentOutputConfig(
+                            gcs_output_config=gcs_output_config
+                        )
+                        
+                        request = documentai.BatchProcessRequest(
+                            name=processor_path,  # WITHOUT version for batch
+                            input_documents=input_config,
+                            document_output_config=output_config
+                        )
+                        
+                        print(f"--- [Celery Task] Starting batch processing with processor: {processor_path}")
+                        operation = client.batch_process_documents(request=request)
+                        
+                        # Wait for operation to complete
+                        result = operation.result(timeout=600)  # 10 minute timeout
+                        print("--- [Celery Task] Batch processing completed successfully")
+                        
+                        # Download and process results
+                        output_blobs = list(bucket.list_blobs(prefix=output_blob_name))
+                        if not output_blobs:
+                            raise Exception("No output files found from batch processing")
+                        
+                        # Download the first output file (should be the processed document)
+                        output_blob = output_blobs[0]
+                        output_temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
+                        output_blob.download_to_filename(output_temp_file.name)
+                        
+                        # Parse the output JSON to extract text
+                        import json
+                        with open(output_temp_file.name, 'r') as f:
+                            output_data = json.load(f)
+                        
+                        # Extract text from the processed document
+                        if 'document' in output_data and 'text' in output_data['document']:
+                            markdown_content = output_data['document']['text']
+                        else:
+                            raise Exception("Could not extract text from batch processing output")
+                        
+                        # Clean up output file
+                        os.unlink(output_temp_file.name)
+                        
+                        # Clean up batch files
+                        try:
+                            for blob_cleanup in bucket.list_blobs(prefix=f"batch-input/{batch_id}/"):
+                                blob_cleanup.delete()
+                            for blob_cleanup in bucket.list_blobs(prefix=f"batch-output/{batch_id}/"):
+                                blob_cleanup.delete()
+                        except:
+                            pass  # Don't fail the task if cleanup fails
+                        
+                    except Exception as batch_error:
+                        current_app.logger.error(f"Batch processing failed: {batch_error}")
+                        
+                        # Enhanced error logging
+                        try:
+                            if hasattr(batch_error, 'operation') and batch_error.operation:
+                                operation = batch_error.operation
+                                current_app.logger.error(f"Batch operation metadata: {operation}")
+                                
+                                if hasattr(operation, 'metadata') and operation.metadata:
+                                    metadata = operation.metadata
+                                    current_app.logger.error(f"Batch operation metadata: {metadata}")
+                                    
+                                    if hasattr(metadata, 'individual_process_statuses'):
+                                        for i, status in enumerate(metadata.individual_process_statuses):
+                                            current_app.logger.error(f"Individual process {i} status: {status}")
+                                            if hasattr(status, 'status') and status.status:
+                                                current_app.logger.error(f"  - Status code: {status.status.code}")
+                                                current_app.logger.error(f"  - Status message: {status.status.message}")
+                                            if hasattr(status, 'input_gcs_source'):
+                                                current_app.logger.error(f"  - Input GCS source: {status.input_gcs_source}")
+                                            if hasattr(status, 'output_gcs_destinations'):
+                                                current_app.logger.error(f"  - Output GCS destinations: {status.output_gcs_destinations}")
+                                    
+                                    if hasattr(metadata, 'state'):
+                                        current_app.logger.error(f"Batch operation state: {metadata.state}")
+                                    if hasattr(metadata, 'state_message'):
+                                        current_app.logger.error(f"Batch operation state message: {metadata.state_message}")
+                            
+                            if hasattr(batch_error, 'error') and batch_error.error:
+                                error = batch_error.error
+                                current_app.logger.error(f"Google API error details: {error}")
+                                if hasattr(error, 'code'):
+                                    current_app.logger.error(f"  - Error code: {error.code}")
+                                if hasattr(error, 'message'):
+                                    current_app.logger.error(f"  - Error message: {error.message}")
+                                if hasattr(error, 'details'):
+                                    current_app.logger.error(f"  - Error details: {error.details}")
+                                    
+                        except Exception as logging_error:
+                            current_app.logger.error(f"Error while extracting detailed error information: {logging_error}")
+                        
+                        raise batch_error
+                        
+                else:
+                    # SYNCHRONOUS PROCESSING PATH
+                    print(f"--- [Celery Task] Small document detected ({page_count or 'unknown'} pages) - using SYNCHRONOUS processing")
+                    
+                    # For synchronous processing, use processor path WITH version
+                    processor_path = f"projects/{project_id}/locations/{location}/processors/{processor_id}/processorVersions/pretrained-ocr-v2.0-2023-06-02"
+                    
+                    # Read file content
+                    with open(temp_file_path, "rb") as image:
+                        image_content = image.read()
+                    
+                    # Create raw document
+                    raw_document = documentai.RawDocument(
+                        content=image_content,
+                        mime_type=mime_type
+                    )
+                    
+                    # Create process request
+                    request = documentai.ProcessRequest(
+                        name=processor_path,
+                        raw_document=raw_document
+                    )
+                    
+                    print(f"--- [Celery Task] Starting synchronous processing with processor: {processor_path}")
+                    
+                    # Process document
+                    result = client.process_document(request=request)
+                    document = result.document
+                    
+                    # Extract text content
+                    markdown_content = document.text
+                    
+                    print("--- [Celery Task] Synchronous processing completed successfully")
             else:
                 print("--- [Celery Task] Starting STANDARD conversion path (markitdown).")
                 md = MarkItDown()
