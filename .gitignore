@@ -31,7 +31,7 @@ instance/
 .webassets-cache
 
 # Uploads directory (temporary files)
-uploads/
+/uploads/
 *.tmp
 
 # IDE
