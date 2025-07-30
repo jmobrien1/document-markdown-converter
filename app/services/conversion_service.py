@@ -30,27 +30,40 @@ class ConversionService:
     
     def validate_file(self, file, use_pro_converter=False):
         """Validate uploaded file for security and compatibility."""
+        current_app.logger.info(f"=== VALIDATE FILE DEBUG ===")
+        current_app.logger.info(f"File: {file.filename if file else 'None'}")
+        current_app.logger.info(f"Use pro converter: {use_pro_converter}")
+        
         if not file or file.filename == '':
+            current_app.logger.error("No file selected")
             return False, "No file selected"
         
         # Check file extension
         filename = secure_filename(file.filename)
         file_extension = os.path.splitext(filename)[1].lower()
+        current_app.logger.info(f"File extension: {file_extension}")
         
         # Choose appropriate extension set based on conversion type
         allowed_extensions = self.pro_extensions if use_pro_converter else self.standard_extensions
+        current_app.logger.info(f"Allowed extensions: {allowed_extensions}")
         
         if not file_extension or file_extension[1:] not in allowed_extensions:
-            return False, f"File type not supported for {'Pro' if use_pro_converter else 'Standard'} conversion. Allowed types: {', '.join(allowed_extensions)}"
+            error_msg = f"File type not supported for {'Pro' if use_pro_converter else 'Standard'} conversion. Allowed types: {', '.join(allowed_extensions)}"
+            current_app.logger.error(f"File validation failed: {error_msg}")
+            return False, error_msg
         
         # Check file size
         file.seek(0, 2)  # Seek to end
         file_size = file.tell()
         file.seek(0)  # Reset to beginning
+        current_app.logger.info(f"File size: {file_size} bytes")
         
         if file_size > self.max_file_size:
-            return False, f"File too large. Maximum size: {self.max_file_size // (1024*1024)}MB"
+            error_msg = f"File too large. Maximum size: {self.max_file_size // (1024*1024)}MB"
+            current_app.logger.error(f"File too large: {error_msg}")
+            return False, error_msg
         
+        current_app.logger.info("File validation passed")
         return True, filename
     
     def get_pdf_page_count(self, file_path):

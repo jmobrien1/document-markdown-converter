@@ -266,13 +266,22 @@ def convert():
     Handles file upload and conversion using the ConversionService.
     Lightweight route handler that delegates business logic to the service layer.
     """
+    # DEBUG: Log request details
+    current_app.logger.info(f"=== CONVERT REQUEST DEBUG ===")
+    current_app.logger.info(f"Files in request: {list(request.files.keys())}")
+    current_app.logger.info(f"Form data: {dict(request.form)}")
+    current_app.logger.info(f"User authenticated: {current_user.is_authenticated if current_user else False}")
+    
     if 'file' not in request.files:
+        current_app.logger.error("No file part in request")
         return jsonify({'error': 'No file part in the request'}), 400
     
     file = request.files['file']
+    current_app.logger.info(f"File received: {file.filename}, size: {file.content_length if hasattr(file, 'content_length') else 'unknown'}")
     
     # Check if the user requested a pro conversion
     use_pro_converter = request.form.get('pro_conversion') == 'on'
+    current_app.logger.info(f"Pro conversion requested: {use_pro_converter}")
     
     # Get user info
     user = None
@@ -280,20 +289,36 @@ def convert():
         user = User.get_user_safely(current_user.id)
         if user:
             user = db.session.merge(user)
+            current_app.logger.info(f"User loaded: {user.email}, has_pro_access: {getattr(user, 'has_pro_access', 'N/A')}")
+        else:
+            current_app.logger.warning("User authentication failed")
+    else:
+        current_app.logger.info("No authenticated user")
     
     # Use the ConversionService to handle all business logic
     conversion_service = ConversionService()
-    success, result = conversion_service.process_conversion(
-        file=file,
-        filename=file.filename,
-        use_pro_converter=use_pro_converter,
-        user=user
-    )
+    current_app.logger.info("Calling ConversionService.process_conversion...")
     
-    if not success:
-        return jsonify({'error': result}), 400
-    
-    return jsonify(result), 200
+    try:
+        success, result = conversion_service.process_conversion(
+            file=file,
+            filename=file.filename,
+            use_pro_converter=use_pro_converter,
+            user=user
+        )
+        
+        current_app.logger.info(f"ConversionService result: success={success}, result={result}")
+        
+        if not success:
+            current_app.logger.error(f"Conversion failed: {result}")
+            return jsonify({'error': result}), 400
+        
+        current_app.logger.info("Conversion successful")
+        return jsonify(result), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in conversion: {e}")
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
 @main.route('/status/<job_id>')
 def task_status(job_id):
