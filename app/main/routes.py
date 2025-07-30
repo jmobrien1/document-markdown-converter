@@ -556,6 +556,37 @@ def pricing():
     """Display pricing information."""
     return render_template('pricing.html')
 
+@main.route('/user-status')
+def user_status():
+    """Return current user status for frontend JavaScript."""
+    try:
+        if current_user and current_user.is_authenticated:
+            return jsonify({
+                'authenticated': True,
+                'user_id': current_user.id,
+                'email': current_user.email,
+                'is_admin': getattr(current_user, 'is_admin', False),
+                'subscription_status': getattr(current_user, 'subscription_status', 'free'),
+                'monthly_usage': getattr(current_user, 'monthly_usage', 0),
+                'usage_limit': getattr(current_user, 'usage_limit', 5)
+            })
+        else:
+            return jsonify({
+                'authenticated': False,
+                'user_id': None,
+                'email': None,
+                'is_admin': False,
+                'subscription_status': 'free',
+                'monthly_usage': 0,
+                'usage_limit': 5
+            })
+    except Exception as e:
+        current_app.logger.error(f"Error in user_status: {e}")
+        return jsonify({
+            'authenticated': False,
+            'error': 'Unable to determine user status'
+        }), 500
+
 @main.app_errorhandler(413)
 def request_entity_too_large(e):
     """Handle 413 Request Entity Too Large errors."""

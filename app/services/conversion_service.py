@@ -56,9 +56,18 @@ class ConversionService:
     def upload_to_gcs(self, file, filename):
         """Upload file to Google Cloud Storage."""
         try:
-            # Get storage client
-            storage_client = storage.Client()
-            bucket_name = os.environ.get('GCS_BUCKET_NAME')
+            # Get storage client with proper credentials
+            credentials_path = current_app.config.get('GCS_CREDENTIALS_PATH')
+            if credentials_path and os.path.exists(credentials_path):
+                storage_client = storage.Client.from_service_account_json(credentials_path)
+            else:
+                # Fallback to default credentials
+                storage_client = storage.Client()
+            
+            bucket_name = current_app.config.get('GCS_BUCKET_NAME')
+            if not bucket_name:
+                raise Exception("GCS_BUCKET_NAME not configured")
+                
             bucket = storage_client.bucket(bucket_name)
             
             # Create unique blob name

@@ -92,10 +92,16 @@ class Config:
         # Render deployment - create temporary credentials file from environment variable
         try:
             credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-            temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-            temp_creds.write(credentials_json)
-            temp_creds.close()
-            GCS_CREDENTIALS_PATH = temp_creds.name
+            # Check if it's already a file path or JSON content
+            if os.path.exists(credentials_json):
+                # It's already a file path
+                GCS_CREDENTIALS_PATH = credentials_json
+            else:
+                # It's JSON content, create temporary file
+                temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+                temp_creds.write(credentials_json)
+                temp_creds.close()
+                GCS_CREDENTIALS_PATH = temp_creds.name
         except Exception as e:
             print(f"Error creating credentials file: {e}")
             GCS_CREDENTIALS_PATH = None
