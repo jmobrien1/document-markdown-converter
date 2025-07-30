@@ -591,14 +591,27 @@ def user_status():
     """Return current user status for frontend JavaScript."""
     try:
         if current_user and current_user.is_authenticated:
+            # Calculate Pro access based on subscription status and trial
+            subscription_status = getattr(current_user, 'subscription_status', 'free')
+            has_pro_access = subscription_status in ['pro', 'trial']
+            on_trial = subscription_status == 'trial'
+            
+            # Set appropriate usage limits based on subscription
+            if has_pro_access:
+                usage_limit = 1000  # Pro users get 1000 pages per month
+            else:
+                usage_limit = 5  # Free users get 5 pages per day
+            
             return jsonify({
                 'authenticated': True,
                 'user_id': current_user.id,
                 'email': current_user.email,
                 'is_admin': getattr(current_user, 'is_admin', False),
-                'subscription_status': getattr(current_user, 'subscription_status', 'free'),
+                'subscription_status': subscription_status,
+                'has_pro_access': has_pro_access,  # ✅ Added missing field
+                'on_trial': on_trial,  # ✅ Added missing field
                 'monthly_usage': getattr(current_user, 'monthly_usage', 0),
-                'usage_limit': getattr(current_user, 'usage_limit', 5)
+                'usage_limit': usage_limit
             })
         else:
             return jsonify({
@@ -607,15 +620,14 @@ def user_status():
                 'email': None,
                 'is_admin': False,
                 'subscription_status': 'free',
+                'has_pro_access': False,
+                'on_trial': False,
                 'monthly_usage': 0,
-                'usage_limit': 5
+                'usage_limit': current_app.config.get('ANONYMOUS_DAILY_LIMIT', 5)
             })
     except Exception as e:
-        current_app.logger.error(f"Error in user_status: {e}")
-        return jsonify({
-            'authenticated': False,
-            'error': 'Unable to determine user status'
-        }), 500
+        current_app.logger.error(f"Error in user_status endpoint: {e}")
+        return jsonify({'error': 'Error retrieving user status'}), 500
 
 @main.app_errorhandler(413)
 def request_entity_too_large(e):
