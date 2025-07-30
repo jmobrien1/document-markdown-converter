@@ -7,14 +7,12 @@ from datetime import datetime, timezone
 from flask import Flask, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask_login import LoginManager
 from flask_mail import Mail
 import bcrypt
 
 # Initialize extensions
 db = SQLAlchemy()
 migrate = Migrate()
-login_manager = LoginManager()
 mail = Mail()
 
 # Initialize Celery at module level to avoid circular imports
@@ -54,8 +52,12 @@ def create_app(config_name=None):
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
-    login_manager.init_app(app)
     mail.init_app(app)
+    
+    # Initialize Flask-Login inside create_app to avoid circular imports
+    from flask_login import LoginManager
+    login_manager = LoginManager()
+    login_manager.init_app(app)
     
     # Configure login manager
     login_manager.login_view = 'auth.login'
