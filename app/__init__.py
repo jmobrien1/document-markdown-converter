@@ -23,12 +23,6 @@ celery = Celery('mdraft', include=['app.tasks'])
 
 def make_celery(app):
     """Create Celery instance and configure it with Flask app context."""
-    celery = Celery(
-        app.import_name,
-        backend=app.config.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
-        broker=app.config.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-    )
-    
     # Configure Celery with Flask app config using new format
     celery.conf.update(
         result_backend=app.config.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
@@ -49,52 +43,43 @@ def make_celery(app):
     return celery
 
 def create_app(config_name=None):
-    """Application factory pattern with enhanced features."""
-    
-    # Import Flask-Login inside create_app to avoid circular dependency
-    from flask_login import LoginManager
-    login_manager = LoginManager()
-    
+    """Application factory pattern for Flask app creation."""
     app = Flask(__name__)
     
     # Load configuration
     if config_name is None:
-        config_name = os.environ.get('FLASK_ENV', 'development')
+        config_name = os.environ.get('FLASK_CONFIG', 'development')
     
     app.logger.info(f"Loading app with config: {config_name}")
     
-    if config_name == 'development':
-        app.config.from_object('config.DevelopmentConfig')
-    elif config_name == 'production':
-        app.config.from_object('config.ProductionConfig')
-    elif config_name == 'testing':
-        app.config.from_object('config.TestingConfig')
-    else:
-        app.config.from_object('config.Config')
+    # Import and apply configuration
+    from config import config
+    app.config.from_object(config[config_name])
+    config[config_name].init_app(app)
     
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
-    login_manager.init_app(app)
     mail.init_app(app)
     
-    # Configure login manager
+    # Initialize Flask-Login inside create_app to avoid circular dependency
+    from flask_login import LoginManager
+    login_manager = LoginManager()
+    login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Please log in to access this page.'
-    login_manager.login_message_category = 'info'
     
-    # User loader for Flask-Login
     @login_manager.user_loader
     def load_user(user_id):
         from .models import User
         return User.query.get(int(user_id))
     
-    # Check bcrypt availability
+    # Configure bcrypt
     try:
         import bcrypt
         app.logger.info("✅ Pure bcrypt available for password hashing")
     except ImportError:
-        app.logger.warning("⚠️ bcrypt not available, using fallback password hashing")
+        app.logger.warning("⚠️ bcrypt not available, using fallback")
     
     # Register blueprints
     from .auth import auth as auth_blueprint
@@ -113,10 +98,10 @@ def create_app(config_name=None):
     app.register_blueprint(main_blueprint)
     app.logger.info("Main blueprint registered successfully")
     
-    # Configure Celery with Flask app
-    celery = make_celery(app)
+    # Configure Celery with Flask app context
+    make_celery(app)
     
-    # Database migration check
+    # Check database migration status
     try:
         with app.app_context():
             # Check if subscription columns exist using database-appropriate method
