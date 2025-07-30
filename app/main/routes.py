@@ -17,11 +17,12 @@ from app.tasks import convert_file_task
 
 # Conditional Flask-Login import for web environment
 try:
-    from flask_login import current_user
+    from flask_login import current_user, login_required
 except ImportError:
     current_user = None
+    login_required = None
 
-from ..models import User, AnonymousUsage, Conversion
+from ..models import User, AnonymousUsage, Conversion, Batch, ConversionJob
 from ..services.conversion_service import ConversionService
 from .. import db
 from . import main
@@ -99,12 +100,11 @@ def validate_file_signature(file_stream, filename):
         return False, f"File signature does not match extension. Expected {file_extension} format."
         
     except Exception as e:
-        current_app.logger.error(f"Error validating file signature: {e}")
-        return False, "Error validating file format"
+        return False, f"Error validating file signature: {str(e)}"
 
 def validate_file_content(file_stream, filename):
     """
-    Additional content validation for text-based files.
+    Validate file content for basic security checks.
     
     Args:
         file_stream: File stream object
@@ -114,86 +114,68 @@ def validate_file_content(file_stream, filename):
         tuple: (is_valid, error_message)
     """
     try:
-        file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+        # Check file size
+        file_stream.seek(0, 2)  # Seek to end
+        file_size = file_stream.tell()
+        file_stream.seek(0)  # Reset to beginning
         
-        # For text files, check if content is readable
-        if file_extension in ['txt', 'csv', 'json', 'xml', 'html', 'htm']:
+        max_size = current_app.config.get('MAX_FILE_SIZE', 50 * 1024 * 1024)
+        if file_size > max_size:
+            return False, f"File too large. Maximum size: {max_size // (1024*1024)}MB"
+        
+        # Basic content validation for text files
+        if filename.lower().endswith('.txt'):
+            # Read first 1KB to check for binary content
+            sample = file_stream.read(1024)
             file_stream.seek(0)
-            content = file_stream.read(1024)  # Read first 1KB
             
-            # Check if content is readable text (not binary)
-            try:
-                content.decode('utf-8')
-            except UnicodeDecodeError:
-                return False, f"File appears to be binary, not valid {file_extension} content"
-            
-            # For JSON files, validate JSON structure
-            if file_extension == 'json':
-                try:
-                    json.loads(content.decode('utf-8'))
-                except json.JSONDecodeError:
-                    return False, "Invalid JSON format"
-            
-            file_stream.seek(0)  # Reset position
-            return True, None
+            # Check if file contains null bytes (binary indicator)
+            if b'\x00' in sample:
+                return False, "Text file contains binary content"
         
         return True, None
         
     except Exception as e:
-        current_app.logger.error(f"Error validating file content: {e}")
-        return False, "Error validating file content"
+        return False, f"Error validating file content: {str(e)}"
 
 def allowed_file(filename):
-    """Check if the file's extension is in the allowed set."""
+    """Check if file extension is allowed."""
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
+           filename.rsplit('.', 1)[1].lower() in current_app.config.get('ALLOWED_EXTENSIONS', {'pdf', 'doc', 'docx', 'txt'})
 
 def check_conversion_limits():
-    """Check if user/session can perform conversions."""
+    """Check if user has exceeded conversion limits."""
     if current_user and current_user.is_authenticated:
-        # Logged-in users have unlimited conversions
+        # Logged in users have higher limits
         return True, None
-    
-    # Check anonymous user limits
-    session_id = session.get('session_id')
-    if not session_id:
-        session_id = str(uuid.uuid4())
-        session['session_id'] = session_id
-    
-    usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
-    daily_limit = current_app.config.get('ANONYMOUS_DAILY_LIMIT', 5)
-    
-    if not usage.can_convert(daily_limit):
-        return False, f"Daily limit reached. Anonymous users can convert {daily_limit} files per day. Please sign up for unlimited conversions."
-    
-    return True, None
+    else:
+        # Anonymous user - check daily limits
+        session_id = session.get('session_id')
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            session['session_id'] = session_id
+        
+        usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
+        daily_limit = current_app.config.get('ANONYMOUS_DAILY_LIMIT', 5)
+        
+        if not usage.can_convert(daily_limit):
+            return False, f"Daily conversion limit exceeded. Limit: {daily_limit} conversions per day."
+        
+        return True, None
 
 def get_storage_client():
-    """Get Google Cloud Storage client with proper credential handling."""
+    """Get Google Cloud Storage client."""
     try:
-        # Check for environment variable credentials (Render deployment)
-        if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
-            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-            # Create temporary credentials file from environment variable
-            temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-            temp_creds.write(credentials_json)
-            temp_creds.close()
-            current_app.logger.info(f"Using credentials from environment variable, temp file: {temp_creds.name}")
-            return storage.Client.from_service_account_json(temp_creds.name)
-        
-        # Check for local credentials file (local development)
-        local_creds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'gcs-credentials.json')
-        if os.path.exists(local_creds_path):
-            current_app.logger.info(f"Using local credentials file: {local_creds_path}")
-            return storage.Client.from_service_account_json(local_creds_path)
-        
-        # Try default credentials (if running on GCP)
-        current_app.logger.info("Attempting to use default credentials")
-        return storage.Client()
-        
+        # Check if credentials are available
+        credentials_path = current_app.config.get('GCS_CREDENTIALS_PATH')
+        if credentials_path and os.path.exists(credentials_path):
+            return storage.Client.from_service_account_json(credentials_path)
+        else:
+            # Try default credentials
+            return storage.Client()
     except Exception as e:
-        current_app.logger.error(f"Failed to create storage client: {e}")
-        raise Exception(f"Could not authenticate with Google Cloud Storage: {e}")
+        current_app.logger.error(f"Error creating storage client: {e}")
+        raise Exception("Failed to initialize cloud storage client")
 
 def get_accurate_pdf_page_count(file_stream, filename):
     """
@@ -349,112 +331,232 @@ def task_result(job_id):
 
 @main.route('/stats')
 def conversion_stats():
-    """Get conversion statistics for dashboard."""
+    """Display conversion statistics."""
     try:
-        if current_user.is_authenticated:
-            # Ensure we have a fresh user object bound to the session
-            user = User.get_user_safely(current_user.id)
-            if not user:
-                return jsonify({'error': 'User not found'}), 404
-            
-            # User-specific stats using the fresh user object
-            total_conversions = user.conversions.count()
-            daily_conversions = user.get_daily_conversions()
-            successful_conversions = user.conversions.filter_by(status='completed').count()
-            
-            # Calculate success rate
-            success_rate = (successful_conversions / total_conversions * 100) if total_conversions > 0 else 0
-            
-            return jsonify({
-                'authenticated': True,
-                'total_conversions': total_conversions,
-                'daily_conversions': daily_conversions,
-                'successful_conversions': successful_conversions,
-                'success_rate': round(success_rate, 1),
-                'can_convert': True
-            })
-        else:
-            # Anonymous user stats
-            session_id = session.get('session_id')
-            if session_id:
-                usage = AnonymousUsage.query.filter_by(session_id=session_id).first()
-                if usage:
-                    daily_limit = current_app.config.get('ANONYMOUS_DAILY_LIMIT', 5)
-                    remaining = max(0, daily_limit - usage.conversions_today)
-                    return jsonify({
-                        'authenticated': False,
-                        'daily_conversions': usage.conversions_today,
-                        'daily_limit': daily_limit,
-                        'remaining_conversions': remaining,
-                        'can_convert': usage.can_convert()
-                    })
-            
-            daily_limit = current_app.config.get('ANONYMOUS_DAILY_LIMIT', 5)
-            return jsonify({
-                'authenticated': False,
-                'daily_conversions': 0,
-                'daily_limit': daily_limit,
-                'remaining_conversions': daily_limit,
-                'can_convert': True
-            })
-            
+        # Get basic stats
+        total_conversions = Conversion.query.count()
+        completed_conversions = Conversion.query.filter_by(status='completed').count()
+        failed_conversions = Conversion.query.filter_by(status='failed').count()
+        
+        # Get recent conversions
+        recent_conversions = Conversion.query.order_by(Conversion.created_at.desc()).limit(10).all()
+        
+        # Calculate success rate
+        success_rate = (completed_conversions / total_conversions * 100) if total_conversions > 0 else 0
+        
+        stats = {
+            'total_conversions': total_conversions,
+            'completed_conversions': completed_conversions,
+            'failed_conversions': failed_conversions,
+            'success_rate': round(success_rate, 2),
+            'recent_conversions': [
+                {
+                    'id': conv.id,
+                    'filename': conv.original_filename,
+                    'status': conv.status,
+                    'created_at': conv.created_at.isoformat() if conv.created_at else None,
+                    'processing_time': conv.processing_time
+                }
+                for conv in recent_conversions
+            ]
+        }
+        
+        return jsonify(stats)
+        
     except Exception as e:
-        current_app.logger.error(f"Error getting stats: {str(e)}")
+        current_app.logger.error(f"Error getting conversion stats: {e}")
         return jsonify({'error': 'Error retrieving statistics'}), 500
 
 @main.route('/history')
 def conversion_history():
-    """Get conversion history for current user."""
-    if not current_user.is_authenticated:
-        return jsonify({'error': 'Authentication required'}), 401
-    
+    """Display conversion history for the current user."""
     try:
-        # Ensure we have a fresh user object bound to the session
-        user = User.get_user_safely(current_user.id)
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
+        if not current_user or not current_user.is_authenticated:
+            return jsonify({'error': 'Authentication required'}), 401
         
-        # Get user's conversion history using the fresh user object
-        conversions = user.conversions.order_by(
-            Conversion.created_at.desc()
-        ).limit(50).all()
+        # Get user's conversion history
+        conversions = Conversion.query.filter_by(user_id=current_user.id).order_by(Conversion.created_at.desc()).limit(50).all()
         
-        history = []
-        for conv in conversions:
-            history.append({
+        history = [
+            {
                 'id': conv.id,
                 'filename': conv.original_filename,
-                'file_type': conv.file_type,
-                'conversion_type': conv.conversion_type,
                 'status': conv.status,
-                'created_at': conv.created_at.isoformat(),
+                'conversion_type': conv.conversion_type,
+                'created_at': conv.created_at.isoformat() if conv.created_at else None,
                 'completed_at': conv.completed_at.isoformat() if conv.completed_at else None,
                 'processing_time': conv.processing_time,
-                'file_size': conv.file_size,
                 'markdown_length': conv.markdown_length,
                 'error_message': conv.error_message
-            })
+            }
+            for conv in conversions
+        ]
+        
+        return jsonify({'conversions': history})
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting conversion history: {e}")
+        return jsonify({'error': 'Error retrieving history'}), 500
+
+# Batch upload routes (moved from uploads module)
+@main.route('/batch-uploader')
+@login_required
+def batch_uploader():
+    """Render the batch uploader interface for David's use case."""
+    return render_template('batch_uploader.html')
+
+@main.route('/batch-upload', methods=['POST'])
+@login_required
+def batch_upload():
+    """Handle batch file upload and create conversion jobs."""
+    try:
+        # Check if files were uploaded
+        if 'files[]' not in request.files:
+            return jsonify({'error': 'No files selected'}), 400
+        
+        files = request.files.getlist('files[]')
+        
+        if not files or files[0].filename == '':
+            return jsonify({'error': 'No files selected'}), 400
+        
+        # Validate files and create batch record
+        valid_files = []
+        batch_id = str(uuid.uuid4())
+        
+        # Create batch record
+        batch = Batch(
+            user_id=current_user.id,
+            batch_id=batch_id,
+            status='queued',
+            total_files=0
+        )
+        db.session.add(batch)
+        db.session.flush()  # Get the batch ID
+        
+        # Process each file
+        for file in files:
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                file_size = len(file.read())
+                file.seek(0)  # Reset file pointer
+                
+                # Get file extension
+                file_type = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+                
+                # Create conversion job record
+                conversion_job = ConversionJob(
+                    batch_id=batch.id,
+                    user_id=current_user.id,
+                    original_filename=filename,
+                    file_size=file_size,
+                    file_type=file_type,
+                    status='queued'
+                )
+                db.session.add(conversion_job)
+                valid_files.append({
+                    'filename': filename,
+                    'size': file_size,
+                    'status': 'queued'
+                })
+        
+        if not valid_files:
+            db.session.rollback()
+            return jsonify({'error': 'No valid files found'}), 400
+        
+        # Update batch with total files count
+        batch.total_files = len(valid_files)
+        db.session.commit()
+        
+        # Dispatch Celery task for batch processing
+        from app.tasks import process_batch_conversions
+        process_batch_conversions.delay(batch.id)
         
         return jsonify({
-            'history': history,
-            'total_conversions': user.conversions.count(),
-            'daily_conversions': user.get_daily_conversions()
+            'success': True,
+            'batch_id': batch_id,
+            'files': valid_files,
+            'message': f'Batch job created with {len(valid_files)} files'
         })
         
     except Exception as e:
-        current_app.logger.error(f"Error getting conversion history: {str(e)}")
-        return jsonify({'error': 'Error retrieving history'}), 500
+        db.session.rollback()
+        current_app.logger.error(f'Batch upload error: {str(e)}')
+        return jsonify({'error': 'Upload failed'}), 500
 
-# (Removed /health, /health/web, and /health/worker routes; now in app/health/routes.py)
+@main.route('/batch-status/<batch_id>')
+@login_required
+def batch_status(batch_id):
+    """Get the status of a batch job."""
+    try:
+        batch = Batch.query.filter_by(batch_id=batch_id, user_id=current_user.id).first()
+        if not batch:
+            return jsonify({'error': 'Batch not found'}), 404
+        
+        # Get conversion jobs for this batch
+        jobs = ConversionJob.query.filter_by(batch_id=batch.id).all()
+        
+        job_statuses = [
+            {
+                'id': job.id,
+                'filename': job.original_filename,
+                'status': job.status,
+                'error_message': job.error_message,
+                'processing_time': job.processing_time
+            }
+            for job in jobs
+        ]
+        
+        return jsonify({
+            'batch_id': batch.batch_id,
+            'status': batch.status,
+            'total_files': batch.total_files,
+            'processed_files': batch.processed_files,
+            'failed_files': batch.failed_files,
+            'progress_percentage': batch.progress_percentage(),
+            'created_at': batch.created_at.isoformat() if batch.created_at else None,
+            'completed_at': batch.completed_at.isoformat() if batch.completed_at else None,
+            'jobs': job_statuses
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Batch status error: {str(e)}')
+        return jsonify({'error': 'Error retrieving batch status'}), 500
+
+@main.route('/batch-download/<job_id>')
+@login_required
+def batch_download(job_id):
+    """Download the result of a completed conversion job."""
+    try:
+        job = ConversionJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+        
+        if job.status != 'completed':
+            return jsonify({'error': 'Job not completed yet'}), 400
+        
+        if not job.markdown_content:
+            return jsonify({'error': 'No content available'}), 400
+        
+        # Create filename for download
+        base_name = job.original_filename.rsplit('.', 1)[0]
+        download_filename = f"{base_name}.md"
+        
+        return jsonify({
+            'filename': download_filename,
+            'content': job.markdown_content,
+            'size': job.markdown_length
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Batch download error: {str(e)}')
+        return jsonify({'error': 'Error downloading result'}), 500
 
 @main.route('/pricing')
 def pricing():
-    """Display tiered pricing page."""
-    subscription_tiers = current_app.config.get('SUBSCRIPTION_TIERS', {})
-    return render_template('pricing.html', subscription_tiers=subscription_tiers)
+    """Display pricing information."""
+    return render_template('pricing.html')
 
 @main.app_errorhandler(413)
 def request_entity_too_large(e):
-    """Custom error handler for 413 Request Entity Too Large."""
-    max_size_mb = current_app.config['MAX_CONTENT_LENGTH'] / 1024 / 1024
-    return jsonify(error=f"File is too large. Maximum size is {max_size_mb:.0f}MB."), 413
+    """Handle 413 Request Entity Too Large errors."""
+    return jsonify({'error': 'File too large'}), 413
