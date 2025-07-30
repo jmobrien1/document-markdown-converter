@@ -22,15 +22,6 @@ from datetime import datetime, timezone
 # Create Celery instance
 celery = Celery('mdraft', include=['app.tasks'])
 
-# Configuration constants
-MONTHLY_PAGE_ALLOWANCE = 1000  # Pages per month for Pro users
-
-# Configuration constants
-MONTHLY_PAGE_ALLOWANCE = 1000  # Pages per month for Pro users
-
-# Configuration constants
-MONTHLY_PAGE_ALLOWANCE = 1000  # Pages per month for Pro users
-
 def scan_file_for_viruses(file_path):
     """
     Scan a file for viruses using ClamAV.
@@ -372,8 +363,9 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         else:
                             pages_processed = page_count
                         
-                        # Check if user has exceeded monthly limit (assuming 1000 pages/month for Pro)
-                        if current_usage + pages_processed > 1000:
+                        # Check if user has exceeded monthly limit
+                        monthly_limit = current_app.config.get('PRO_PAGES_PER_MONTH', 1000)
+                        if current_usage + pages_processed > monthly_limit:
                             raise Exception(f"Monthly usage limit exceeded. Current usage: {current_usage}, attempting: {pages_processed}")
                 
                 print("--- [Celery Task] Starting PRO conversion path (Google Document AI).")

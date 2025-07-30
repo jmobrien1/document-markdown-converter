@@ -19,7 +19,7 @@ class ConversionService:
     
     def __init__(self):
         self.allowed_extensions = {'pdf', 'doc', 'docx', 'txt'}
-        self.max_file_size = 50 * 1024 * 1024  # 50MB
+        self.max_file_size = current_app.config.get('MAX_FILE_SIZE', 50 * 1024 * 1024)  # 50MB default
     
     def validate_file(self, file):
         """Validate uploaded file for security and compatibility."""
@@ -100,20 +100,13 @@ class ConversionService:
             raise Exception("Failed to create conversion record")
     
     def check_user_access(self, user, use_pro_converter):
-        """Check if user has access to the requested conversion type."""
-        if not user:
-            # Anonymous user - check limits
-            session_id = request.cookies.get('session_id', 'anonymous')
-            usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
+        """Check if user can perform the requested conversion."""
+        if use_pro_converter:
+            if not user:
+                return False, "Pro conversion requires user account"
             
-            if not usage.can_convert():
-                return False, "Daily conversion limit exceeded for anonymous users"
-            
-            return True, None
-        
-        # Logged in user
-        if use_pro_converter and not user.has_pro_access:
-            return False, "Pro access required. Please upgrade to Pro or check your trial status."
+            if not user.has_pro_access:
+                return False, "Pro access required. Please upgrade to Pro or check your trial status."
         
         return True, None
     
@@ -158,7 +151,7 @@ class ConversionService:
             )
             
             # Get Google Cloud credentials
-            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
             if not credentials_json:
                 return False, "Google Cloud credentials not configured"
             
@@ -217,10 +210,8 @@ class ConversionService:
                 return False, "Conversion not found"
             
             if conversion.status != 'completed':
-                return False, f"Conversion not completed. Status: {conversion.status}"
+                return False, "Conversion not completed yet"
             
-            # For now, return basic info - in a real implementation,
-            # you might store the markdown content in the database or retrieve it from storage
             return True, {
                 'id': conversion.id,
                 'filename': conversion.original_filename,
