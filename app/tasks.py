@@ -16,7 +16,8 @@ from celery import current_task
 from datetime import datetime, timezone
 
 # Import the properly configured celery instance
-from app import celery
+# We'll import this lazily to avoid circular imports
+celery = None
 
 # Conditional imports for Flask components
 try:
@@ -46,6 +47,14 @@ try:
 except ImportError:
     EMAIL_AVAILABLE = False
     send_conversion_complete_email = None
+
+def get_celery():
+    """Get the celery instance, importing it lazily to avoid circular imports."""
+    global celery
+    if celery is None:
+        from app import celery as celery_instance
+        celery = celery_instance
+    return celery
 
 def scan_file_for_viruses(file_path):
     """
@@ -288,7 +297,7 @@ class DocumentAIProcessor:
             current_app.logger.error(f"Document AI batch processing error for {input_gcs_uri}: {e}")
             raise Exception(f"Document AI batch processing failed: {str(e)}")
 
-@celery.task(bind=True)
+@get_celery().task(bind=True)
 def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None, credentials_json=None):
     """
     Convert uploaded file to Markdown using Celery background task.
@@ -816,7 +825,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                 print(f"--- [Celery Task] Warning: Could not clean up temporary credentials file {credentials_path}: {e}")
 
 
-@celery.task
+@get_celery().task
 def expire_trials():
     """Expire trials for users whose trial period has ended."""
     from datetime import datetime, timezone
@@ -862,7 +871,7 @@ def expire_trials():
             pass
 
 
-@celery.task
+@get_celery().task
 def reset_monthly_usage():
     """Reset monthly usage counters for all users."""
     from sqlalchemy import text
@@ -896,7 +905,7 @@ def reset_monthly_usage():
             pass
 
 
-@celery.task
+@get_celery().task
 def redis_health_check():
     """
     Simple health check task to keep Redis active.
@@ -917,7 +926,7 @@ def redis_health_check():
         }
 
 
-@celery.task(bind=True)
+@get_celery().task(bind=True)
 def process_batch_conversions(self, batch_id):
     """
     Process all conversion jobs in a batch.
