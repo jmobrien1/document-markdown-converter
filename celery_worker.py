@@ -1,10 +1,4 @@
-from app import create_app, make_celery
+from app import celery
 
-# Create Flask app
-app = create_app()
-
-# Create Celery instance with Flask app context
-celery = make_celery(app)
-
-# Push app context for worker
-app.app_context().push()
+# The celery instance is already configured with Flask app context
+# No additional setup needed

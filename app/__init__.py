@@ -18,14 +18,11 @@ mail = Mail()
 # Initialize Celery at module level to avoid circular imports
 from celery import Celery
 
+# Create base celery instance
+celery = Celery('mdraft', include=['app.tasks'])
+
 def make_celery(app):
     """Create Celery instance and configure it with Flask app context."""
-    celery = Celery(
-        app.import_name,
-        backend=app.config.get('CELERY_RESULT_BACKEND'),
-        broker=app.config.get('CELERY_BROKER_URL')
-    )
-    
     # Configure Celery with Flask app config
     celery.conf.update(app.config)
     
@@ -121,6 +118,6 @@ def create_app(config_name=None):
     
     return app
 
-# Create celery instance for worker
+# Create Flask app and configure celery
 app = create_app()
 celery = make_celery(app)

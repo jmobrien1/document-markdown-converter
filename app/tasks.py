@@ -12,8 +12,11 @@ from google.cloud import storage, documentai
 from google.oauth2 import service_account
 from google.api_core import exceptions as google_exceptions
 from markitdown import MarkItDown
-from celery import Celery, current_task
+from celery import current_task
 from datetime import datetime, timezone
+
+# Import the properly configured celery instance
+from app import celery
 
 # Conditional imports for Flask components
 try:
@@ -43,9 +46,6 @@ try:
 except ImportError:
     EMAIL_AVAILABLE = False
     send_conversion_complete_email = None
-
-# Create Celery instance - this will be properly configured by the app factory
-celery = Celery('mdraft', include=['app.tasks'])
 
 def scan_file_for_viruses(file_path):
     """
