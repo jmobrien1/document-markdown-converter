@@ -10,15 +10,24 @@ def check_column_exists(table_name, column_name):
     """Check if a column exists in the database."""
     try:
         from sqlalchemy import text
-        result = db.session.execute(
-            text("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = :table_name AND column_name = :column_name
-            """),
-            {'table_name': table_name, 'column_name': column_name}
-        ).fetchone()
-        return result is not None
+        # Use SQLite-compatible PRAGMA table_info for SQLite, fallback to information_schema for other databases
+        if db.engine.dialect.name == 'sqlite':
+            result = db.session.execute(
+                text("PRAGMA table_info(:table_name)"),
+                {'table_name': table_name}
+            ).fetchall()
+            return any(row[1] == column_name for row in result)
+        else:
+            # Use information_schema for PostgreSQL and other databases
+            result = db.session.execute(
+                text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = :table_name AND column_name = :column_name
+                """),
+                {'table_name': table_name, 'column_name': column_name}
+            ).fetchone()
+            return result is not None
     except Exception:
         # If we can't check, assume it doesn't exist
         return False

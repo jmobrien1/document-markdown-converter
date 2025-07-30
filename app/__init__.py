@@ -75,17 +75,27 @@ def create_app(config_name=None):
     # Check database migration status
     try:
         with app.app_context():
-            # Check if subscription columns exist
+            # Check if subscription columns exist using database-appropriate method
             from sqlalchemy import text
-            result = db.session.execute(
-                text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'users' AND column_name = 'is_admin'
-                """)
-            ).fetchone()
-            if result is None:
-                app.logger.warning("Database migration check failed: (sqlite3.OperationalError) no such table: information_schema.columns")
+            if db.engine.dialect.name == 'sqlite':
+                # Use SQLite-compatible PRAGMA table_info
+                result = db.session.execute(
+                    text("PRAGMA table_info(users)")
+                ).fetchall()
+                has_is_admin = any(row[1] == 'is_admin' for row in result)
+                if not has_is_admin:
+                    app.logger.warning("Database migration check: is_admin column not found in users table")
+            else:
+                # Use information_schema for PostgreSQL and other databases
+                result = db.session.execute(
+                    text("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'users' AND column_name = 'is_admin'
+                    """)
+                ).fetchone()
+                if result is None:
+                    app.logger.warning("Database migration check: is_admin column not found in users table")
     except Exception as e:
         app.logger.warning(f"Database migration check failed: {e}")
     
@@ -108,10 +118,6 @@ def create_app(config_name=None):
     from .api_docs import api_docs as api_docs_blueprint
     app.register_blueprint(api_docs_blueprint, url_prefix='/api/docs')
     app.logger.info("API documentation blueprint registered successfully")
-    
-    from .uploads import uploads as uploads_blueprint
-    app.register_blueprint(uploads_blueprint, url_prefix='/uploads')
-    app.logger.info("Uploads blueprint registered successfully")
     
     from .main import main as main_blueprint
     app.register_blueprint(main_blueprint)
