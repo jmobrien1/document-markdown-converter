@@ -18,10 +18,17 @@ class ConversionService:
     """Service class for handling document conversion business logic."""
     
     def __init__(self):
-        self.allowed_extensions = {'pdf', 'doc', 'docx', 'txt'}
+        # Standard conversion supported formats
+        self.standard_extensions = {
+            'docx', 'xlsx', 'xls', 'pptx', 'pdf', 'html', 'htm', 'csv', 'json', 'xml', 'epub'
+        }
+        # Pro conversion supported formats (Google Document AI)
+        self.pro_extensions = {
+            'pdf', 'gif', 'tiff', 'tif', 'jpg', 'jpeg', 'png', 'bmp', 'webp', 'html'
+        }
         self.max_file_size = current_app.config.get('MAX_FILE_SIZE', 50 * 1024 * 1024)  # 50MB default
     
-    def validate_file(self, file):
+    def validate_file(self, file, use_pro_converter=False):
         """Validate uploaded file for security and compatibility."""
         if not file or file.filename == '':
             return False, "No file selected"
@@ -30,8 +37,11 @@ class ConversionService:
         filename = secure_filename(file.filename)
         file_extension = os.path.splitext(filename)[1].lower()
         
-        if not file_extension or file_extension[1:] not in self.allowed_extensions:
-            return False, f"File type not supported. Allowed types: {', '.join(self.allowed_extensions)}"
+        # Choose appropriate extension set based on conversion type
+        allowed_extensions = self.pro_extensions if use_pro_converter else self.standard_extensions
+        
+        if not file_extension or file_extension[1:] not in allowed_extensions:
+            return False, f"File type not supported for {'Pro' if use_pro_converter else 'Standard'} conversion. Allowed types: {', '.join(allowed_extensions)}"
         
         # Check file size
         file.seek(0, 2)  # Seek to end
@@ -158,8 +168,14 @@ class ConversionService:
             if not user:
                 return False, "Pro conversion requires user account"
             
-            if not user.has_pro_access:
-                return False, "Pro access required. Please upgrade to Pro or check your trial status."
+            # Safely check pro access with fallback for missing columns
+            try:
+                if not user.has_pro_access:
+                    return False, "Pro access required. Please upgrade to Pro or check your trial status."
+            except Exception as e:
+                # If has_pro_access fails due to missing columns, assume no access
+                current_app.logger.warning(f"Error checking pro access: {e}")
+                return False, "Pro access check failed. Please try again or contact support."
         
         return True, None
     
@@ -170,7 +186,7 @@ class ConversionService:
             self.safe_stream_reset(file)
             
             # Validate file
-            is_valid, error_message = self.validate_file(file)
+            is_valid, error_message = self.validate_file(file, use_pro_converter)
             if not is_valid:
                 return False, error_message
             

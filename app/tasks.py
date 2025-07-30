@@ -576,13 +576,98 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                                 with open(output_temp_file.name, 'r') as f:
                                     output_data = json.load(f)
                                 
-                                # Extract text from the processed document
-                                if 'document' in output_data and 'text' in output_data['document']:
-                                    document_text = output_data['document']['text']
+                                # DEBUG: Print the JSON structure to understand what we're getting
+                                print(f"--- [Celery Task] DEBUG: JSON keys in blob {i+1}: {list(output_data.keys()) if isinstance(output_data, dict) else 'Not a dict'}")
+                                
+                                # Extract text from the processed document - try multiple possible structures
+                                document_text = ""
+                                
+                                # Method 1: Check for 'document' -> 'text'
+                                if 'document' in output_data and isinstance(output_data['document'], dict):
+                                    if 'text' in output_data['document']:
+                                        document_text = output_data['document']['text']
+                                        print(f"--- [Celery Task] Found text via document.text: {len(document_text)} chars")
+                                    
+                                    # Method 2: Check for 'document' -> 'pages' -> text content
+                                    elif 'pages' in output_data['document']:
+                                        pages = output_data['document']['pages']
+                                        page_texts = []
+                                        for page_idx, page in enumerate(pages):
+                                            # Extract text from blocks, paragraphs, or tokens
+                                            page_text = ""
+                                            
+                                            # Try blocks
+                                            if 'blocks' in page:
+                                                for block in page['blocks']:
+                                                    if 'layout' in block and 'textAnchor' in block['layout']:
+                                                        # This is a reference to text segments
+                                                        text_anchor = block['layout']['textAnchor']
+                                                        if 'textSegments' in text_anchor:
+                                                            for segment in text_anchor['textSegments']:
+                                                                if 'startIndex' in segment and 'endIndex' in segment:
+                                                                    start_idx = int(segment.get('startIndex', 0))
+                                                                    end_idx = int(segment.get('endIndex', 0))
+                                                                    if 'text' in output_data['document']:
+                                                                        page_text += output_data['document']['text'][start_idx:end_idx]
+                                            
+                                            # Try paragraphs if blocks didn't work
+                                            if not page_text and 'paragraphs' in page:
+                                                for paragraph in page['paragraphs']:
+                                                    if 'layout' in paragraph and 'textAnchor' in paragraph['layout']:
+                                                        text_anchor = paragraph['layout']['textAnchor']
+                                                        if 'textSegments' in text_anchor:
+                                                            for segment in text_anchor['textSegments']:
+                                                                if 'startIndex' in segment and 'endIndex' in segment:
+                                                                    start_idx = int(segment.get('startIndex', 0))
+                                                                    end_idx = int(segment.get('endIndex', 0))
+                                                                    if 'text' in output_data['document']:
+                                                                        page_text += output_data['document']['text'][start_idx:end_idx]
+                                            
+                                            if page_text:
+                                                page_texts.append(page_text)
+                                                print(f"--- [Celery Task] Extracted {len(page_text)} chars from page {page_idx}")
+                                        
+                                        if page_texts:
+                                            document_text = '\n'.join(page_texts)
+                                            print(f"--- [Celery Task] Combined page texts: {len(document_text)} chars total")
+                                
+                                # Method 3: Check if the whole output_data is the text content
+                                elif isinstance(output_data, str):
+                                    document_text = output_data
+                                    print(f"--- [Celery Task] Found direct text content: {len(document_text)} chars")
+                                
+                                # Method 4: Check for other possible structures
+                                elif 'text' in output_data:
+                                    document_text = output_data['text']
+                                    print(f"--- [Celery Task] Found text via root.text: {len(document_text)} chars")
+                                
+                                # If we found text, add it to combined text
+                                if document_text and document_text.strip():
                                     combined_text += document_text + "\n"
-                                    print(f"--- [Celery Task] Extracted {len(document_text)} characters from blob {i+1}")
+                                    print(f"--- [Celery Task] Successfully extracted {len(document_text)} characters from blob {i+1}")
                                 else:
-                                    print(f"--- [Celery Task] Warning: No text found in blob {i+1}")
+                                    # Enhanced debugging - show the actual structure we're getting
+                                    print(f"--- [Celery Task] DEBUG: No text found in blob {i+1}")
+                                    print(f"--- [Celery Task] DEBUG: Full JSON structure preview:")
+                                    
+                                    # Print first few levels of the JSON structure for debugging
+                                    def print_json_structure(obj, indent=0, max_depth=3):
+                                        if indent > max_depth:
+                                            return
+                                        spaces = "  " * indent
+                                        if isinstance(obj, dict):
+                                            for key, value in list(obj.items())[:5]:  # Only show first 5 keys
+                                                if isinstance(value, (dict, list)):
+                                                    print(f"{spaces}{key}: {type(value).__name__} (length: {len(value)})")
+                                                    print_json_structure(value, indent + 1, max_depth)
+                                                else:
+                                                    val_preview = str(value)[:100] + "..." if len(str(value)) > 100 else str(value)
+                                                    print(f"{spaces}{key}: {val_preview}")
+                                        elif isinstance(obj, list) and obj:
+                                            print(f"{spaces}[0]: {type(obj[0]).__name__}")
+                                            print_json_structure(obj[0], indent + 1, max_depth)
+                                    
+                                    print_json_structure(output_data)
                             
                             finally:
                                 # Clean up temporary file
