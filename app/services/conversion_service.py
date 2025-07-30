@@ -53,9 +53,27 @@ class ConversionService:
             current_app.logger.error(f"Error getting PDF page count: {e}")
             return 1  # Fallback to 1 page
     
+    def safe_stream_reset(self, file_stream):
+        """
+        Safely reset file stream to beginning with error handling.
+        
+        Args:
+            file_stream: File stream object (werkzeug FileStorage or similar)
+        """
+        try:
+            if hasattr(file_stream, 'seek'):
+                file_stream.seek(0)
+            elif hasattr(file_stream, 'stream') and hasattr(file_stream.stream, 'seek'):
+                file_stream.stream.seek(0)
+        except (OSError, IOError, AttributeError) as e:
+            current_app.logger.warning(f"Could not reset file stream: {e}")
+    
     def upload_to_gcs(self, file, filename):
         """Upload file to Google Cloud Storage."""
         try:
+            # CRITICAL: Ensure stream is at beginning before upload
+            self.safe_stream_reset(file)
+            
             # Get storage client with proper credentials
             credentials_path = current_app.config.get('GCS_CREDENTIALS_PATH')
             if credentials_path and os.path.exists(credentials_path):
@@ -75,15 +93,41 @@ class ConversionService:
             unique_id = str(uuid.uuid4())
             blob_name = f"uploads/{unique_id}/{filename}"
             
-            # Upload file
-            blob = bucket.blob(blob_name)
-            blob.upload_from_file(file)
+            # Upload file with proper content type
+            file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+            content_type = self.get_content_type(file_extension)
             
+            # CRITICAL: Reset stream one more time before upload
+            self.safe_stream_reset(file)
+            
+            # Upload the file
+            blob = bucket.blob(blob_name)
+            blob.upload_from_file(file, content_type=content_type)
+            
+            current_app.logger.info(f"File uploaded to GCS: {blob_name}")
             return bucket_name, blob_name
             
         except Exception as e:
             current_app.logger.error(f"Error uploading to GCS: {e}")
             raise Exception("Failed to upload file to cloud storage")
+    
+    def get_content_type(self, file_extension):
+        """Get appropriate content type for file extension."""
+        content_types = {
+            'pdf': 'application/pdf',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'doc': 'application/msword',
+            'txt': 'text/plain',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'tiff': 'image/tiff',
+            'tif': 'image/tiff',
+            'html': 'text/html',
+            'htm': 'text/html'
+        }
+        return content_types.get(file_extension, 'application/octet-stream')
     
     def create_conversion_record(self, user_id, session_id, filename, file_size, file_type, use_pro_converter=False):
         """Create a new conversion record in the database."""
@@ -122,10 +166,16 @@ class ConversionService:
     def process_conversion(self, file, filename, use_pro_converter=False, user=None):
         """Main method to process a file conversion."""
         try:
+            # CRITICAL: Reset stream at the very beginning
+            self.safe_stream_reset(file)
+            
             # Validate file
             is_valid, error_message = self.validate_file(file)
             if not is_valid:
                 return False, error_message
+            
+            # CRITICAL: Reset stream after validation
+            self.safe_stream_reset(file)
             
             # Check user access
             can_convert, access_error = self.check_user_access(user, use_pro_converter)
@@ -136,6 +186,9 @@ class ConversionService:
             file.seek(0, 2)
             file_size = file.tell()
             file.seek(0)
+            
+            # CRITICAL: Reset stream after size check
+            self.safe_stream_reset(file)
             
             # Get file type
             file_extension = os.path.splitext(filename)[1].lower()
@@ -148,6 +201,9 @@ class ConversionService:
                     file.save(temp_file.name)
                     page_count = self.get_pdf_page_count(temp_file.name)
                     os.unlink(temp_file.name)
+                
+                # CRITICAL: Reset stream after page count check
+                self.safe_stream_reset(file)
             
             # Upload to GCS
             bucket_name, blob_name = self.upload_to_gcs(file, filename)
