@@ -61,6 +61,19 @@ FILE_SIGNATURES = {
     'epub': [b'PK\x03\x04'],  # EPUB is a ZIP archive
 }
 
+def reset_file_stream(file_stream):
+    """
+    Safely reset file stream to beginning.
+    
+    Args:
+        file_stream: File stream object
+    """
+    try:
+        file_stream.seek(0)
+    except (OSError, IOError) as e:
+        # Handle cases where seek might fail
+        print(f"Warning: Could not reset file stream: {e}")
+
 def validate_file_signature(file_stream, filename):
     """
     Validate file signature (magic number) against file extension.
@@ -79,10 +92,14 @@ def validate_file_signature(file_stream, filename):
         if file_extension not in FILE_SIGNATURES:
             return False, f"Unsupported file type: {file_extension}"
         
+        # FIXED: Ensure we're at the beginning
+        reset_file_stream(file_stream)
+        
         # Read first 8 bytes for signature checking
-        file_stream.seek(0)
         header = file_stream.read(8)
-        file_stream.seek(0)  # Reset position
+        
+        # CRITICAL: Always reset stream after reading
+        reset_file_stream(file_stream)
         
         # Get expected signatures for this file type
         expected_signatures = FILE_SIGNATURES.get(file_extension, [])
@@ -114,10 +131,15 @@ def validate_file_content(file_stream, filename):
         tuple: (is_valid, error_message)
     """
     try:
+        # FIXED: Ensure we're at the beginning
+        reset_file_stream(file_stream)
+        
         # Check file size
         file_stream.seek(0, 2)  # Seek to end
         file_size = file_stream.tell()
-        file_stream.seek(0)  # Reset to beginning
+        
+        # CRITICAL: Reset to beginning after size check
+        reset_file_stream(file_stream)
         
         max_size = current_app.config.get('MAX_FILE_SIZE', 50 * 1024 * 1024)
         if file_size > max_size:
@@ -127,7 +149,9 @@ def validate_file_content(file_stream, filename):
         if filename.lower().endswith('.txt'):
             # Read first 1KB to check for binary content
             sample = file_stream.read(1024)
-            file_stream.seek(0)
+            
+            # CRITICAL: Reset stream after reading sample
+            reset_file_stream(file_stream)
             
             # Check if file contains null bytes (binary indicator)
             if b'\x00' in sample:
@@ -196,10 +220,16 @@ def get_accurate_pdf_page_count(file_stream, filename):
         # Import pypdf for accurate page counting
         from pypdf import PdfReader
         
+        # FIXED: Ensure we're at the beginning
+        reset_file_stream(file_stream)
+        
         # Use pypdf to get accurate page count
-        file_stream.seek(0)  # Reset to beginning
         pdf_reader = PdfReader(file_stream)
         page_count = len(pdf_reader.pages)
+        
+        # CRITICAL: Reset stream after reading
+        reset_file_stream(file_stream)
+        
         current_app.logger.info(f"Accurate PDF page count for {filename}: {page_count} pages")
         return page_count
         
