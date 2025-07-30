@@ -5,8 +5,9 @@ from . import uploads
 import os
 from werkzeug.utils import secure_filename
 import uuid
-from app.models import Batch, ConversionJob, db
-from app.tasks import process_batch_conversions
+from .. import db
+from ..models import Batch, ConversionJob
+# Move the tasks import inside the function where it's used
 
 # Allowed file extensions for batch processing
 ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'txt', 'rtf'}
@@ -84,7 +85,8 @@ def batch_upload():
         batch.total_files = len(valid_files)
         db.session.commit()
         
-        # Dispatch Celery task for batch processing
+        # FIXED: Import Celery task inside the function to avoid circular imports
+        from ..tasks import process_batch_conversions
         process_batch_conversions.delay(batch.id)
         
         return jsonify({

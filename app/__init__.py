@@ -135,5 +135,10 @@ def create_app(config_name=None):
     return app
 
 # Create celery instance for worker
-app = create_app()
-celery = make_celery(app)
+# Initialize celery at module level to avoid circular imports
+celery = Celery('mdraft', include=['app.tasks'])
+
+# Only create the Flask app when not running as a Celery worker
+if not os.environ.get('CELERY_WORKER_RUNNING'):
+    app = create_app()
+    make_celery(app)
