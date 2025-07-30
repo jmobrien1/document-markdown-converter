@@ -17,6 +17,26 @@ migrate = Migrate()
 login_manager = LoginManager()
 mail = Mail()
 
+# Initialize Celery at module level to avoid circular imports
+from celery import Celery
+
+def make_celery(app):
+    """Create Celery instance and configure it with Flask app context."""
+    celery = Celery(
+        app.import_name,
+        backend=app.config.get('CELERY_RESULT_BACKEND'),
+        broker=app.config.get('CELERY_BROKER_URL')
+    )
+    celery.conf.update(app.config)
+    
+    class ContextTask(celery.Task):
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
+    
+    celery.Task = ContextTask
+    return celery
+
 def create_standardized_error_response(message, status_code, error_type=None):
     """Create a standardized JSON error response."""
     response = {
@@ -119,10 +139,6 @@ def create_app(config_name=None):
     app.register_blueprint(api_docs_blueprint, url_prefix='/api/docs')
     app.logger.info("API documentation blueprint registered successfully")
     
-    from .uploads import uploads as uploads_blueprint
-    app.register_blueprint(uploads_blueprint, url_prefix='/uploads')
-    app.logger.info("Uploads blueprint registered successfully")
-    
     from .main import main as main_blueprint
     app.register_blueprint(main_blueprint)
     
@@ -208,5 +224,6 @@ def create_app(config_name=None):
     
     return app
 
-# Export celery instance for worker
-from .tasks import celery
+# Create celery instance for worker
+app = create_app()
+celery = make_celery(app)
