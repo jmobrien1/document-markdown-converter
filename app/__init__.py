@@ -23,10 +23,23 @@ celery = Celery('mdraft', include=['app.tasks'])
 
 def make_celery(app):
     """Create Celery instance and configure it with Flask app context."""
-    # Configure Celery with Flask app config
-    celery.conf.update(app.config)
+    celery = Celery(
+        app.import_name,
+        backend=app.config.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
+        broker=app.config.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+    )
     
-    # Set up task routing
+    # Configure Celery with Flask app config using new format
+    celery.conf.update(
+        result_backend=app.config.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
+        broker_url=app.config.get('CELERY_BROKER_URL', 'redis://localhost:6379/0'),
+        task_serializer='json',
+        accept_content=['json'],
+        result_serializer='json',
+        timezone='UTC',
+        enable_utc=True,
+    )
+    
     class ContextTask(celery.Task):
         def __call__(self, *args, **kwargs):
             with app.app_context():
@@ -36,30 +49,41 @@ def make_celery(app):
     return celery
 
 def create_app(config_name=None):
-    """Application factory pattern for Flask app creation."""
+    """Application factory pattern with enhanced features."""
+    
+    # Import Flask-Login inside create_app to avoid circular dependency
+    from flask_login import LoginManager
+    login_manager = LoginManager()
+    
     app = Flask(__name__)
     
     # Load configuration
     if config_name is None:
-        config_name = os.environ.get('FLASK_CONFIG', 'development')
+        config_name = os.environ.get('FLASK_ENV', 'development')
     
-    app.config.from_object(f'config.{config_name.capitalize()}Config')
     app.logger.info(f"Loading app with config: {config_name}")
+    
+    if config_name == 'development':
+        app.config.from_object('config.DevelopmentConfig')
+    elif config_name == 'production':
+        app.config.from_object('config.ProductionConfig')
+    elif config_name == 'testing':
+        app.config.from_object('config.TestingConfig')
+    else:
+        app.config.from_object('config.Config')
     
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
-    mail.init_app(app)
-    
-    # Initialize Flask-Login inside create_app to avoid circular imports
-    from flask_login import LoginManager
-    login_manager = LoginManager()
     login_manager.init_app(app)
+    mail.init_app(app)
     
     # Configure login manager
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Please log in to access this page.'
+    login_manager.login_message_category = 'info'
     
+    # User loader for Flask-Login
     @login_manager.user_loader
     def load_user(user_id):
         from .models import User
@@ -67,10 +91,10 @@ def create_app(config_name=None):
     
     # Check bcrypt availability
     try:
-        bcrypt.hashpw(b'test', bcrypt.gensalt())
+        import bcrypt
         app.logger.info("✅ Pure bcrypt available for password hashing")
-    except Exception as e:
-        app.logger.warning(f"⚠️ bcrypt not available: {e}")
+    except ImportError:
+        app.logger.warning("⚠️ bcrypt not available, using fallback password hashing")
     
     # Register blueprints
     from .auth import auth as auth_blueprint
@@ -89,7 +113,10 @@ def create_app(config_name=None):
     app.register_blueprint(main_blueprint)
     app.logger.info("Main blueprint registered successfully")
     
-    # Check database migration status
+    # Configure Celery with Flask app
+    celery = make_celery(app)
+    
+    # Database migration check
     try:
         with app.app_context():
             # Check if subscription columns exist using database-appropriate method
@@ -110,7 +137,7 @@ def create_app(config_name=None):
                         FROM information_schema.columns 
                         WHERE table_name = 'users' AND column_name = 'is_admin'
                     """)
-                ).fetchall()
+                ).fetchone()
                 if not result:
                     app.logger.warning("Database migration check: is_admin column not found in users table")
     except Exception as e:
@@ -118,6 +145,6 @@ def create_app(config_name=None):
     
     return app
 
-# Create Flask app and configure celery
+# Create celery instance for worker
 app = create_app()
 celery = make_celery(app)
