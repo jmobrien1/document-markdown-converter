@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Form Submission Test</title>
+</head>
+<body>
+    <h1>Form Submission Test</h1>
+    
+    <form id="testForm" method="POST" action="/convert" enctype="multipart/form-data">
+        <input type="file" name="file" id="testFileInput" accept=".pdf,.docx,.txt">
+        <button type="submit">Test Submit</button>
+    </form>
+    
+    <div id="results"></div>
+    
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('testFileInput');
+            const results = document.getElementById('results');
+            
+            if (!fileInput.files.length) {
+                results.innerHTML = '<p style="color: red;">No file selected</p>';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            console.log('Selected file:', file.name, file.size, 'bytes');
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            console.log('FormData contents:');
+            for (let [key, value] of formData.entries()) {
+                console.log(`${key}:`, value);
+            }
+            
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const responseText = await response.text();
+                console.log('Response status:', response.status);
+                console.log('Response body:', responseText);
+                
+                results.innerHTML = `
+                    <p><strong>Status:</strong> ${response.status}</p>
+                    <p><strong>Response:</strong> ${responseText}</p>
+                `;
+            } catch (error) {
+                console.error('Error:', error);
+                results.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html> 

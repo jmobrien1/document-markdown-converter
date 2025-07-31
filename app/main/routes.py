@@ -260,6 +260,11 @@ def index():
                          remaining_conversions=remaining_conversions,
                          daily_limit=current_app.config.get('ANONYMOUS_DAILY_LIMIT', 5))
 
+@main.route('/test-form')
+def test_form():
+    """Test page for debugging form submission."""
+    return render_template('test_form_submission.html')
+
 @main.route('/convert', methods=['GET', 'POST'])
 def convert():
     """
