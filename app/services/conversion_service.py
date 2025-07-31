@@ -312,6 +312,13 @@ class ConversionService:
                     credentials_json
                 )
                 current_app.logger.info(f"10. Celery task queued: {task.id} ✓")
+                
+                # --- CRITICAL FIX: Save the Celery job_id to the database record ---
+                conversion.job_id = task.id
+                db.session.commit()
+                current_app.logger.info(f"10.5. Job ID saved to database: {task.id} ✓")
+                # --- END FIX ---
+                
             except Exception as celery_error:
                 current_app.logger.error(f"Celery task dispatch failed: {celery_error}")
                 return False, f"Failed to queue conversion task: {str(celery_error)}"
