@@ -693,6 +693,9 @@
                     convertBtn.disabled = true;
                     convertBtn.textContent = 'CONVERTING...';
                     loading.style.display = 'block';
+                    
+                    // Define isProUser based on current tab state
+                    const isProUser = proBtn.classList.contains('active');
                     loadingText.textContent = isProUser && fileInput.files.length > 1 ? 'Uploading and starting batch conversion...' : 'Uploading and starting conversion...';
                     batchStatusContainer.innerHTML = '';
 
