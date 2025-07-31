@@ -469,7 +469,7 @@
         {% if current_user.is_authenticated %}
             <!-- Logged-in View -->
             <section class="upload-section">
-                <form id="uploadForm" enctype="multipart/form-data">
+                <form id="uploadForm" method="POST" action="{{ url_for('main.convert') }}" enctype="multipart/form-data">
                     <div class="file-input-wrapper">
                         <div class="file-input">
                             <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.pptx,.html,.htm,.csv,.json,.xml,.epub,.gif,.tiff,.tif,.jpg,.jpeg,.png,.bmp,.webp">
