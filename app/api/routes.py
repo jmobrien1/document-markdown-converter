@@ -6,73 +6,43 @@ from app.models import Conversion, Batch, ConversionJob, db
 from app.tasks import convert_file_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
+from app.services.conversion_service import ConversionService
 
 from . import api, api_key_required
 
 @api.route('/convert', methods=['POST'])
 @api_key_required
 def api_convert():
+    """API endpoint for file conversion using ConversionService."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
+    
     file = request.files['file']
-    if file.filename == '' or not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid or no selected file'}), 400
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
 
-    filename = secure_filename(file.filename)
-    blob_name = f"uploads/{uuid.uuid4()}_{filename}"
-    bucket_name = current_app.config['GCS_BUCKET_NAME']
-
+    # Get conversion type from request
     use_pro_converter = request.form.get('pro_conversion') == 'on'
-    user = g.current_user  # Now guaranteed to exist due to decorator
+    user = g.current_user  # Guaranteed to exist due to decorator
 
-    try:
-        storage_client = get_storage_client()
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-        blob.upload_from_file(file)
-    except Exception as e:
-        current_app.logger.error(f"GCS Upload Failed: {e}")
-        return jsonify({'error': 'Could not upload file to cloud storage.'}), 500
-
-    # Get file size
-    file.seek(0, 2)
-    file_size = file.tell()
-    file.seek(0)
-
-    try:
-        conversion = Conversion(
-            user_id=user.id,
-            session_id=None,
-            original_filename=filename,
-            file_size=file_size,
-            file_type=os.path.splitext(filename)[1].lower(),
-            conversion_type='pro' if use_pro_converter else 'standard',
-            status='pending'
-        )
-        db.session.add(conversion)
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'Database error occurred. Please try again.'}), 500
-
-    # Start the conversion task
-    task = convert_file_task.delay(
-        bucket_name,
-        blob_name,
-        filename,
-        use_pro_converter,
-        conversion.id
+    # Use ConversionService for all business logic
+    conversion_service = ConversionService()
+    success, result = conversion_service.process_conversion(
+        file=file,
+        filename=file.filename,
+        use_pro_converter=use_pro_converter,
+        user=user
     )
 
-    try:
-        conversion.job_id = task.id
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Failed to store job_id: {e}")
+    if not success:
+        return jsonify({'error': result}), 400
 
-    status_url = url_for('main.task_status', job_id=task.id, _external=True)
-    return jsonify({'job_id': task.id, 'status_url': status_url}), 202 
+    # Return success response
+    status_url = url_for('main.task_status', job_id=result['job_id'], _external=True)
+    return jsonify({
+        'job_id': result['job_id'],
+        'status_url': status_url
+    }), 202
 
 @api.route('/status/<job_id>', methods=['GET'])
 @api_key_required
