@@ -160,6 +160,8 @@
         .copy-btn:hover { background: #218838; }
         .download-btn { background: #007bff; color: white; text-decoration: none; display: none; }
         .download-btn:hover { background: #0056b3; }
+        .pro-download-btn { background: #28a745; color: white; text-decoration: none; display: none; margin-left: 8px; }
+        .pro-download-btn:hover { background: #218838; }
         .markdown-output { width: 100%; min-height: 300px; padding: 20px; border: 1px solid #dee2e6; border-radius: 12px; font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.6; background: #f8f9fa; resize: vertical; }
         .error-message, .success-message { padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid; display: none; }
         .error-message { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
@@ -527,6 +529,10 @@
                     <div class="action-buttons">
                         <button class="action-btn copy-btn" id="copyBtn">📋 Copy</button>
                         <a href="#" class="action-btn download-btn" id="downloadBtn">💾 Download</a>
+                        {% if current_user and current_user.has_pro_access %}
+                        <a href="#" class="action-btn download-btn pro-download-btn" id="downloadTextBtn" style="display: none;">📄 Download .txt</a>
+                        <a href="#" class="action-btn download-btn pro-download-btn" id="downloadJsonBtn" style="display: none;">📊 Download .json</a>
+                        {% endif %}
                     </div>
                 </div>
                 <textarea class="markdown-output" id="markdownOutput" readonly></textarea>
@@ -902,6 +908,10 @@
                 }
 
                 function pollForTaskStatus(statusUrl) {
+                    // Store job ID for Pro downloads
+                    const jobId = statusUrl.split('/').pop();
+                    window.currentJobId = jobId;
+                    
                     pollingInterval = setInterval(async () => {
                         try {
                             const statusResponse = await fetch(statusUrl);
@@ -910,7 +920,6 @@
                             if (data.status === 'completed') {
                                 clearInterval(pollingInterval);
                                 // Fetch the full result from the separate result endpoint
-                                const jobId = statusUrl.split('/').pop();
                                 const resultResponse = await fetch(`/result/${jobId}`);
                                 const resultData = await resultResponse.json();
                                 
@@ -943,7 +952,32 @@
                     downloadBtn.download = 'mdraft_output.md';
                     downloadBtn.style.display = 'inline-block';
 
+                    // Show Pro download buttons if user has Pro access
+                    const downloadTextBtn = document.getElementById('downloadTextBtn');
+                    const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+                    if (downloadTextBtn && downloadJsonBtn) {
+                        downloadTextBtn.style.display = 'inline-block';
+                        downloadJsonBtn.style.display = 'inline-block';
+                        
+                        // Get job ID from the current polling URL or result
+                        const jobId = getCurrentJobId();
+                        if (jobId) {
+                            downloadTextBtn.href = `/result/${jobId}/text`;
+                            downloadJsonBtn.href = `/result/${jobId}/json`;
+                            downloadTextBtn.download = `${result.filename || 'output'}.txt`;
+                            downloadJsonBtn.download = `${result.filename || 'output'}.json`;
+                        }
+                    }
+
                     resetUI();
+                }
+
+                function getCurrentJobId() {
+                    // Try to get job ID from the current polling URL
+                    if (window.currentJobId) {
+                        return window.currentJobId;
+                    }
+                    return null;
                 }
 
                 function handleFailure(errorMsg) {
@@ -955,6 +989,18 @@
                     loading.style.display = 'none';
                     convertBtn.disabled = false;
                     convertBtn.textContent = 'Convert with mdraft';
+                    
+                    // Hide Pro download buttons
+                    const downloadTextBtn = document.getElementById('downloadTextBtn');
+                    const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+                    if (downloadTextBtn) downloadTextBtn.style.display = 'none';
+                    if (downloadJsonBtn) downloadJsonBtn.style.display = 'none';
+                }
+
+                function getJobIdFromUrl() {
+                    // Extract job ID from current URL or polling URL
+                    const urlParams = new URLSearchParams(window.location.search);
+                    return urlParams.get('job_id') || null;
                 }
 
                 copyBtn.addEventListener('click', () => {

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 from flask import (
-    render_template, request, jsonify, url_for, current_app, session
+    render_template, request, jsonify, url_for, current_app, session, send_file, abort
 )
 from werkzeug.utils import secure_filename
 from app.tasks import convert_file_task
@@ -24,6 +24,7 @@ except ImportError:
 
 from ..models import User, AnonymousUsage, Conversion, Batch, ConversionJob
 from ..services.conversion_service import ConversionService
+from ..services.conversion_engine import ConversionEngine
 from .. import db
 from . import main
 
@@ -458,6 +459,131 @@ def task_result(job_id):
     except Exception as e:
         current_app.logger.error(f"Error getting task result: {e}")
         return jsonify({'error': 'Error retrieving task result'}), 500
+
+@main.route('/result/<job_id>/text')
+@login_required
+def task_result_text(job_id):
+    """
+    Get the clean text result of a completed conversion task for Pro users.
+    """
+    # Access control check - must be the very first operation
+    if not current_user.has_pro_access:
+        abort(403)
+    
+    try:
+        # Get the conversion record
+        conversion = Conversion.query.filter_by(job_id=job_id, user_id=current_user.id).first()
+        if not conversion:
+            return jsonify({'error': 'Conversion not found'}), 404
+        
+        if conversion.status != 'completed':
+            return jsonify({'error': 'Conversion not completed yet'}), 400
+        
+        # Get the markdown content from GCS
+        storage_client = get_storage_client()
+        bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
+        markdown_blob = bucket.blob(f"results/{conversion.id}.md")
+        
+        if not markdown_blob.exists():
+            return jsonify({'error': 'Result file not found'}), 404
+        
+        # Download markdown content
+        markdown_content = markdown_blob.download_as_text()
+        
+        # Convert to clean text using ConversionEngine
+        conversion_engine = ConversionEngine()
+        
+        # Create temporary file with markdown content
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
+            temp_file.write(markdown_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Convert to clean text
+            clean_text = conversion_engine.convert_to_clean_text(temp_file_path)
+            
+            # Create response with clean text
+            from io import BytesIO
+            response = send_file(
+                BytesIO(clean_text.encode('utf-8')),
+                mimetype='text/plain',
+                as_attachment=True,
+                download_name=f"{conversion.original_filename.rsplit('.', 1)[0]}.txt"
+            )
+            
+            return response
+            
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file_path)
+            
+    except Exception as e:
+        current_app.logger.error(f"Error getting task result text: {e}")
+        return jsonify({'error': 'Error retrieving task result text'}), 500
+
+@main.route('/result/<job_id>/json')
+@login_required
+def task_result_json(job_id):
+    """
+    Get the structured JSON result of a completed conversion task for Pro users.
+    """
+    # Access control check - must be the very first operation
+    if not current_user.has_pro_access:
+        abort(403)
+    
+    try:
+        # Get the conversion record
+        conversion = Conversion.query.filter_by(job_id=job_id, user_id=current_user.id).first()
+        if not conversion:
+            return jsonify({'error': 'Conversion not found'}), 404
+        
+        if conversion.status != 'completed':
+            return jsonify({'error': 'Conversion not completed yet'}), 400
+        
+        # Get the markdown content from GCS
+        storage_client = get_storage_client()
+        bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
+        markdown_blob = bucket.blob(f"results/{conversion.id}.md")
+        
+        if not markdown_blob.exists():
+            return jsonify({'error': 'Result file not found'}), 404
+        
+        # Download markdown content
+        markdown_content = markdown_blob.download_as_text()
+        
+        # Convert to structured JSON using ConversionEngine
+        conversion_engine = ConversionEngine()
+        
+        # Create temporary file with markdown content
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
+            temp_file.write(markdown_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Convert to structured JSON
+            structured_doc = conversion_engine.convert_to_structured_json(temp_file_path)
+            
+            # Convert to JSON string
+            json_content = structured_doc.model_dump_json(indent=2)
+            
+            # Create response with JSON
+            from io import BytesIO
+            response = send_file(
+                BytesIO(json_content.encode('utf-8')),
+                mimetype='application/json',
+                as_attachment=True,
+                download_name=f"{conversion.original_filename.rsplit('.', 1)[0]}.json"
+            )
+            
+            return response
+            
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file_path)
+            
+    except Exception as e:
+        current_app.logger.error(f"Error getting task result json: {e}")
+        return jsonify({'error': 'Error retrieving task result json'}), 500
 
 @main.route('/stats')
 def conversion_stats():
