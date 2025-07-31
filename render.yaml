@@ -12,9 +12,8 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.render
     plan: free
-    # Install web dependencies with aggressive cache busting
-    buildCommand: "echo 'ACCOUNT_PAGE_FIX_FORCE_REBUILD_$(date +%s)_$(uuidgen)_$(echo $RANDOM)_$(echo $BUILD_ID)' && rm -rf ~/.cache/pip && pip cache purge && rm -rf /tmp/* && find . -name '*.pyc' -delete && find . -name '__pycache__' -type d -exec rm -rf {} + && docker system prune -f && pip install --no-cache-dir --force-reinstall -r requirements-web.txt && echo 'Build completed at $(date)' && echo 'Account page TypeError fix deployed'"
-    startCommand: "echo 'Starting database migration...' && echo 'Current migration state:' && flask db current && echo 'Running migrations...' && flask db upgrade && echo 'Running job_id column fix...' && flask fix-job-id-column && echo 'Migration complete, starting web server...' && echo 'Pure bcrypt migration version: $(date +%s)' && echo 'Verifying User model has verify_password method...' && python -c \"from app.models import User; print('✅ User model verify_password method exists:', hasattr(User, 'verify_password'))\" && echo 'Verifying pure bcrypt is available...' && python -c \"import bcrypt; print('✅ Pure bcrypt available:', bcrypt is not None)\" && echo 'Testing bcrypt functionality...' && python -c \"import bcrypt; salt = bcrypt.gensalt(); hashed = bcrypt.hashpw(b'test', salt); print('✅ Bcrypt test successful:', bcrypt.checkpw(b'test', hashed))\" && echo 'Verifying job_id column exists...' && python -c \"from app import db; from app.models import Conversion; result = db.session.execute('SELECT column_name FROM information_schema.columns WHERE table_name = \\'conversions\\' AND column_name = \\'job_id\\''); print('✅ job_id column exists:', result.fetchone() is not None)\" && gunicorn run:app"
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: flask db upgrade && gunicorn run:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -22,12 +21,6 @@ services:
         value: run.py
       - key: FLASK_CONFIG
         value: production
-      - key: FORCE_REBUILD
-        value: "true"
-      - key: BCRYPT_MIGRATION
-        value: "pure_bcrypt_v1"
-      - key: DATABASE_MIGRATION
-        value: "job_id_column_fix_v1"
       - key: CELERY_BROKER_URL
         fromService:
           type: redis
@@ -46,9 +39,8 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile.render
     plan: free
-    # Install worker dependencies with aggressive cache busting
-    buildCommand: "echo 'WORKER-AGGRESSIVE-CACHE-BUST-$(date +%s)-$(uuidgen)' && rm -rf ~/.cache/pip && pip cache purge && pip install --no-cache-dir --force-reinstall -r requirements-worker.txt"
-    startCommand: "echo 'WORKER-START-COMMAND-EXECUTED' && celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4 --without-gossip --without-mingle"
+    buildCommand: pip install -r requirements-worker.txt
+    startCommand: celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4 --without-gossip --without-mingle
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -56,12 +48,6 @@ services:
         value: run.py
       - key: FLASK_CONFIG
         value: production
-      - key: FORCE_REBUILD
-        value: "true"
-      - key: BCRYPT_MIGRATION
-        value: "pure_bcrypt_v1"
-      - key: DATABASE_MIGRATION
-        value: "job_id_column_fix_v1"
       - key: CELERY_BROKER_URL
         fromService:
           type: redis
@@ -105,7 +91,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python scripts/run_cron_tasks.py reset_monthly_usage
+    startCommand: celery -A celery_worker.celery call app.tasks.reset_monthly_usage
     schedule: "0 0 1 * *"  # First day of every month at midnight UTC
     envVars:
       - key: FLASK_APP
@@ -130,7 +116,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python scripts/run_cron_tasks.py redis_health_check
+    startCommand: celery -A celery_worker.celery call app.tasks.redis_health_check
     schedule: "*/30 * * * *"  # Every 30 minutes
     envVars:
       - key: FLASK_APP
