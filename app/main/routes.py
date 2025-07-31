@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 from flask import (
-    render_template, request, jsonify, url_for, current_app, session, send_file, abort
+    render_template, request, jsonify, url_for, current_app, session, send_file, abort, flash, redirect
 )
 from werkzeug.utils import secure_filename
 from app.tasks import convert_file_task
@@ -22,7 +22,7 @@ except ImportError:
     current_user = None
     login_required = None
 
-from ..models import User, AnonymousUsage, Conversion, Batch, ConversionJob
+from ..models import User, AnonymousUsage, Conversion, Batch, ConversionJob, Team, TeamMember
 from ..services.conversion_service import ConversionService
 from ..services.conversion_engine import ConversionEngine
 from .. import db
@@ -859,3 +859,98 @@ def user_status():
 def request_entity_too_large(e):
     """Handle 413 Request Entity Too Large errors."""
     return jsonify({'error': 'File too large'}), 413
+
+# Team Management Routes
+@main.route('/team/<int:team_id>/manage')
+@login_required
+def manage_team(team_id):
+    """Team management page for team admins."""
+    # Verify current user is an admin of the specified team
+    team = Team.query.get_or_404(team_id)
+    if not team.is_admin(current_user):
+        abort(403)
+    
+    # Get team members with their user information
+    members = []
+    for membership in team.members.all():
+        user = User.query.get(membership.user_id)
+        if user:
+            members.append({
+                'id': user.id,
+                'email': user.email,
+                'role': membership.role,
+                'joined_at': membership.joined_at
+            })
+    
+    return render_template('main/manage_team.html', team=team, members=members)
+
+@main.route('/team/<int:team_id>/invite', methods=['POST'])
+@login_required
+def invite_team_member(team_id):
+    """Invite a user to join the team."""
+    # Verify current user is an admin of the specified team
+    team = Team.query.get_or_404(team_id)
+    if not team.is_admin(current_user):
+        abort(403)
+    
+    email = request.form.get('email', '').strip().lower()
+    if not email:
+        flash('Email address is required', 'error')
+        return redirect(url_for('main.manage_team', team_id=team_id))
+    
+    # Find the user by email
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        flash(f'User with email {email} not found', 'error')
+        return redirect(url_for('main.manage_team', team_id=team_id))
+    
+    # Check if user is already a member
+    if team.is_member(user):
+        flash(f'{email} is already a member of this team', 'error')
+        return redirect(url_for('main.manage_team', team_id=team_id))
+    
+    try:
+        # Add user to team with default 'member' role
+        team.add_member(user, role='member')
+        db.session.commit()
+        flash(f'{email} has been invited to join the team', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error inviting user to team: {e}')
+        flash('Error inviting user to team', 'error')
+    
+    return redirect(url_for('main.manage_team', team_id=team_id))
+
+@main.route('/team/<int:team_id>/remove/<int:user_id>', methods=['POST'])
+@login_required
+def remove_team_member(team_id, user_id):
+    """Remove a user from the team."""
+    # Verify current user is an admin of the specified team
+    team = Team.query.get_or_404(team_id)
+    if not team.is_admin(current_user):
+        abort(403)
+    
+    # Find the user to remove
+    user = User.query.get_or_404(user_id)
+    
+    # Check if user is actually a member of this team
+    if not team.is_member(user):
+        flash('User is not a member of this team', 'error')
+        return redirect(url_for('main.manage_team', team_id=team_id))
+    
+    # Prevent removing the team owner
+    if user.id == team.owner_id:
+        flash('Cannot remove the team owner', 'error')
+        return redirect(url_for('main.manage_team', team_id=team_id))
+    
+    try:
+        # Remove user from team
+        team.remove_member(user)
+        db.session.commit()
+        flash(f'{user.email} has been removed from the team', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error removing user from team: {e}')
+        flash('Error removing user from team', 'error')
+    
+    return redirect(url_for('main.manage_team', team_id=team_id))
