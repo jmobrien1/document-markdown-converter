@@ -1,120 +1,66 @@
-// Debug script for testing file conversion
-// Run this in your browser console on https://mdraft.onrender.com
-
-async function debugConversion() {
-    console.log("=== DEBUGGING CONVERSION ===");
+// Debug script to test form submission
+async function debugFormSubmission() {
+    console.log("=== DEBUGGING FORM SUBMISSION ===");
     
-    // 1. Check user status
-    console.log("1. Checking user status...");
-    const userResponse = await fetch('/user-status');
-    const userData = await userResponse.json();
-    console.log("User Status:", userData);
+    // Check if form exists
+    const uploadForm = document.getElementById('uploadForm');
+    console.log("1. Form found:", uploadForm);
     
-    // 2. Check form elements
-    console.log("2. Checking form elements...");
-    const proCheckbox = document.getElementById('pro_conversion');
-    const proTab = document.getElementById('pro-tab');
-    const standardTab = document.getElementById('standard-tab');
-    const fileInput = document.getElementById('file-input') || document.querySelector('input[type="file"]');
-    const proConversionHidden = document.getElementById('pro_conversion_hidden_input');
-    
-    console.log("Form Elements:", {
-        proCheckbox: proCheckbox,
-        proCheckboxDisabled: proCheckbox?.disabled,
-        proTab: proTab,
-        standardTab: standardTab,
-        fileInput: fileInput,
-        hasFile: fileInput?.files?.length > 0,
-        proConversionHidden: proConversionHidden,
-        hiddenValue: proConversionHidden?.value
-    });
-    
-    // 3. Check current tab state
-    console.log("3. Checking tab state...");
-    if (proTab && standardTab) {
-        console.log("Tab States:", {
-            proTabActive: proTab.classList.contains('active'),
-            standardTabActive: standardTab.classList.contains('active'),
-            proTabDisabled: proTab.disabled,
-            standardTabDisabled: standardTab.disabled
-        });
+    if (!uploadForm) {
+        console.error("❌ Form not found!");
+        return;
     }
     
-    // 4. Try a test conversion if file is selected
+    // Check form attributes
+    console.log("2. Form attributes:", {
+        method: uploadForm.method,
+        action: uploadForm.action,
+        enctype: uploadForm.enctype
+    });
+    
+    // Check file input
+    const fileInput = document.getElementById('fileInput');
+    console.log("3. File input found:", fileInput);
+    
     if (fileInput && fileInput.files.length > 0) {
-        console.log("4. Testing conversion...");
-        const file = fileInput.files[0];
-        console.log("Selected file:", {
-            name: file.name,
-            size: file.size,
-            type: file.type
-        });
+        console.log("4. File selected:", fileInput.files[0].name, fileInput.files[0].size, "bytes");
         
-        const formData = new FormData();
-        formData.append('file', file);
+        // Test FormData creation
+        const formData = new FormData(uploadForm);
+        console.log("5. FormData created from form");
         
-        // Check if Pro conversion is selected
-        const isProSelected = proTab && proTab.classList.contains('active');
-        if (isProSelected) {
-            formData.append('pro_conversion', 'on');
-            console.log("Pro conversion selected");
-        } else {
-            console.log("Standard conversion selected");
+        // Check what's in the FormData
+        console.log("6. FormData contents:");
+        for (let [key, value] of formData.entries()) {
+            console.log(`   ${key}:`, value);
         }
         
-        console.log("Sending conversion request...");
-        
+        // Test the actual submission
+        console.log("7. Testing submission...");
         try {
-            const response = await fetch('/convert', {
-                method: 'POST',
+            const response = await fetch(uploadForm.action, {
+                method: uploadForm.method,
                 body: formData
             });
             
+            console.log("8. Response status:", response.status);
             const responseText = await response.text();
-            console.log("Response Status:", response.status);
-            console.log("Response Headers:", Object.fromEntries(response.headers.entries()));
-            console.log("Response Text:", responseText);
+            console.log("9. Response body:", responseText);
             
-            if (!response.ok) {
-                console.error("CONVERSION FAILED:", responseText);
+            if (response.ok) {
+                console.log("✅ SUCCESS: Form submission worked!");
             } else {
-                console.log("Conversion request successful!");
+                console.log("❌ ERROR: Form submission failed");
             }
         } catch (error) {
-            console.error("FETCH ERROR:", error);
+            console.error("❌ FETCH ERROR:", error);
         }
     } else {
         console.log("4. No file selected - please select a file first");
     }
+    
+    console.log("=== DEBUG COMPLETE ===");
 }
 
-// Also provide a simple test function
-function testWithSampleFile() {
-    console.log("=== TESTING WITH SAMPLE FILE ===");
-    
-    // Create a simple text file for testing
-    const testContent = "This is a test document for conversion.";
-    const testFile = new File([testContent], "test.txt", { type: "text/plain" });
-    
-    // Simulate file input
-    const fileInput = document.getElementById('file-input') || document.querySelector('input[type="file"]');
-    if (fileInput) {
-        // Create a DataTransfer object to set files
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(testFile);
-        fileInput.files = dataTransfer.files;
-        
-        console.log("Test file set:", testFile.name);
-        debugConversion();
-    } else {
-        console.error("File input not found");
-    }
-}
-
-// Export functions for console use
-window.debugConversion = debugConversion;
-window.testWithSampleFile = testWithSampleFile;
-
-console.log("Debug functions loaded:");
-console.log("- debugConversion() - Test with selected file");
-console.log("- testWithSampleFile() - Test with sample text file"); 
+// Run the debug
+debugFormSubmission(); 
