@@ -854,7 +854,7 @@
                             const response = await fetch(`/status/${jobId}`);
                             const data = await response.json();
                             
-                            if (data.state === 'SUCCESS') {
+                            if (data.status === 'completed') {
                                 clearInterval(pollInterval);
                                 updateCardStatus(card, 'completed', 'Conversion completed');
                                 
@@ -867,7 +867,7 @@
                                     card.dataset.markdown = resultData.markdown;
                                     card.dataset.filename = resultData.filename;
                                 }
-                            } else if (data.state === 'FAILURE') {
+                            } else if (data.status === 'failed') {
                                 clearInterval(pollInterval);
                                 updateCardStatus(card, 'failed', `Failed: ${data.error || 'Unknown error'}`);
                             } else {
@@ -907,7 +907,7 @@
                             const statusResponse = await fetch(statusUrl);
                             const data = await statusResponse.json();
 
-                            if (data.state === 'SUCCESS' && data.has_result) {
+                            if (data.status === 'completed') {
                                 clearInterval(pollingInterval);
                                 // Fetch the full result from the separate result endpoint
                                 const jobId = statusUrl.split('/').pop();
@@ -919,7 +919,7 @@
                                 } else {
                                     handleFailure('No result data available');
                                 }
-                            } else if (data.state === 'FAILURE') {
+                            } else if (data.status === 'failed') {
                                 clearInterval(pollingInterval);
                                 handleFailure(data.error);
                             } else {
