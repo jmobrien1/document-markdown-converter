@@ -3,7 +3,7 @@ import os
 import uuid
 from werkzeug.utils import secure_filename
 from app.models import Conversion, Batch, ConversionJob, db
-from app.tasks import convert_file_task
+from app.tasks import convert_file_task, extract_data_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
 from app.services.conversion_service import ConversionService
@@ -187,4 +187,50 @@ def api_batch_status(batch_id):
         
     except Exception as e:
         current_app.logger.error(f'Batch status API error: {str(e)}')
-        return jsonify({'error': 'Failed to get batch status'}), 500 
+        return jsonify({'error': 'Failed to get batch status'}), 500
+
+
+@api.route('/conversion/<job_id>/extract', methods=['POST'])
+@api_key_required
+def api_extract_data(job_id):
+    """Extract structured data from a completed conversion."""
+    user = g.current_user  # Now guaranteed to exist due to decorator
+    
+    # Query Conversion record for this job_id and user
+    conversion = Conversion.query.filter_by(job_id=job_id, user_id=user.id).first()
+    if not conversion:
+        return jsonify({'error': 'Conversion not found'}), 404
+    
+    # Verify that the current_user is the owner of the conversion
+    if conversion.user_id != user.id:
+        return jsonify({'error': 'Access denied'}), 403
+    
+    # Check if user has Pro access
+    if not user.has_pro_access:
+        return jsonify({'error': 'Pro access required for data extraction'}), 403
+    
+    # Check if conversion is completed
+    if conversion.status != 'completed':
+        return jsonify({'error': 'Conversion must be completed before extraction'}), 400
+    
+    # Check if extraction has already been performed
+    if conversion.structured_data is not None:
+        return jsonify({'error': 'Data extraction already performed for this conversion'}), 400
+    
+    try:
+        # Dispatch the extraction task
+        task = extract_data_task.delay(conversion.id)
+        
+        return jsonify({
+            'task_id': task.id,
+            'job_id': job_id,
+            'message': 'Data extraction started'
+        }), 202
+        
+    except Exception as e:
+        current_app.logger.error(f'Failed to start extraction for job {job_id}: {e}')
+        return jsonify({
+            'error': 'Failed to start data extraction',
+            'job_id': job_id,
+            'details': str(e)
+        }), 500 

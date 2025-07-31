@@ -277,6 +277,7 @@ class Conversion(db.Model):
     # Results
     markdown_length = db.Column(db.Integer, nullable=True)  # Character count
     pages_processed = db.Column(db.Integer, nullable=True, info={'optional': True})  # Number of pages processed (for Pro conversions)
+    structured_data = db.Column(db.JSON, nullable=True)  # Extracted structured data from AI analysis
 
     @property
     def duration(self):

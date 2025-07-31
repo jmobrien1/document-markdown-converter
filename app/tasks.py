@@ -31,6 +31,7 @@ except ImportError:
 try:
     from app import db
     from app.models import Conversion, User, Batch, ConversionJob
+    from app.services.extraction_service import ExtractionService
     MODELS_AVAILABLE = True
 except ImportError:
     MODELS_AVAILABLE = False
@@ -39,6 +40,7 @@ except ImportError:
     User = None
     Batch = None
     ConversionJob = None
+    ExtractionService = None
 
 # Conditional imports for email functionality
 try:
@@ -1076,3 +1078,35 @@ def process_batch_conversions(self, batch_id):
                     db.session.commit()
         except:
             pass
+
+
+@get_celery().task(bind=True)
+def extract_data_task(self, conversion_id):
+    """
+    Extract structured data from a document's text content.
+    
+    Args:
+        conversion_id (int): The ID of the conversion to extract data from
+    """
+    try:
+        with current_app.app_context():
+            print(f"--- [Celery Task] Starting structured data extraction for conversion {conversion_id}")
+            
+            # Instantiate the ExtractionService and call the extract_structured_data method
+            extraction_service = ExtractionService()
+            structured_data = extraction_service.extract_structured_data(conversion_id)
+            
+            print(f"--- [Celery Task] Successfully extracted structured data for conversion {conversion_id}")
+            return {
+                'status': 'success',
+                'conversion_id': conversion_id,
+                'structured_data': structured_data
+            }
+            
+    except Exception as e:
+        print(f"--- [Celery Task] Error extracting structured data for conversion {conversion_id}: {str(e)}")
+        return {
+            'status': 'error',
+            'conversion_id': conversion_id,
+            'error': str(e)
+        }
