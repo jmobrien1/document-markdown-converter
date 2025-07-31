@@ -860,6 +860,26 @@ def request_entity_too_large(e):
     """Handle 413 Request Entity Too Large errors."""
     return jsonify({'error': 'File too large'}), 413
 
+@main.route('/result/<job_id>/graph')
+@login_required
+def task_result_graph(job_id):
+    """Get knowledge graph data for a completed conversion."""
+    conversion = Conversion.query.filter_by(job_id=job_id).first()
+    if not conversion:
+        abort(404)
+    
+    if conversion.user_id != current_user.id:
+        abort(403)
+    
+    if conversion.status != 'completed':
+        abort(400, description="Conversion must be completed before graph data is available")
+    
+    if not conversion.structured_data:
+        abort(404, description="No graph data available for this conversion")
+    
+    return jsonify(conversion.structured_data)
+
+
 @main.route('/workspace')
 @login_required
 def workspace():
