@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 from google.cloud import storage
 from pypdf import PdfReader
 
+from app import db
 from app.models import Conversion, User, AnonymousUsage
 from app.tasks import convert_file_task
 
@@ -176,7 +177,6 @@ class ConversionService:
                 status='pending'
             )
             
-            from app import db
             db.session.add(conversion)
             db.session.commit()
             
