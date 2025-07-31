@@ -174,8 +174,19 @@ def account():
             if avg_time_result is not None:
                 avg_processing_time = round(avg_time_result, 2)
             
+            # Calculate Total Time Saved by summing processing_time for completed conversions
+            total_time_saved_result = db.session.query(db.func.sum(Conversion.processing_time)).filter(
+                Conversion.user_id == user.id,
+                Conversion.status == 'completed',
+                Conversion.processing_time.isnot(None)
+            ).scalar()
+            total_time_saved = round(total_time_saved_result, 1) if total_time_saved_result is not None else 0.0
+            
             pro_conversions_count = user.conversions.filter_by(conversion_type='pro').count()
             recent_conversions = user.conversions.order_by(Conversion.created_at.desc()).limit(10).all()
+        else:
+            # Default values when no conversions exist
+            total_time_saved = 0.0
 
         # Prepare context, ensuring all required keys are present
         context = {
@@ -188,7 +199,8 @@ def account():
             'recent_conversions': recent_conversions,
             'pro_pages_processed': getattr(user, 'pro_pages_processed_current_month', 0), # CRITICAL FIX
             'trial_days_remaining': user.trial_days_remaining,
-            'monthly_allowance': 1000 
+            'monthly_allowance': 1000,
+            'total_time_saved': total_time_saved
         }
         return render_template('auth/account.html', **context)
 

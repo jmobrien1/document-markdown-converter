@@ -412,10 +412,14 @@
                 <div class="stat-value">{{ "%.1f"|format(avg_processing_time) }}</div>
                 <div class="stat-label">Avg. Time Saved (s)</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ "%.1f"|format(total_time_saved) }}</div>
+                <div class="stat-label">Total Time Saved (s)</div>
+            </div>
             {% if user.has_pro_access %}
             <div class="stat-card">
                 <div class="stat-value">{{ pro_pages_processed }}/{{ monthly_allowance }}</div>
-                <div class="stat-label">Pages Processed (This Month)</div>
+                <div class="stat-label">Pro Pages Processed (This Month)</div>
             </div>
             {% endif %}
         </div>
