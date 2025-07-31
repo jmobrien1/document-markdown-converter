@@ -327,10 +327,8 @@ def convert():
         user = None
         if current_user and current_user.is_authenticated:
             current_app.logger.info(f"Authenticated user: {current_user.id}")
-            user = User.get_user_safely(current_user.id)
-            if user:
-                user = db.session.merge(user)
-                current_app.logger.info(f"User loaded: {user.email}, subscription: {getattr(user, 'subscription_status', 'N/A')}")
+            user = db.session.merge(current_user)
+            current_app.logger.info(f"User loaded: {user.email}, subscription: {getattr(user, 'subscription_status', 'N/A')}")
         else:
             current_app.logger.info("Anonymous user conversion")
         

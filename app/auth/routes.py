@@ -127,7 +127,7 @@ def login():
 def logout():
     """User logout endpoint."""
     # Ensure we have a fresh user object bound to the session
-    user = User.get_user_safely(current_user.id)
+    user = db.session.merge(current_user)
     user_email = user.email if user else 'User'
     logout_user()
     flash(f'Goodbye, {user_email}!', 'info')
@@ -204,13 +204,7 @@ def test_email():
     """Test email functionality."""
     try:
         # Ensure we have a fresh user object bound to the session
-        user = User.get_user_safely(current_user.id)
-        if not user:
-            flash('User not found', 'error')
-            return redirect(url_for('auth.account'))
-        
-        # Ensure user is properly bound to session
-        user = db.session.merge(user)
+        user = db.session.merge(current_user)
         
         from app.email import send_conversion_complete_email
         send_conversion_complete_email(user.email, "test-file.pdf")
@@ -225,13 +219,7 @@ def generate_api_key():
     """Generate a new API key for the current user."""
     try:
         # Ensure we have a fresh user object bound to the session
-        user = User.get_user_safely(current_user.id)
-        if not user:
-            flash('User not found', 'error')
-            return redirect(url_for('auth.account'))
-        
-        # Ensure user is properly bound to session
-        user = db.session.merge(user)
+        user = db.session.merge(current_user)
         
         user.generate_api_key()
         flash('New API key generated successfully!', 'success')
@@ -245,13 +233,7 @@ def revoke_api_key():
     """Revoke the current API key."""
     try:
         # Ensure we have a fresh user object bound to the session
-        user = User.get_user_safely(current_user.id)
-        if not user:
-            flash('User not found', 'error')
-            return redirect(url_for('auth.account'))
-        
-        # Ensure user is properly bound to session
-        user = db.session.merge(user)
+        user = db.session.merge(current_user)
         
         user.revoke_api_key()
         flash('API key revoked successfully!', 'success')
@@ -264,12 +246,7 @@ def user_status():
     """API endpoint to get current user status."""
     if current_user.is_authenticated:
         # Ensure we have a fresh user object bound to the session
-        user = User.get_user_safely(current_user.id)
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        # Ensure user is properly bound to session
-        user = db.session.merge(user)
+        user = db.session.merge(current_user)
         
         # Get user's conversion stats using the fresh user object
         daily_conversions = user.get_daily_conversions()
@@ -348,10 +325,7 @@ def create_checkout_session():
     
     try:
         # Ensure we have a fresh user object bound to the session
-        user = User.get_user_safely(current_user.id)
-        if not user:
-            flash('User not found', 'error')
-            return redirect(url_for('auth.upgrade'))
+        user = db.session.merge(current_user)
         
         stripe.api_key = current_app.config['STRIPE_SECRET_KEY']
         checkout_session = stripe.checkout.Session.create(
@@ -389,10 +363,7 @@ def stripe_success():
 def billing_portal():
     """Redirect user to Stripe Customer Billing Portal."""
     # Ensure we have a fresh user object bound to the session
-    user = User.get_user_safely(current_user.id)
-    if not user:
-        flash('User not found', 'error')
-        return redirect(url_for('auth.account'))
+    user = db.session.merge(current_user)
     
     if not user.stripe_customer_id:
         flash("You don't have a billing account with us.", "error")

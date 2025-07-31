@@ -363,7 +363,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
             
             # Update conversion record with failure
             if conversion_id and MODELS_AVAILABLE:
-                conversion = Conversion.get_conversion_safely(conversion_id)
+                conversion = Conversion.query.get(conversion_id)
                 if conversion:
                     conversion.status = 'failed'
                     conversion.error_message = f"Security scan failed: {scan_result}"
@@ -393,9 +393,9 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
         if use_pro_converter:
             # Check user has Pro access
             if conversion_id and MODELS_AVAILABLE:
-                conversion = Conversion.get_conversion_safely(conversion_id)
+                conversion = Conversion.query.get(conversion_id)
                 if conversion and conversion.user_id:
-                    user = User.get_user_safely(conversion.user_id)
+                    user = User.query.get(conversion.user_id)
                     if not user or not user.has_pro_access:
                         raise Exception("Pro access required. Please upgrade to Pro or check your trial status.")
                     
@@ -784,7 +784,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
         
         # Update conversion record with success
         if conversion_id and MODELS_AVAILABLE:
-            conversion = Conversion.get_conversion_safely(conversion_id)
+            conversion = Conversion.query.get(conversion_id)
             if conversion:
                 conversion.status = 'completed'
                 conversion.completed_at = datetime.now(timezone.utc)
@@ -793,7 +793,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                 
                 # Track Pro usage if this was a Pro conversion
                 if use_pro_converter and conversion.user_id:
-                    user = User.get_user_safely(conversion.user_id)
+                    user = User.query.get(conversion.user_id)
                     if user:
                         # Use the accurate page count passed to the task
                         if page_count is None:
@@ -861,7 +861,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
         # Update conversion record with failure
         if conversion_id and MODELS_AVAILABLE:
             try:
-                conversion = Conversion.get_conversion_safely(conversion_id)
+                conversion = Conversion.query.get(conversion_id)
                 if conversion:
                     conversion.status = 'failed'
                     conversion.error_message = str(e)

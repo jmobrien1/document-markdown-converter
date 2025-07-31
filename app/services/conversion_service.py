@@ -344,7 +344,7 @@ class ConversionService:
     def get_conversion_status(self, conversion_id):
         """Get the status of a conversion."""
         try:
-            conversion = Conversion.get_conversion_safely(conversion_id)
+            conversion = Conversion.query.get(conversion_id)
             if not conversion:
                 return False, "Conversion not found"
             
@@ -364,7 +364,7 @@ class ConversionService:
     def get_conversion_result(self, conversion_id):
         """Get the result of a completed conversion."""
         try:
-            conversion = Conversion.get_conversion_safely(conversion_id)
+            conversion = Conversion.query.get(conversion_id)
             if not conversion:
                 return False, "Conversion not found"
             
