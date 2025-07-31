@@ -42,6 +42,10 @@ class User(db.Model):
     # Relationship to conversions
     conversions = db.relationship('Conversion', backref='user', lazy='dynamic')
     
+    # Team relationships
+    owned_teams = db.relationship('Team', backref='owner', lazy='dynamic', foreign_keys='Team.owner_id')
+    team_memberships = db.relationship('TeamMember', backref='user', lazy='dynamic')
+    
     # Flask-Login required properties and methods
     @property
     def is_authenticated(self):
@@ -101,115 +105,149 @@ class User(db.Model):
         ).count()
 
     def can_convert(self):
-        """Check if user can perform conversions (always True for logged-in users)."""
-        return True
-    
+        """Check if user can perform a conversion."""
+        return self.is_active and (self.has_pro_access or self.get_daily_conversions() < 5)
+
     @property
     def has_pro_access(self):
-        """Check if user has Pro access (prioritizing trial status over legacy premium)."""
-        # First check if user is on trial and trial hasn't expired
+        """Check if user has access to Pro features."""
         try:
-            if (hasattr(self, 'on_trial') and self.on_trial and 
-                hasattr(self, 'trial_end_date') and self.trial_end_date):
-                # Ensure both datetimes are timezone-aware
-                now = datetime.now(timezone.utc)
-                trial_end = self.trial_end_date
-                if trial_end.tzinfo is None:
-                    trial_end = trial_end.replace(tzinfo=timezone.utc)
-                return now < trial_end
-        except:
-            pass
-        
-        # Fallback to legacy premium check
-        if self.is_premium:
-            return True
-        
-        return False
-    
+            # Check if user is on trial and trial hasn't expired
+            if self.on_trial and self.trial_end_date:
+                if datetime.now(timezone.utc) < self.trial_end_date:
+                    return True
+            
+            # Check if user has active subscription
+            if self.is_premium or self.current_tier in ['pro', 'enterprise']:
+                return True
+            
+            return False
+        except Exception:
+            # If any error occurs (e.g., missing columns), default to False
+            return False
+
     @property
     def trial_days_remaining(self):
-        """Get the number of days remaining in the trial."""
+        """Calculate remaining trial days."""
         try:
-            # Check if trial columns exist before accessing them
-            if not (hasattr(self, 'on_trial') and self.on_trial and 
-                   hasattr(self, 'trial_end_date') and self.trial_end_date):
+            if not self.on_trial or not self.trial_end_date:
                 return 0
             
-            # Ensure both datetimes are timezone-aware
-            now = datetime.now(timezone.utc)
-            trial_end = self.trial_end_date
-            if trial_end.tzinfo is None:
-                trial_end = trial_end.replace(tzinfo=timezone.utc)
-            
-            remaining = trial_end - now
+            remaining = self.trial_end_date - datetime.now(timezone.utc)
             return max(0, remaining.days)
-        except:
+        except Exception:
             return 0
 
     def generate_api_key(self):
+        """Generate a new API key for the user."""
         import secrets
-        token = secrets.token_urlsafe(48)[:64]
-        self.api_key = token
-        db.session.commit()
-        return token
+        self.api_key = secrets.token_hex(32)
+        return self.api_key
 
     def revoke_api_key(self):
-        """Revoke the current API key by setting it to None."""
+        """Revoke the user's API key."""
         self.api_key = None
-        db.session.commit()
 
-    # New subscription-related methods
     def is_in_trial(self):
         """Check if user is currently in trial period."""
-        if not self.trial_end_date:
+        try:
+            if not self.on_trial or not self.trial_end_date:
+                return False
+            return datetime.now(timezone.utc) < self.trial_end_date
+        except Exception:
             return False
-        # Ensure both datetimes are timezone-aware
-        now = datetime.now(timezone.utc)
-        trial_end = self.trial_end_date
-        if trial_end.tzinfo is None:
-            trial_end = trial_end.replace(tzinfo=timezone.utc)
-        return now < trial_end
-    
 
-    
     def has_active_subscription(self):
         """Check if user has an active subscription."""
-        return self.subscription_status in ['active', 'trialing']
-    
+        return self.is_premium or self.current_tier in ['pro', 'enterprise']
+
     def can_access_pro_features(self):
         """Check if user can access Pro features."""
-        return (self.has_active_subscription() or 
-                self.is_premium or 
-                (self.is_in_trial() and self.current_tier in ['pro', 'enterprise']))
-    
+        return self.has_pro_access
+
     def start_trial(self, tier='pro', days=7):
         """Start a trial period for the user."""
-        now = datetime.now(timezone.utc)
-        self.trial_start_date = now
-        self.trial_end_date = now + timedelta(days=days)
-        self.subscription_status = 'trial'
-        self.current_tier = tier
         self.on_trial = True
-        db.session.commit()
-    
+        self.trial_start_date = datetime.now(timezone.utc)
+        self.trial_end_date = self.trial_start_date + timedelta(days=days)
+        self.current_tier = tier
+
     def expire_trial(self):
-        """Expire the trial and downgrade user."""
-        self.subscription_status = 'canceled'
-        self.current_tier = 'free'
+        """Expire the user's trial."""
         self.on_trial = False
-        self.trial_end_date = datetime.now(timezone.utc)
-        db.session.commit()
-    
+        self.trial_end_date = None
+
     def setup_premium_user(self):
-        """Setup subscription fields for existing premium users."""
-        if self.is_premium and self.subscription_status == 'trial':
-            self.subscription_status = 'active'
-            self.current_tier = 'pro'
-            self.subscription_start_date = self.created_at
-            db.session.commit()
+        """Set up a user as premium."""
+        self.is_premium = True
+        self.current_tier = 'pro'
+        self.on_trial = False
 
     def __repr__(self):
         return f'<User {self.email}>'
+
+
+class Team(db.Model):
+    """Team model for enterprise team accounts."""
+    __tablename__ = 'teams'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    
+    # Relationships
+    members = db.relationship('TeamMember', backref='team', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def add_member(self, user, role='member'):
+        """Add a user to the team with a specific role."""
+        membership = TeamMember(user_id=user.id, team_id=self.id, role=role)
+        db.session.add(membership)
+        return membership
+    
+    def remove_member(self, user):
+        """Remove a user from the team."""
+        membership = TeamMember.query.filter_by(user_id=user.id, team_id=self.id).first()
+        if membership:
+            db.session.delete(membership)
+            return True
+        return False
+    
+    def is_admin(self, user):
+        """Check if a user is an admin of this team."""
+        membership = TeamMember.query.filter_by(user_id=user.id, team_id=self.id).first()
+        return membership and membership.role == 'admin'
+    
+    def is_member(self, user):
+        """Check if a user is a member of this team."""
+        membership = TeamMember.query.filter_by(user_id=user.id, team_id=self.id).first()
+        return membership is not None
+    
+    def get_member_role(self, user):
+        """Get the role of a user in this team."""
+        membership = TeamMember.query.filter_by(user_id=user.id, team_id=self.id).first()
+        return membership.role if membership else None
+    
+    def __repr__(self):
+        return f'<Team {self.name}>'
+
+
+class TeamMember(db.Model):
+    """Association table for team memberships."""
+    __tablename__ = 'team_members'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
+    role = db.Column(db.String(50), nullable=False, default='member')  # 'admin', 'member'
+    joined_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    # Unique constraint to prevent duplicate memberships
+    __table_args__ = (db.UniqueConstraint('user_id', 'team_id', name='uq_user_team'),)
+    
+    def __repr__(self):
+        return f'<TeamMember {self.user_id} in {self.team_id} as {self.role}>'
 
 
 class Conversion(db.Model):
