@@ -98,6 +98,10 @@ def create_app(config_name=None):
     app.register_blueprint(uploads_blueprint, url_prefix='/uploads')
     app.logger.info("Uploads blueprint registered successfully")
     
+    from .api import api as api_blueprint
+    app.register_blueprint(api_blueprint, url_prefix='/api/v1')
+    app.logger.info("API blueprint registered successfully")
+    
     from .main import main as main_blueprint
     app.register_blueprint(main_blueprint)
     app.logger.info("Main blueprint registered successfully")
