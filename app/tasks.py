@@ -793,6 +793,14 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                 conversion.processing_time = time.time() - start_time
                 conversion.markdown_length = len(markdown_content) if markdown_content else 0
                 
+                # Trigger knowledge graph generation after successful conversion
+                try:
+                    from app.tasks import generate_knowledge_graph_task
+                    generate_knowledge_graph_task.delay(conversion_id)
+                    print(f"--- [Celery Task] Triggered knowledge graph generation for conversion {conversion_id}")
+                except Exception as kg_error:
+                    print(f"--- [Celery Task] Warning: Failed to trigger knowledge graph generation: {kg_error}")
+                
                 # Track Pro usage if this was a Pro conversion
                 if use_pro_converter and conversion.user_id:
                     user = User.query.get(conversion.user_id)
@@ -1110,3 +1118,178 @@ def extract_data_task(self, conversion_id):
             'conversion_id': conversion_id,
             'error': str(e)
         }
+
+
+@get_celery().task(bind=True)
+def generate_knowledge_graph_task(self, conversion_id):
+    """
+    Generate a knowledge graph from document text using LLM.
+    
+    Args:
+        conversion_id (int): The ID of the conversion to generate knowledge graph for
+    """
+    try:
+        with current_app.app_context():
+            print(f"--- [Celery Task] Starting knowledge graph generation for conversion {conversion_id}")
+            
+            # Retrieve the Conversion object by its ID
+            conversion = Conversion.query.get(conversion_id)
+            if not conversion:
+                raise ValueError(f"Conversion with ID {conversion_id} not found")
+            
+            # Check if conversion is completed
+            if conversion.status != 'completed':
+                raise ValueError(f"Conversion {conversion_id} is not completed (status: {conversion.status})")
+            
+            # Read the document's plain text content from its result file
+            text_content = _get_document_text_for_knowledge_graph(conversion)
+            if not text_content:
+                raise ValueError("No text content available for knowledge graph generation")
+            
+            # Construct a prompt for an LLM designed for entity and relationship extraction
+            prompt = _construct_knowledge_graph_prompt(text_content)
+            
+            # Make a mock call to the LLM and receive a sample JSON graph object
+            knowledge_graph = _call_llm_for_knowledge_graph(prompt)
+            
+            # Persist the resulting JSON by updating the structured_data column
+            conversion.structured_data = knowledge_graph
+            db.session.commit()
+            
+            print(f"--- [Celery Task] Successfully generated knowledge graph for conversion {conversion_id}")
+            return {
+                'status': 'success',
+                'conversion_id': conversion_id,
+                'knowledge_graph': knowledge_graph
+            }
+            
+    except Exception as e:
+        print(f"--- [Celery Task] Error generating knowledge graph for conversion {conversion_id}: {str(e)}")
+        # Update conversion with error status
+        if conversion:
+            conversion.structured_data = {"error": str(e)}
+            db.session.commit()
+        return {
+            'status': 'error',
+            'conversion_id': conversion_id,
+            'error': str(e)
+        }
+
+
+def _get_document_text_for_knowledge_graph(conversion):
+    """
+    Retrieve the document's text content for knowledge graph generation.
+    
+    Args:
+        conversion (Conversion): The conversion object
+        
+    Returns:
+        str: The document's text content
+    """
+    try:
+        # For now, return a placeholder text
+        # In a real implementation, this would:
+        # 1. Construct the GCS path based on conversion.job_id
+        # 2. Download the markdown content from GCS
+        # 3. Convert markdown to plain text if needed
+        
+        return """Sample document text for knowledge graph generation. This would contain the actual document content retrieved from Google Cloud Storage.
+
+This is a sample contract between Company A and Company B for the development of a new software platform. The contract includes terms for payment, delivery schedule, intellectual property rights, and dispute resolution. The project is valued at $500,000 and will be delivered over 6 months.
+
+Key parties involved:
+- Company A (Client)
+- Company B (Vendor)
+- Legal representatives from both companies
+
+The contract is governed by Delaware law and any disputes will be resolved through arbitration in New York."""
+        
+    except Exception as e:
+        print(f"Error retrieving document text for knowledge graph: {e}")
+        return None
+
+
+def _construct_knowledge_graph_prompt(text_content):
+    """
+    Construct a prompt for LLM to extract entities and relationships.
+    
+    Args:
+        text_content (str): The document's text content
+        
+    Returns:
+        str: The constructed prompt
+    """
+    prompt = f"""Analyze the following document text and extract entities and relationships to create a knowledge graph.
+
+Document Text:
+{text_content}
+
+Please extract entities and relationships and return a JSON object with the following structure:
+{{
+    "nodes": [
+        {{"id": "entity1", "label": "Entity Name", "type": "PERSON|ORGANIZATION|CONTRACT|AMOUNT|DATE|LOCATION"}},
+        ...
+    ],
+    "edges": [
+        {{"source": "entity1", "target": "entity2", "label": "relationship_type"}},
+        ...
+    ]
+}}
+
+Entity types should include: PERSON, ORGANIZATION, CONTRACT, AMOUNT, DATE, LOCATION, CLAUSE, TERM
+Relationship types should include: PARTY_TO, INVOLVES, GOVERNED_BY, VALUED_AT, DUE_DATE, LOCATED_IN, CONTAINS
+
+Return only valid JSON without any additional text."""
+    
+    return prompt
+
+
+def _call_llm_for_knowledge_graph(prompt):
+    """
+    Call LLM for knowledge graph generation (placeholder implementation).
+    
+    Args:
+        prompt (str): The constructed prompt
+        
+    Returns:
+        dict: The generated knowledge graph
+    """
+    # Placeholder implementation - in production this would call an actual LLM API
+    # For now, return a sample knowledge graph object
+    
+    sample_knowledge_graph = {
+        "nodes": [
+            {"id": "company_a", "label": "Company A", "type": "ORGANIZATION"},
+            {"id": "company_b", "label": "Company B", "type": "ORGANIZATION"},
+            {"id": "contract_001", "label": "Software Development Contract", "type": "CONTRACT"},
+            {"id": "amount_500k", "label": "$500,000", "type": "AMOUNT"},
+            {"id": "duration_6m", "label": "6 months", "type": "TERM"},
+            {"id": "delaware_law", "label": "Delaware Law", "type": "CLAUSE"},
+            {"id": "arbitration_ny", "label": "Arbitration in New York", "type": "CLAUSE"},
+            {"id": "ip_rights", "label": "Intellectual Property Rights", "type": "CLAUSE"},
+            {"id": "payment_terms", "label": "Payment Terms", "type": "CLAUSE"},
+            {"id": "delivery_schedule", "label": "Delivery Schedule", "type": "CLAUSE"}
+        ],
+        "edges": [
+            {"source": "company_a", "target": "contract_001", "label": "PARTY_TO"},
+            {"source": "company_b", "target": "contract_001", "label": "PARTY_TO"},
+            {"source": "contract_001", "target": "amount_500k", "label": "VALUED_AT"},
+            {"source": "contract_001", "target": "duration_6m", "label": "DURATION"},
+            {"source": "contract_001", "target": "delaware_law", "label": "GOVERNED_BY"},
+            {"source": "contract_001", "target": "arbitration_ny", "label": "CONTAINS"},
+            {"source": "contract_001", "target": "ip_rights", "label": "CONTAINS"},
+            {"source": "contract_001", "target": "payment_terms", "label": "CONTAINS"},
+            {"source": "contract_001", "target": "delivery_schedule", "label": "CONTAINS"},
+            {"source": "company_a", "target": "company_b", "label": "CONTRACTS_WITH"}
+        ],
+        "metadata": {
+            "generation_timestamp": "2024-01-15T10:30:00Z",
+            "model_version": "1.0",
+            "processing_time_ms": 2500,
+            "entities_extracted": 10,
+            "relationships_extracted": 10
+        }
+    }
+    
+    print("LLM knowledge graph generation called (placeholder implementation)")
+    return sample_knowledge_graph
