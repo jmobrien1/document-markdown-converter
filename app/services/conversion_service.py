@@ -98,14 +98,25 @@ class ConversionService:
             self.safe_stream_reset(file)
             
             # Get storage client with proper credentials
-            credentials_path = current_app.config.get('GCS_CREDENTIALS_PATH')
-            if credentials_path and os.path.exists(credentials_path):
-                storage_client = storage.Client.from_service_account_json(credentials_path)
+            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+            if credentials_json:
+                # Check if it's a file path or JSON content
+                if os.path.exists(credentials_json):
+                    # It's a file path
+                    storage_client = storage.Client.from_service_account_json(credentials_json)
+                else:
+                    # It's JSON content, create temporary file
+                    import tempfile
+                    temp_creds = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+                    temp_creds.write(credentials_json)
+                    temp_creds.close()
+                    storage_client = storage.Client.from_service_account_json(temp_creds.name)
+                    os.unlink(temp_creds.name)  # Clean up temp file
             else:
                 # Fallback to default credentials
                 storage_client = storage.Client()
             
-            bucket_name = current_app.config.get('GCS_BUCKET_NAME')
+            bucket_name = os.environ.get('GCS_BUCKET_NAME')
             if not bucket_name:
                 raise Exception("GCS_BUCKET_NAME not configured")
                 
@@ -245,7 +256,7 @@ class ConversionService:
             )
             
             # Get Google Cloud credentials
-            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+            credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
             if not credentials_json:
                 return False, "Google Cloud credentials not configured"
             
