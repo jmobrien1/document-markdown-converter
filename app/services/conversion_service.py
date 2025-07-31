@@ -329,7 +329,7 @@ class ConversionService:
             
             current_app.logger.info("=== CONVERSION SERVICE SUCCESS ===")
             return True, {
-                'task_id': task.id,
+                'job_id': task.id,
                 'conversion_id': conversion.id,
                 'status': 'queued'
             }

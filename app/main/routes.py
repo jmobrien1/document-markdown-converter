@@ -349,7 +349,7 @@ def convert():
                 return jsonify({'error': result}), 400
             
             current_app.logger.info("=== CONVERT REQUEST SUCCESSFUL ===")
-            return jsonify(result), 200
+            return jsonify(result), 202
             
         except ImportError:
             # Fallback if ConversionService doesn't exist
@@ -365,7 +365,7 @@ def convert():
                 'filename': file.filename,
                 'pro_conversion': use_pro_converter,
                 'status': 'started'
-            }), 200
+            }), 202
             
         except Exception as service_error:
             current_app.logger.error(f"ConversionService error: {service_error}")
@@ -384,7 +384,7 @@ def convert():
                 'pro_conversion': use_pro_converter,
                 'status': 'queued',
                 'note': 'Using emergency fallback due to service error'
-            }), 200
+            }), 202
     
     except Exception as e:
         current_app.logger.error(f"Unexpected error in convert route: {e}")
