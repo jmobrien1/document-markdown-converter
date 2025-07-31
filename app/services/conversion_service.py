@@ -206,36 +206,50 @@ class ConversionService:
     def process_conversion(self, file, filename, use_pro_converter=False, user=None):
         """Main method to process a file conversion."""
         try:
+            current_app.logger.info(f"=== CONVERSION SERVICE START ===")
+            current_app.logger.info(f"File: {filename}, Pro: {use_pro_converter}, User: {user.id if user else 'anonymous'}")
+            
             # CRITICAL: Reset stream at the very beginning
             self.safe_stream_reset(file)
+            current_app.logger.info("1. File stream reset ✓")
             
             # Validate file
+            current_app.logger.info("2. Starting file validation...")
             is_valid, error_message = self.validate_file(file, use_pro_converter)
             if not is_valid:
+                current_app.logger.error(f"File validation failed: {error_message}")
                 return False, error_message
+            current_app.logger.info("2. File validation passed ✓")
             
             # CRITICAL: Reset stream after validation
             self.safe_stream_reset(file)
             
             # Check user access
+            current_app.logger.info("3. Checking user access...")
             can_convert, access_error = self.check_user_access(user, use_pro_converter)
             if not can_convert:
+                current_app.logger.error(f"User access check failed: {access_error}")
                 return False, access_error
+            current_app.logger.info("3. User access check passed ✓")
             
             # Get file size
+            current_app.logger.info("4. Getting file size...")
             file.seek(0, 2)
             file_size = file.tell()
             file.seek(0)
+            current_app.logger.info(f"4. File size: {file_size} bytes ✓")
             
             # CRITICAL: Reset stream after size check
             self.safe_stream_reset(file)
             
             # Get file type
             file_extension = os.path.splitext(filename)[1].lower()
+            current_app.logger.info(f"5. File extension: {file_extension} ✓")
             
             # Get page count for PDFs
             page_count = None
             if file_extension == '.pdf':
+                current_app.logger.info("6. Getting PDF page count...")
                 # Create temporary file to get page count
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
                     # Handle both FileStorage and BytesIO objects
@@ -253,39 +267,67 @@ class ConversionService:
                 
                 # CRITICAL: Reset stream after page count check
                 self.safe_stream_reset(file)
+                current_app.logger.info(f"6. PDF page count: {page_count} ✓")
             
             # Upload to GCS
-            bucket_name, blob_name = self.upload_to_gcs(file, filename)
+            current_app.logger.info("7. Starting GCS upload...")
+            try:
+                bucket_name, blob_name = self.upload_to_gcs(file, filename)
+                current_app.logger.info(f"7. GCS upload successful: {blob_name} ✓")
+            except Exception as gcs_error:
+                current_app.logger.error(f"GCS upload failed: {gcs_error}")
+                return False, f"Failed to upload file to cloud storage: {str(gcs_error)}"
             
             # Create conversion record
-            user_id = user.id if user else None
-            session_id = request.cookies.get('session_id', 'anonymous')
-            conversion = self.create_conversion_record(
-                user_id, session_id, filename, file_size, file_extension, use_pro_converter
-            )
+            current_app.logger.info("8. Creating conversion record...")
+            try:
+                user_id = user.id if user else None
+                session_id = request.cookies.get('session_id', 'anonymous')
+                conversion = self.create_conversion_record(
+                    user_id, session_id, filename, file_size, file_extension, use_pro_converter
+                )
+                current_app.logger.info(f"8. Conversion record created: {conversion.id} ✓")
+            except Exception as db_error:
+                current_app.logger.error(f"Database record creation failed: {db_error}")
+                return False, f"Failed to create conversion record: {str(db_error)}"
             
             # Get Google Cloud credentials
+            current_app.logger.info("9. Checking Google Cloud credentials...")
             credentials_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
             if not credentials_json:
+                current_app.logger.error("Google Cloud credentials not configured")
                 return False, "Google Cloud credentials not configured"
+            current_app.logger.info("9. Google Cloud credentials found ✓")
             
             # Start conversion task
-            task = convert_file_task.delay(
-                bucket_name,
-                blob_name,
-                filename,
-                use_pro_converter,
-                conversion.id,
-                page_count,
-                credentials_json
-            )
+            current_app.logger.info("10. Starting Celery task...")
+            try:
+                task = convert_file_task.delay(
+                    bucket_name,
+                    blob_name,
+                    filename,
+                    use_pro_converter,
+                    conversion.id,
+                    page_count,
+                    credentials_json
+                )
+                current_app.logger.info(f"10. Celery task queued: {task.id} ✓")
+            except Exception as celery_error:
+                current_app.logger.error(f"Celery task dispatch failed: {celery_error}")
+                return False, f"Failed to queue conversion task: {str(celery_error)}"
             
             # Update anonymous usage if applicable
             if not user:
-                session_id = request.cookies.get('session_id', 'anonymous')
-                usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
-                usage.increment_usage()
+                current_app.logger.info("11. Updating anonymous usage...")
+                try:
+                    session_id = request.cookies.get('session_id', 'anonymous')
+                    usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
+                    usage.increment_usage()
+                    current_app.logger.info("11. Anonymous usage updated ✓")
+                except Exception as usage_error:
+                    current_app.logger.warning(f"Anonymous usage update failed: {usage_error}")
             
+            current_app.logger.info("=== CONVERSION SERVICE SUCCESS ===")
             return True, {
                 'task_id': task.id,
                 'conversion_id': conversion.id,
@@ -293,7 +335,10 @@ class ConversionService:
             }
             
         except Exception as e:
-            current_app.logger.error(f"Error in conversion service: {e}")
+            current_app.logger.error(f"=== CONVERSION SERVICE ERROR ===")
+            current_app.logger.error(f"Unexpected error: {e}")
+            import traceback
+            current_app.logger.error(f"Traceback: {traceback.format_exc()}")
             return False, str(e)
     
     def get_conversion_status(self, conversion_id):
