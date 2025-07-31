@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Intelligence Workspace - mdraft</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- PDF.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-dark: #2563eb;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --surface-2: #f1f5f9;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Header */
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        
+        .header .brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .header .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .header .nav-links a {
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+        }
+        
+        .header .nav-links a:hover {
+            color: var(--primary-color);
+            background: var(--surface-2);
+        }
+        
+        /* Main Workspace Layout */
+        .workspace {
+            display: flex;
+            height: calc(100vh - 60px);
+            overflow: hidden;
+        }
+        
+        /* Pane 1: Source Document Viewer */
+        #source-viewer-pane {
+            flex: 1;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .viewer-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .viewer-title {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .viewer-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .viewer-controls button {
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+        
+        .viewer-controls button:hover {
+            background: var(--surface-2);
+        }
+        
+        .viewer-controls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .page-info {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin: 0 1rem;
+        }
+        
+        .pdf-container {
+            flex: 1;
+            overflow: auto;
+            padding: 1rem;
+            background: #f5f5f5;
+        }
+        
+        .pdf-viewer {
+            background: white;
+            box-shadow: var(--shadow-lg);
+            margin: 0 auto;
+            max-width: 100%;
+            min-height: 100%;
+        }
+        
+        .pdf-page {
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .pdf-page canvas {
+            display: block;
+            margin: 0 auto;
+        }
+        
+        /* Pane 2: Knowledge Pane */
+        #knowledge-pane {
+            flex: 1;
+            background: var(--surface);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .knowledge-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-2);
+        }
+        
+        .knowledge-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+        }
+        
+        .tab-container {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .tab-button {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+        
+        .tab-button.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+        
+        .tab-button:hover {
+            color: var(--text-primary);
+        }
+        
+        .tab-content {
+            flex: 1;
+            overflow: auto;
+            padding: 1rem;
+        }
+        
+        .tab-panel {
+            display: none;
+        }
+        
+        .tab-panel.active {
+            display: block;
+        }
+        
+        /* Pane 3: Control Panel */
+        #control-panel-pane {
+            width: 300px;
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .control-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-2);
+        }
+        
+        .control-title {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .control-content {
+            flex: 1;
+            overflow: auto;
+            padding: 1rem;
+        }
+        
+        .upload-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .file-input-wrapper {
+            margin-bottom: 1rem;
+        }
+        
+        .file-input {
+            border: 2px dashed var(--border);
+            border-radius: 0.5rem;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--surface-2);
+        }
+        
+        .file-input:hover {
+            border-color: var(--primary-color);
+            background: var(--surface);
+        }
+        
+        .file-input input[type="file"] {
+            display: none;
+        }
+        
+        .file-input span {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+        
+        .convert-btn {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .convert-btn:hover {
+            background: var(--primary-dark);
+        }
+        
+        .convert-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Loading States */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+        
+        .spinner {
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            #control-panel-pane {
+                width: 250px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .workspace {
+                flex-direction: column;
+            }
+            
+            #source-viewer-pane,
+            #knowledge-pane {
+                flex: none;
+                height: 50%;
+            }
+            
+            #control-panel-pane {
+                width: 100%;
+                height: auto;
+                max-height: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <a href="{{ url_for('main.index') }}" class="brand">mdraft</a>
+        <nav class="nav-links">
+            {% if current_user.is_authenticated %}
+                <a href="{{ url_for('auth.account') }}">{{ current_user.email }}</a>
+                <a href="{{ url_for('auth.logout') }}">Logout</a>
+            {% else %}
+                <a href="{{ url_for('auth.login') }}">Login</a>
+                <a href="{{ url_for('auth.signup') }}">Sign Up</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    <div class="workspace">
+        <!-- Pane 1: Source Document Viewer -->
+        <div id="source-viewer-pane">
+            <div class="viewer-header">
+                <div class="viewer-title">Source Document</div>
+                <div class="viewer-controls">
+                    <button id="prev-page" disabled>‹</button>
+                    <span class="page-info" id="page-info">Page 1 of 1</span>
+                    <button id="next-page" disabled>›</button>
+                    <button id="zoom-out">−</button>
+                    <button id="zoom-in">+</button>
+                    <button id="fit-width">Fit Width</button>
+                </div>
+            </div>
+            <div class="pdf-container" id="pdf-container">
+                <div class="pdf-viewer" id="pdf-viewer">
+                    <!-- PDF pages will be rendered here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Pane 2: Knowledge Pane -->
+        <div id="knowledge-pane">
+            <div class="knowledge-header">
+                <div class="knowledge-title">Document Intelligence</div>
+                <div class="tab-container">
+                    <button class="tab-button active" data-tab="clean-text">Clean Text</button>
+                    <button class="tab-button" data-tab="knowledge-graph">Knowledge Graph</button>
+                </div>
+            </div>
+            <div class="tab-content">
+                <div class="tab-panel active" id="clean-text-panel">
+                    <div id="clean-text-content">
+                        <p class="placeholder-text">Upload a document to see the extracted clean text here.</p>
+                    </div>
+                </div>
+                <div class="tab-panel" id="knowledge-graph-panel">
+                    <div id="knowledge-graph-content">
+                        <p class="placeholder-text">Upload a document to see the knowledge graph here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pane 3: Control Panel -->
+        <div id="control-panel-pane">
+            <div class="control-header">
+                <div class="control-title">Document Upload</div>
+            </div>
+            <div class="control-content">
+                <div class="upload-section">
+                    <form id="uploadForm" method="POST" action="{{ url_for('main.convert') }}" enctype="multipart/form-data">
+                        <div class="file-input-wrapper">
+                            <div class="file-input" onclick="document.getElementById('fileInput').click()">
+                                <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.pptx,.html,.htm,.csv,.json,.xml,.epub,.gif,.tiff,.tif,.jpg,.jpeg,.png,.bmp,.webp">
+                                <span id="fileLabel">Click to select a file</span>
+                            </div>
+                        </div>
+                        
+                        <input type="hidden" name="pro_conversion" id="pro_conversion_hidden_input" value="off">
+                        
+                        <button type="submit" class="convert-btn" id="convertBtn" disabled>Convert Document</button>
+                    </form>
+                </div>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p id="loadingText">Processing document...</p>
+                </div>
+                
+                <div id="errorMessage" class="error-message"></div>
+                <div id="successMessage" class="success-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // PDF.js variables
+        let pdfDoc = null;
+        let pageNum = 1;
+        let pageRendering = false;
+        let pageNumPending = null;
+        let scale = 1.5;
+        let canvas = null;
+        let ctx = null;
+        
+        // Tab functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabPanels = document.querySelectorAll('.tab-panel');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetTab = button.getAttribute('data-tab');
+                    
+                    // Remove active class from all buttons and panels
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabPanels.forEach(panel => panel.classList.remove('active'));
+                    
+                    // Add active class to clicked button and corresponding panel
+                    button.classList.add('active');
+                    document.getElementById(targetTab + '-panel').classList.add('active');
+                });
+            });
+            
+            // File input handling
+            const fileInput = document.getElementById('fileInput');
+            const fileLabel = document.getElementById('fileLabel');
+            const convertBtn = document.getElementById('convertBtn');
+            
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    fileLabel.textContent = file.name;
+                    convertBtn.disabled = false;
+                    
+                    // If it's a PDF, render it immediately
+                    if (file.type === 'application/pdf') {
+                        const url = URL.createObjectURL(file);
+                        renderPdf(url);
+                    }
+                } else {
+                    fileLabel.textContent = 'Click to select a file';
+                    convertBtn.disabled = true;
+                }
+            });
+            
+            // Form submission
+            const uploadForm = document.getElementById('uploadForm');
+            const loading = document.getElementById('loading');
+            const loadingText = document.getElementById('loadingText');
+            const errorMessage = document.getElementById('errorMessage');
+            const successMessage = document.getElementById('successMessage');
+            
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(uploadForm);
+                
+                // Show loading state
+                loading.style.display = 'block';
+                convertBtn.disabled = true;
+                errorMessage.style.display = 'none';
+                successMessage.style.display = 'none';
+                
+                fetch(uploadForm.action, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    convertBtn.disabled = false;
+                    
+                    if (data.error) {
+                        errorMessage.textContent = data.error;
+                        errorMessage.style.display = 'block';
+                    } else {
+                        successMessage.textContent = 'Document processed successfully!';
+                        successMessage.style.display = 'block';
+                        
+                        // If we have a job_id, we can poll for status
+                        if (data.job_id) {
+                            pollForTaskStatus(data.job_id);
+                        }
+                    }
+                })
+                .catch(error => {
+                    loading.style.display = 'none';
+                    convertBtn.disabled = false;
+                    errorMessage.textContent = 'An error occurred while processing the document.';
+                    errorMessage.style.display = 'block';
+                    console.error('Error:', error);
+                });
+            });
+            
+            // PDF viewer controls
+            const prevPage = document.getElementById('prev-page');
+            const nextPage = document.getElementById('next-page');
+            const zoomOut = document.getElementById('zoom-out');
+            const zoomIn = document.getElementById('zoom-in');
+            const fitWidth = document.getElementById('fit-width');
+            const pageInfo = document.getElementById('page-info');
+            
+            prevPage.addEventListener('click', () => {
+                if (pageNum <= 1) return;
+                pageNum--;
+                renderPage(pageNum);
+            });
+            
+            nextPage.addEventListener('click', () => {
+                if (pageNum >= pdfDoc.numPages) return;
+                pageNum++;
+                renderPage(pageNum);
+            });
+            
+            zoomOut.addEventListener('click', () => {
+                scale = Math.max(0.5, scale - 0.25);
+                renderPage(pageNum);
+            });
+            
+            zoomIn.addEventListener('click', () => {
+                scale = Math.min(3.0, scale + 0.25);
+                renderPage(pageNum);
+            });
+            
+            fitWidth.addEventListener('click', () => {
+                const container = document.getElementById('pdf-container');
+                const containerWidth = container.clientWidth - 40; // Account for padding
+                scale = containerWidth / canvas.width;
+                renderPage(pageNum);
+            });
+        });
+        
+        // PDF rendering functions
+        function renderPdf(url) {
+            pdfjsLib.getDocument(url).promise.then(function(pdf) {
+                pdfDoc = pdf;
+                pageNum = 1;
+                
+                // Update page info
+                document.getElementById('page-info').textContent = `Page 1 of ${pdf.numPages}`;
+                
+                // Enable/disable navigation buttons
+                document.getElementById('prev-page').disabled = true;
+                document.getElementById('next-page').disabled = pdf.numPages <= 1;
+                
+                // Render first page
+                renderPage(pageNum);
+            }).catch(function(error) {
+                console.error('Error loading PDF:', error);
+                document.getElementById('pdf-viewer').innerHTML = '<p style="text-align: center; color: #666; padding: 2rem;">Error loading PDF document</p>';
+            });
+        }
+        
+        function renderPage(num) {
+            pageRendering = true;
+            
+            pdfDoc.getPage(num).then(function(page) {
+                const viewport = page.getViewport({scale: scale});
+                
+                // Prepare canvas
+                canvas = document.createElement('canvas');
+                ctx = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                // Render PDF page into canvas context
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                
+                const renderTask = page.render(renderContext);
+                
+                renderTask.promise.then(function() {
+                    pageRendering = false;
+                    
+                    // Clear previous content and add new page
+                    const viewer = document.getElementById('pdf-viewer');
+                    viewer.innerHTML = '';
+                    
+                    const pageDiv = document.createElement('div');
+                    pageDiv.className = 'pdf-page';
+                    pageDiv.appendChild(canvas);
+                    viewer.appendChild(pageDiv);
+                    
+                    // Update page info
+                    document.getElementById('page-info').textContent = `Page ${num} of ${pdfDoc.numPages}`;
+                    
+                    // Update navigation buttons
+                    document.getElementById('prev-page').disabled = num <= 1;
+                    document.getElementById('next-page').disabled = num >= pdfDoc.numPages;
+                    
+                    if (pageNumPending !== null) {
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    }
+                });
+            });
+            
+            pageNum = num;
+        }
+        
+        function queueRenderPage(num) {
+            if (pageRendering) {
+                pageNumPending = num;
+            } else {
+                renderPage(num);
+            }
+        }
+        
+        function onPrevPage() {
+            if (pageNum <= 1) return;
+            queueRenderPage(pageNum - 1);
+        }
+        
+        function onNextPage() {
+            if (pageNum >= pdfDoc.numPages) return;
+            queueRenderPage(pageNum + 1);
+        }
+        
+        // Task status polling
+        function pollForTaskStatus(jobId) {
+            const statusUrl = `/status/${jobId}`;
+            
+            fetch(statusUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'completed') {
+                        // Handle completed conversion
+                        console.log('Conversion completed:', data);
+                    } else if (data.status === 'failed') {
+                        console.error('Conversion failed:', data.error);
+                    } else {
+                        // Continue polling
+                        setTimeout(() => pollForTaskStatus(jobId), 2000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error polling status:', error);
+                });
+        }
+    </script>
+</body>
+</html> 

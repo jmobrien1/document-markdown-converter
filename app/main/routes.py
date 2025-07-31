@@ -860,6 +860,12 @@ def request_entity_too_large(e):
     """Handle 413 Request Entity Too Large errors."""
     return jsonify({'error': 'File too large'}), 413
 
+@main.route('/workspace')
+@login_required
+def workspace():
+    """Document Intelligence Workspace."""
+    return render_template('workspace.html')
+
 # Team Management Routes
 @main.route('/team/<int:team_id>/manage')
 @login_required
