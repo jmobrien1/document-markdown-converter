@@ -573,6 +573,11 @@
                 batchStatusContainer.className = 'file-status-list';
                 uploadForm.parentNode.insertBefore(batchStatusContainer, uploadForm.nextSibling);
 
+                // Define isProUser function to check current tab state
+                function getIsProUser() {
+                    return proBtn.classList.contains('active');
+                }
+
                 // --- Segmented Control Logic ---
                 const standardBtn = document.getElementById('standard-tab');
                 const proBtn = document.getElementById('pro-tab');
@@ -664,7 +669,7 @@
 
                 // --- File Input Logic ---
                 fileInput.addEventListener('change', (e) => {
-                    const isProUser = proBtn.classList.contains('active');
+                    const isProUser = getIsProUser();
                     
                     if (isProUser && fileInput.files.length > 1) {
                         fileLabel.innerHTML = `<strong>Selected:</strong> ${fileInput.files.length} files`;
@@ -694,8 +699,8 @@
                     convertBtn.textContent = 'CONVERTING...';
                     loading.style.display = 'block';
                     
-                    // Define isProUser based on current tab state
-                    const isProUser = proBtn.classList.contains('active');
+                    // Get current Pro user state
+                    const isProUser = getIsProUser();
                     loadingText.textContent = isProUser && fileInput.files.length > 1 ? 'Uploading and starting batch conversion...' : 'Uploading and starting conversion...';
                     batchStatusContainer.innerHTML = '';
 
