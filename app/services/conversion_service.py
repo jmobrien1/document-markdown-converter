@@ -238,7 +238,16 @@ class ConversionService:
             if file_extension == '.pdf':
                 # Create temporary file to get page count
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-                    file.save(temp_file.name)
+                    # Handle both FileStorage and BytesIO objects
+                    if hasattr(file, 'save'):
+                        # It's a FileStorage object (has save method)
+                        file.save(temp_file.name)
+                    else:
+                        # It's a BytesIO object, write content directly
+                        file.seek(0)
+                        temp_file.write(file.read())
+                        temp_file.flush()
+                    
                     page_count = self.get_pdf_page_count(temp_file.name)
                     os.unlink(temp_file.name)
                 

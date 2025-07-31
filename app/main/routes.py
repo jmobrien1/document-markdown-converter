@@ -294,23 +294,10 @@ def convert():
             current_app.logger.error("Empty filename")
             return jsonify({'error': 'No file selected'}), 400
         
-        # CRITICAL FIX: Reset file stream to beginning and create a copy
+        # CRITICAL FIX: Reset file stream to beginning
         try:
             file.seek(0)
-            
-            # For additional safety, create a BytesIO copy of the file
-            import io
-            file_content = file.read()
-            file.seek(0)  # Reset original
-            
-            # Create a new file-like object that won't have seek issues
-            file_copy = io.BytesIO(file_content)
-            file_copy.name = file.filename  # Preserve filename
-            file_copy.filename = file.filename
-            
-            # Use the copy for processing
-            file = file_copy
-            current_app.logger.info(f"Created file copy for processing: {len(file_content)} bytes")
+            current_app.logger.info(f"File stream reset successfully: {file.filename}")
             
         except Exception as stream_error:
             current_app.logger.error(f"Error handling file stream: {stream_error}")
