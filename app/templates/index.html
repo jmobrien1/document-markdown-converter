@@ -760,7 +760,9 @@
                     const startData = await startResponse.json();
                     if (startResponse.status === 202) {
                         loadingText.textContent = 'File conversion in progress...';
-                        pollForTaskStatus(startData.status_url);
+                        // Use job_id to construct the status URL
+                        const statusUrl = `/status/${startData.job_id}`;
+                        pollForTaskStatus(statusUrl);
                     } else {
                         throw new Error(startData.error || 'Could not start conversion job.');
                     }
