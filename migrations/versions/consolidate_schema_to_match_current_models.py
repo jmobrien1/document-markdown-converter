@@ -8,6 +8,7 @@ Create Date: 2025-07-31 03:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from datetime import datetime, timezone
 
 # revision identifiers, used by Alembic.
 revision = 'consolidate_schema_to_match_current_models'
@@ -19,29 +20,33 @@ depends_on = None
 def upgrade():
     """Create complete schema from scratch to match current models."""
     
-    # Create users table with all required columns
+    # Create users table with all required columns and constraints
     op.create_table('users',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('email', sa.String(length=120), nullable=False),
         sa.Column('password_hash', sa.String(length=128), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=True),
-        sa.Column('is_premium', sa.Boolean(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
+        sa.Column('is_active', sa.Boolean(), nullable=True, server_default=sa.text('true')),
+        sa.Column('is_premium', sa.Boolean(), nullable=True, server_default=sa.text('false')),
         sa.Column('is_admin', sa.Boolean(), server_default=sa.text('false'), nullable=False),
         sa.Column('premium_expires', sa.DateTime(), nullable=True),
         sa.Column('stripe_customer_id', sa.String(length=255), nullable=True),
         sa.Column('stripe_subscription_id', sa.String(length=255), nullable=True),
         sa.Column('api_key', sa.String(length=64), nullable=True),
-        sa.Column('subscription_status', sa.String(length=50), nullable=True),
-        sa.Column('current_tier', sa.String(length=50), nullable=True),
+        sa.Column('subscription_status', sa.String(length=50), nullable=True, server_default=sa.text("'trial'")),
+        sa.Column('current_tier', sa.String(length=50), nullable=True, server_default=sa.text("'free'")),
         sa.Column('subscription_start_date', sa.DateTime(), nullable=True),
         sa.Column('last_payment_date', sa.DateTime(), nullable=True),
         sa.Column('next_payment_date', sa.DateTime(), nullable=True),
         sa.Column('trial_start_date', sa.DateTime(), nullable=True),
         sa.Column('trial_end_date', sa.DateTime(), nullable=True),
-        sa.Column('on_trial', sa.Boolean(), nullable=True),
-        sa.Column('pro_pages_processed_current_month', sa.Integer(), nullable=True),
-        sa.PrimaryKeyConstraint('id')
+        sa.Column('on_trial', sa.Boolean(), nullable=True, server_default=sa.text('true')),
+        sa.Column('pro_pages_processed_current_month', sa.Integer(), nullable=True, server_default=sa.text('0')),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('email'),
+        sa.UniqueConstraint('stripe_customer_id'),
+        sa.UniqueConstraint('stripe_subscription_id'),
+        sa.UniqueConstraint('api_key')
     )
     
     # Create indexes for users table
@@ -54,9 +59,9 @@ def upgrade():
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('session_id', sa.String(length=64), nullable=False),
         sa.Column('ip_address', sa.String(length=45), nullable=True),
-        sa.Column('conversions_today', sa.Integer(), nullable=True),
+        sa.Column('conversions_today', sa.Integer(), nullable=True, server_default=sa.text('0')),
         sa.Column('last_conversion', sa.DateTime(), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.PrimaryKeyConstraint('id')
     )
     
@@ -72,11 +77,11 @@ def upgrade():
         sa.Column('original_filename', sa.String(length=255), nullable=False),
         sa.Column('file_size', sa.Integer(), nullable=True),
         sa.Column('file_type', sa.String(length=10), nullable=True),
-        sa.Column('conversion_type', sa.String(length=20), nullable=True),
-        sa.Column('status', sa.String(length=20), nullable=True),
+        sa.Column('conversion_type', sa.String(length=20), nullable=True, server_default=sa.text("'standard'")),
+        sa.Column('status', sa.String(length=20), nullable=True, server_default=sa.text("'pending'")),
         sa.Column('error_message', sa.Text(), nullable=True),
         sa.Column('job_id', sa.String(length=64), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('completed_at', sa.DateTime(), nullable=True),
         sa.Column('processing_time', sa.Float(), nullable=True),
         sa.Column('markdown_length', sa.Integer(), nullable=True),
@@ -96,8 +101,8 @@ def upgrade():
         sa.Column('current_period_start', sa.DateTime(), nullable=False),
         sa.Column('current_period_end', sa.DateTime(), nullable=False),
         sa.Column('trial_end', sa.DateTime(), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-        sa.Column('updated_at', sa.DateTime(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
+        sa.Column('updated_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('stripe_subscription_id')
@@ -109,9 +114,9 @@ def upgrade():
         sa.Column('subscription_id', sa.Integer(), nullable=False),
         sa.Column('stripe_invoice_id', sa.String(length=255), nullable=False),
         sa.Column('amount', sa.Integer(), nullable=False),
-        sa.Column('currency', sa.String(length=3), nullable=True),
+        sa.Column('currency', sa.String(length=3), nullable=True, server_default=sa.text("'usd'")),
         sa.Column('status', sa.String(length=50), nullable=False),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('paid_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['subscription_id'], ['subscriptions.id'], ),
         sa.PrimaryKeyConstraint('id'),
@@ -123,11 +128,11 @@ def upgrade():
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('batch_id', sa.String(length=64), nullable=False),
-        sa.Column('status', sa.String(length=50), nullable=True),
-        sa.Column('total_files', sa.Integer(), nullable=True),
-        sa.Column('processed_files', sa.Integer(), nullable=True),
-        sa.Column('failed_files', sa.Integer(), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.Column('status', sa.String(length=50), nullable=True, server_default=sa.text("'queued'")),
+        sa.Column('total_files', sa.Integer(), nullable=True, server_default=sa.text('0')),
+        sa.Column('processed_files', sa.Integer(), nullable=True, server_default=sa.text('0')),
+        sa.Column('failed_files', sa.Integer(), nullable=True, server_default=sa.text('0')),
+        sa.Column('created_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('completed_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
         sa.PrimaryKeyConstraint('id'),
@@ -142,10 +147,10 @@ def upgrade():
         sa.Column('original_filename', sa.String(length=255), nullable=False),
         sa.Column('file_size', sa.Integer(), nullable=True),
         sa.Column('file_type', sa.String(length=10), nullable=True),
-        sa.Column('status', sa.String(length=50), nullable=True),
+        sa.Column('status', sa.String(length=50), nullable=True, server_default=sa.text("'queued'")),
         sa.Column('error_message', sa.Text(), nullable=True),
         sa.Column('job_id', sa.String(length=64), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('started_at', sa.DateTime(), nullable=True),
         sa.Column('completed_at', sa.DateTime(), nullable=True),
         sa.Column('processing_time', sa.Float(), nullable=True),
