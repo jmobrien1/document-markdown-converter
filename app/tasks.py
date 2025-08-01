@@ -1332,6 +1332,15 @@ def _call_llm_for_knowledge_graph(prompt):
     if text_match:
         document_text = text_match.group(1).strip()
         
+        # DEBUG: Print what content we're actually processing
+        print(f"=== KNOWLEDGE GRAPH DEBUG ===")
+        print(f"Document text length: {len(document_text)}")
+        print(f"First 500 chars: {document_text[:500]}")
+        print(f"Contains 'Block': {'Block' in document_text}")
+        print(f"Contains 'Owner': {'Owner' in document_text}")
+        print(f"Contains 'R1': {'R1' in document_text}")
+        print(f"=== END DEBUG ===")
+        
         # Simple entity extraction based on the actual document content
         entities = []
         relationships = []
@@ -1434,6 +1443,11 @@ def _call_llm_for_knowledge_graph(prompt):
                     "target": entities[i + 1]["id"],
                     "label": "RELATED_TO"
                 })
+        
+        print(f"=== EXTRACTED ENTITIES ===")
+        print(f"Found {len(entities)} entities: {[e['label'] for e in entities]}")
+        print(f"Found {len(relationships)} relationships")
+        print(f"=== END EXTRACTION ===")
         
         return {
             "nodes": entities,
