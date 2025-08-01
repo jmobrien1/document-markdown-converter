@@ -796,7 +796,7 @@ def request_entity_too_large(e):
 @main.route('/result/<job_id>/graph')
 @login_required
 def task_result_graph(job_id):
-    """Get knowledge graph data for a completed conversion."""
+    """Get financial analysis data for a completed conversion."""
     conversion = Conversion.query.filter_by(job_id=job_id).first()
     if not conversion:
         abort(404)
@@ -805,13 +805,13 @@ def task_result_graph(job_id):
         abort(403)
     
     if conversion.status != 'completed':
-        abort(400, description="Conversion must be completed before graph data is available")
+        abort(400, description="Conversion must be completed before financial data is available")
     
     if not conversion.structured_data:
-        abort(404, description="No graph data available for this conversion")
+        abort(404, description="No financial data available for this conversion")
     
-    # Wrap the structured_data in a knowledge_graph object for frontend compatibility
-    return jsonify({"knowledge_graph": conversion.structured_data})
+    # Return the financial analysis data directly
+    return jsonify(conversion.structured_data)
 
 
 @main.route('/workspace')
