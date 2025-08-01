@@ -729,6 +729,16 @@
 
         // Render knowledge graph using Sigma.js
         function renderKnowledgeGraph(data) {
+            // --- ADD THIS FIX ---
+            const graph = data.knowledge_graph;
+            if (!graph || !graph.nodes || !graph.edges) {
+                console.error("Invalid graph data received:", data);
+                document.getElementById('knowledge-graph-content').innerHTML =
+                    '<p class="placeholder-text">Invalid knowledge graph data format.</p>';
+                return;
+            }
+            // --- END FIX ---
+
             const container = document.getElementById('graph-container');
             
             // Clear previous graph
@@ -756,7 +766,7 @@
             });
 
             // Add nodes
-            data.nodes.forEach(node => {
+            graph.nodes.forEach(node => {
                 sigmaInstance.graph.addNode({
                     id: node.id,
                     label: node.label,
@@ -769,7 +779,7 @@
             });
 
             // Add edges
-            data.edges.forEach(edge => {
+            graph.edges.forEach(edge => {
                 sigmaInstance.graph.addEdge({
                     id: `${edge.source}-${edge.target}`,
                     source: edge.source,
@@ -908,8 +918,13 @@
         function searchNodeInGraph(searchText) {
             if (!graphData || !sigmaInstance) return;
             
+            // --- ADD THIS FIX ---
+            const graph = graphData.knowledge_graph;
+            if (!graph || !graph.nodes) return;
+            // --- END FIX ---
+            
             // Simple text matching (case-insensitive)
-            const matchingNode = graphData.nodes.find(node => 
+            const matchingNode = graph.nodes.find(node => 
                 node.label.toLowerCase().includes(searchText.toLowerCase())
             );
             
