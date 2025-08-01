@@ -707,6 +707,56 @@
         let graphData = null;
         let currentJobId = null;
 
+        // Auto-load test knowledge graph data for debugging
+        function loadTestKnowledgeGraph() {
+            console.log('Loading test knowledge graph data...');
+            const testJobId = 'test-knowledge-graph-123';
+            
+            // Fetch test data
+            Promise.all([
+                fetch(`/result/${testJobId}`).then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                }),
+                fetch(`/result/${testJobId}/graph`).then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+            ])
+            .then(([resultData, graphData]) => {
+                console.log('Test data loaded successfully');
+                console.log('Result data:', resultData);
+                console.log('Graph data:', graphData);
+                
+                // Store graph data globally
+                window.graphData = graphData;
+                currentJobId = testJobId;
+                
+                // Display clean text in the "Clean Text" tab
+                displayCleanText(resultData);
+                
+                // Render knowledge graph
+                renderKnowledgeGraph(graphData);
+                
+                console.log('Test knowledge graph loaded successfully');
+            })
+            .catch(error => {
+                console.error('Error loading test data:', error);
+                document.getElementById('knowledge-graph-content').innerHTML = 
+                    '<p class="placeholder-text">Error loading test data. Please try again.</p>';
+            });
+        }
+
+        // Load test data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Workspace loaded, attempting to load test knowledge graph...');
+            loadTestKnowledgeGraph();
+        });
+
         // Load all conversion data using Promise.all()
         function loadAllConversionData(jobId) {
             console.log('Fetching result data and graph data in parallel...');
