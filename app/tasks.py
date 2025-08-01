@@ -1206,16 +1206,19 @@ def _get_document_text_for_knowledge_graph(conversion):
         str: The document's text content
     """
     try:
-        # First, try to get the markdown content from the conversion result
-        if hasattr(conversion, 'result') and conversion.result:
-            try:
-                import json
-                result_data = json.loads(conversion.result)
-                if 'markdown' in result_data and result_data['markdown']:
-                    print(f"Using markdown content from conversion result for knowledge graph")
-                    return result_data['markdown']
-            except Exception as e:
-                print(f"Error parsing conversion result: {e}")
+        # Get the markdown content from the Celery task result
+        from celery.result import AsyncResult
+        
+        if conversion.job_id:
+            task_result = AsyncResult(conversion.job_id)
+            
+            if task_result.ready() and task_result.successful():
+                result = task_result.result
+                if isinstance(result, dict) and result.get('status') == 'SUCCESS':
+                    markdown_content = result.get('markdown', '')
+                    if markdown_content:
+                        print(f"Using markdown content from Celery task result for knowledge graph")
+                        return markdown_content
         
         # If no result data, try GCS download
         from google.cloud import storage
@@ -1224,15 +1227,6 @@ def _get_document_text_for_knowledge_graph(conversion):
         bucket_name = current_app.config.get('GCS_BUCKET_NAME')
         if not bucket_name:
             print("GCS_BUCKET_NAME not configured, trying fallback method")
-            # Fallback: Try to get content from conversion result
-            if hasattr(conversion, 'result') and conversion.result:
-                try:
-                    result_data = json.loads(conversion.result)
-                    if 'markdown' in result_data:
-                        print("Using markdown content from conversion result")
-                        return result_data['markdown']
-                except:
-                    pass
             
             # If no result data, create a basic text representation
             print("Creating basic text representation from conversion metadata")
