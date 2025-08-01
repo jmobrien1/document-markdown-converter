@@ -675,7 +675,7 @@
             queueRenderPage(pageNum + 1);
         }
         
-        // Task status polling
+        // Task status polling with robust async workflow
         function pollForTaskStatus(jobId) {
             const statusUrl = `/status/${jobId}`;
             
@@ -683,12 +683,13 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'completed') {
-                        // Handle completed conversion
-                        console.log('Conversion completed:', data);
-                        // Load knowledge graph data
-                        loadKnowledgeGraph(jobId);
+                        console.log('Polling success received for job:', jobId);
+                        // Handle completed conversion with robust parallel data fetching
+                        loadAllConversionData(jobId);
                     } else if (data.status === 'failed') {
                         console.error('Conversion failed:', data.error);
+                        document.getElementById('knowledge-graph-content').innerHTML = 
+                            '<p class="placeholder-text">Conversion failed. Please try again.</p>';
                     } else {
                         // Continue polling
                         setTimeout(() => pollForTaskStatus(jobId), 2000);
@@ -696,6 +697,8 @@
                 })
                 .catch(error => {
                     console.error('Error polling status:', error);
+                    document.getElementById('knowledge-graph-content').innerHTML = 
+                        '<p class="placeholder-text">Error checking conversion status.</p>';
                 });
         }
 
@@ -704,27 +707,62 @@
         let graphData = null;
         let currentJobId = null;
 
-        // Load and render knowledge graph
-        function loadKnowledgeGraph(jobId) {
-            currentJobId = jobId;
+        // Load all conversion data using Promise.all()
+        function loadAllConversionData(jobId) {
+            console.log('Fetching result data and graph data in parallel...');
+            
+            const resultUrl = `/result/${jobId}`;
             const graphUrl = `/result/${jobId}/graph`;
             
-            fetch(graphUrl)
-                .then(response => {
+            // Fetch both main result and graph data in parallel
+            Promise.all([
+                fetch(resultUrl).then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                }),
+                fetch(graphUrl).then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
                     return response.json();
                 })
-                .then(data => {
-                    graphData = data;
-                    renderKnowledgeGraph(data);
-                })
-                .catch(error => {
-                    console.error('Error loading knowledge graph:', error);
-                    document.getElementById('knowledge-graph-content').innerHTML = 
-                        '<p class="placeholder-text">Error loading knowledge graph data.</p>';
-                });
+            ])
+            .then(([resultData, graphData]) => {
+                console.log('Both fetches complete, rendering UI.');
+                console.log('Result data:', resultData);
+                console.log('Graph data:', graphData);
+                
+                // Store graph data globally
+                window.graphData = graphData;
+                currentJobId = jobId;
+                
+                // Display clean text in the "Clean Text" tab
+                displayCleanText(resultData);
+                
+                // Render knowledge graph
+                renderKnowledgeGraph(graphData);
+                
+                console.log('UI rendering complete.');
+            })
+            .catch(error => {
+                console.error('Error loading conversion data:', error);
+                document.getElementById('knowledge-graph-content').innerHTML = 
+                    '<p class="placeholder-text">Error loading conversion data. Please try again.</p>';
+            });
+        }
+
+        // Display clean text in the Clean Text tab
+        function displayCleanText(resultData) {
+            console.log('Displaying clean text...');
+            const cleanTextContainer = document.getElementById('clean-text-content');
+            if (cleanTextContainer && resultData.result) {
+                cleanTextContainer.innerHTML = `<pre>${resultData.result}</pre>`;
+                console.log('Clean text displayed successfully.');
+            } else {
+                console.warn('Clean text container not found or no result data.');
+            }
         }
 
         // Render knowledge graph using Sigma.js
@@ -916,10 +954,10 @@
 
         // Search for node in graph based on selected text
         function searchNodeInGraph(searchText) {
-            if (!graphData || !sigmaInstance) return;
+            if (!window.graphData || !sigmaInstance) return;
             
             // --- ADD THIS FIX ---
-            const graph = graphData.knowledge_graph;
+            const graph = window.graphData.knowledge_graph;
             if (!graph || !graph.nodes) return;
             // --- END FIX ---
             
