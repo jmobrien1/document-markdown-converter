@@ -1130,33 +1130,47 @@ def generate_knowledge_graph_task(self, conversion_id):
     """
     try:
         with current_app.app_context():
-            print(f"--- [Celery Task] Starting knowledge graph generation for conversion {conversion_id}")
+            print(f"=== [KNOWLEDGE GRAPH TASK] Starting knowledge graph generation for conversion {conversion_id}")
             
             # Retrieve the Conversion object by its ID
             conversion = Conversion.query.get(conversion_id)
             if not conversion:
+                print(f"=== [KNOWLEDGE GRAPH TASK] ERROR: Conversion with ID {conversion_id} not found")
                 raise ValueError(f"Conversion with ID {conversion_id} not found")
+            
+            print(f"=== [KNOWLEDGE GRAPH TASK] Found conversion: {conversion.original_filename}, status: {conversion.status}")
             
             # Check if conversion is completed
             if conversion.status != 'completed':
+                print(f"=== [KNOWLEDGE GRAPH TASK] ERROR: Conversion {conversion_id} is not completed (status: {conversion.status})")
                 raise ValueError(f"Conversion {conversion_id} is not completed (status: {conversion.status})")
             
             # Read the document's plain text content from its result file
+            print(f"=== [KNOWLEDGE GRAPH TASK] Getting document text for knowledge graph...")
             text_content = _get_document_text_for_knowledge_graph(conversion)
             if not text_content:
+                print(f"=== [KNOWLEDGE GRAPH TASK] ERROR: No text content available for knowledge graph generation")
                 raise ValueError("No text content available for knowledge graph generation")
+            
+            print(f"=== [KNOWLEDGE GRAPH TASK] Got text content, length: {len(text_content)}")
+            print(f"=== [KNOWLEDGE GRAPH TASK] First 200 chars: {text_content[:200]}")
             
             # Construct a prompt for an LLM designed for entity and relationship extraction
             prompt = _construct_knowledge_graph_prompt(text_content)
             
             # Make a mock call to the LLM and receive a sample JSON graph object
+            print(f"=== [KNOWLEDGE GRAPH TASK] Calling LLM for knowledge graph generation...")
             knowledge_graph = _call_llm_for_knowledge_graph(prompt)
             
             # Persist the resulting JSON by updating the structured_data column
+            print(f"=== [KNOWLEDGE GRAPH TASK] Saving knowledge graph to database...")
             conversion.structured_data = knowledge_graph
             db.session.commit()
             
-            print(f"--- [Celery Task] Successfully generated knowledge graph for conversion {conversion_id}")
+            print(f"=== [KNOWLEDGE GRAPH TASK] SUCCESS: Generated knowledge graph for conversion {conversion_id}")
+            print(f"=== [KNOWLEDGE GRAPH TASK] Entities: {len(knowledge_graph.get('nodes', []))}")
+            print(f"=== [KNOWLEDGE GRAPH TASK] Relationships: {len(knowledge_graph.get('edges', []))}")
+            
             return {
                 'status': 'success',
                 'conversion_id': conversion_id,
@@ -1164,7 +1178,7 @@ def generate_knowledge_graph_task(self, conversion_id):
             }
             
     except Exception as e:
-        print(f"--- [Celery Task] Error generating knowledge graph for conversion {conversion_id}: {str(e)}")
+        print(f"=== [KNOWLEDGE GRAPH TASK] ERROR: {str(e)}")
         # Update conversion with error status
         if conversion:
             conversion.structured_data = {"error": str(e)}
