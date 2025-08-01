@@ -450,7 +450,7 @@ def task_result(job_id):
         if isinstance(result, dict) and result.get('status') == 'SUCCESS':
             return jsonify({
                 'status': 'success',
-                'result': result.get('markdown', ''),  # Frontend expects 'result' field
+                'markdown': result.get('markdown', ''),  # Keep original format for main UI
                 'filename': result.get('filename', '')
             })
         else:

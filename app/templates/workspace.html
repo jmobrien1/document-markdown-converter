@@ -757,8 +757,10 @@
         function displayCleanText(resultData) {
             console.log('Displaying clean text...');
             const cleanTextContainer = document.getElementById('clean-text-content');
-            if (cleanTextContainer && resultData.result) {
-                cleanTextContainer.innerHTML = `<pre>${resultData.result}</pre>`;
+            // Handle both 'result' and 'markdown' fields for compatibility
+            const textContent = resultData.result || resultData.markdown;
+            if (cleanTextContainer && textContent) {
+                cleanTextContainer.innerHTML = `<pre>${textContent}</pre>`;
                 console.log('Clean text displayed successfully.');
             } else {
                 console.warn('Clean text container not found or no result data.');
