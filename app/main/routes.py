@@ -271,7 +271,7 @@ def convert():
     """
     Handles file upload and conversion.
     GET: Returns method info for debugging
-    POST: Processes file conversion
+    POST: Processes file conversion using ConversionService
     """
     if request.method == 'GET':
         # Handle GET requests for debugging
@@ -283,118 +283,47 @@ def convert():
             'status': 'ready'
         }), 405
     
-    # Handle POST requests (your existing conversion logic)
+    # Handle POST requests using ConversionService
     try:
         current_app.logger.info("=== CONVERT REQUEST STARTED ===")
-        current_app.logger.info(f"Request files: {list(request.files.keys())}")
-        current_app.logger.info(f"Request form: {dict(request.form)}")
         
         if 'file' not in request.files:
             current_app.logger.error("No file part in request")
             return jsonify({'error': 'No file part in the request'}), 400
         
         file = request.files['file']
-        current_app.logger.info(f"File received: {file.filename}")
-        
         if file.filename == '':
             current_app.logger.error("Empty filename")
             return jsonify({'error': 'No file selected'}), 400
         
-        # CRITICAL FIX: Reset file stream to beginning
-        try:
-            file.seek(0)
-            current_app.logger.info(f"File stream reset successfully: {file.filename}")
-            
-        except Exception as stream_error:
-            current_app.logger.error(f"Error handling file stream: {stream_error}")
-            return jsonify({'error': 'Error processing uploaded file'}), 400
-        
-        # Check if file extension is allowed
-        if not allowed_file(file.filename):
-            current_app.logger.error(f"File type not allowed: {file.filename}")
-            return jsonify({'error': 'File type not supported'}), 400
-        
-        # Check if the user requested a pro conversion
+        # Get conversion type from request
         use_pro_converter = request.form.get('pro_conversion') == 'on'
-        current_app.logger.info(f"Pro conversion requested: {use_pro_converter}")
         
-        # Check conversion limits
-        can_convert, limit_error = check_conversion_limits()
-        if not can_convert:
-            current_app.logger.error(f"Conversion limit exceeded: {limit_error}")
-            return jsonify({'error': limit_error}), 400
-        
-        # Get user info with debugging
+        # Get user info
         user = None
         if current_user and current_user.is_authenticated:
-            current_app.logger.info(f"Authenticated user: {current_user.id}")
-            user = db.session.merge(current_user)
-            current_app.logger.info(f"User loaded: {user.email}, subscription: {getattr(user, 'subscription_status', 'N/A')}")
-        else:
-            current_app.logger.info("Anonymous user conversion")
+            user = current_user
         
-        # Use the ConversionService to handle all business logic
-        try:
-            from ..services.conversion_service import ConversionService
-            conversion_service = ConversionService()
-            current_app.logger.info("ConversionService created")
-            
-            success, result = conversion_service.process_conversion(
-                file=file,
-                filename=file.filename,
-                use_pro_converter=use_pro_converter,
-                user=user
-            )
-            
-            current_app.logger.info(f"Conversion service result: success={success}")
-            
-            if not success:
-                current_app.logger.error(f"Conversion service error: {result}")
-                return jsonify({'error': result}), 400
-            
-            current_app.logger.info("=== CONVERT REQUEST SUCCESSFUL ===")
-            return jsonify(result), 202
-            
-        except ImportError:
-            # Fallback if ConversionService doesn't exist
-            current_app.logger.warning("ConversionService not found, using fallback")
-            
-            # Simple fallback conversion logic
-            import uuid
-            dummy_task_id = str(uuid.uuid4())
-            
-            return jsonify({
-                'job_id': dummy_task_id,
-                'message': 'File validation passed - using fallback conversion',
-                'filename': file.filename,
-                'pro_conversion': use_pro_converter,
-                'status': 'started'
-            }), 202
-            
-        except Exception as service_error:
-            current_app.logger.error(f"ConversionService error: {service_error}")
-            import traceback
-            current_app.logger.error(f"Service error traceback: {traceback.format_exc()}")
-            
-            # CRITICAL: Provide a fallback response instead of failing completely
-            current_app.logger.warning("Using emergency fallback response")
-            import uuid
-            emergency_task_id = str(uuid.uuid4())
-            
-            return jsonify({
-                'job_id': emergency_task_id,
-                'message': 'File accepted - conversion queued (emergency mode)',
-                'filename': file.filename,
-                'pro_conversion': use_pro_converter,
-                'status': 'queued',
-                'note': 'Using emergency fallback due to service error'
-            }), 202
-    
+        # Use ConversionService for all business logic
+        conversion_service = ConversionService()
+        success, result = conversion_service.process_conversion(
+            file=file,
+            filename=file.filename,
+            use_pro_converter=use_pro_converter,
+            user=user
+        )
+        
+        if not success:
+            current_app.logger.error(f"Conversion service error: {result}")
+            return jsonify({'error': result}), 400
+        
+        current_app.logger.info("=== CONVERT REQUEST SUCCESSFUL ===")
+        return jsonify(result), 202
+        
     except Exception as e:
-        current_app.logger.error(f"Unexpected error in convert route: {e}")
-        import traceback
-        current_app.logger.error(f"Traceback: {traceback.format_exc()}")
-        return jsonify({'error': 'Unexpected server error'}), 500
+        current_app.logger.error(f"=== CONVERT REQUEST ERROR ===")
+        current_app.logger.error(f"Unexpected error: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @main.route('/status/<job_id>')
 def task_status(job_id):
