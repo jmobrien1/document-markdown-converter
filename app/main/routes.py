@@ -981,3 +981,70 @@ def remove_team_member(team_id, user_id):
         flash('Error removing user from team', 'error')
     
     return redirect(url_for('main.manage_team', team_id=team_id))
+
+@main.route('/test-knowledge-graph')
+@login_required
+def test_knowledge_graph():
+    """Test endpoint to create a mock conversion with knowledge graph data."""
+    try:
+        # Create a mock conversion record
+        conversion = Conversion(
+            user_id=current_user.id,
+            session_id='test',
+            original_filename='test-document.pdf',
+            file_size=1024,
+            file_type='pdf',
+            conversion_type='standard',
+            status='completed',
+            job_id='test-knowledge-graph-123',
+            completed_at=datetime.now(timezone.utc),
+            processing_time=5.0,
+            markdown_length=500
+        )
+        
+        # Add mock knowledge graph data
+        conversion.structured_data = {
+            "nodes": [
+                {"id": "company_a", "label": "Company A", "type": "ORGANIZATION"},
+                {"id": "company_b", "label": "Company B", "type": "ORGANIZATION"},
+                {"id": "contract_001", "label": "Software Development Contract", "type": "CONTRACT"},
+                {"id": "amount_500k", "label": "$500,000", "type": "AMOUNT"},
+                {"id": "duration_6m", "label": "6 months", "type": "TERM"},
+                {"id": "delaware_law", "label": "Delaware Law", "type": "CLAUSE"},
+                {"id": "arbitration_ny", "label": "Arbitration in New York", "type": "CLAUSE"},
+                {"id": "ip_rights", "label": "Intellectual Property Rights", "type": "CLAUSE"},
+                {"id": "payment_terms", "label": "Payment Terms", "type": "CLAUSE"},
+                {"id": "delivery_schedule", "label": "Delivery Schedule", "type": "CLAUSE"}
+            ],
+            "edges": [
+                {"source": "company_a", "target": "contract_001", "label": "PARTY_TO"},
+                {"source": "company_b", "target": "contract_001", "label": "PARTY_TO"},
+                {"source": "contract_001", "target": "amount_500k", "label": "VALUED_AT"},
+                {"source": "contract_001", "target": "duration_6m", "label": "DURATION"},
+                {"source": "contract_001", "target": "delaware_law", "label": "GOVERNED_BY"},
+                {"source": "contract_001", "target": "arbitration_ny", "label": "CONTAINS"},
+                {"source": "contract_001", "target": "ip_rights", "label": "CONTAINS"},
+                {"source": "contract_001", "target": "payment_terms", "label": "CONTAINS"},
+                {"source": "contract_001", "target": "delivery_schedule", "label": "CONTAINS"},
+                {"source": "company_a", "target": "company_b", "label": "CONTRACTS_WITH"}
+            ],
+            "metadata": {
+                "generation_timestamp": "2024-01-15T10:30:00Z",
+                "model_version": "1.0",
+                "processing_time_ms": 2500,
+                "entities_extracted": 10,
+                "relationships_extracted": 10
+            }
+        }
+        
+        db.session.add(conversion)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'job_id': 'test-knowledge-graph-123',
+            'message': 'Test conversion created with knowledge graph data'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
