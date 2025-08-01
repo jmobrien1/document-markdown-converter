@@ -621,149 +621,6 @@
             background: #f8f9fa;
             border-radius: 8px;
             border: 1px solid #e9ecef;
-            overflow: auto;
-        }
-        
-        /* Financial Dashboard Styles */
-        .financial-dashboard {
-            padding: 20px;
-        }
-        
-        .insight-panel {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .summary-box {
-            margin-bottom: 20px;
-        }
-        
-        .summary-box h3 {
-            color: var(--text-primary);
-            margin-bottom: 10px;
-        }
-        
-        .summary-box p {
-            color: var(--text-secondary);
-            line-height: 1.6;
-        }
-        
-        .winner-loser-box {
-            display: flex;
-            gap: 20px;
-        }
-        
-        .winner, .loser {
-            flex: 1;
-            padding: 15px;
-            border-radius: 6px;
-            text-align: center;
-        }
-        
-        .winner {
-            background: linear-gradient(135deg, #d4edda, #c3e6cb);
-            border: 1px solid #c3e6cb;
-        }
-        
-        .loser {
-            background: linear-gradient(135deg, #f8d7da, #f5c6cb);
-            border: 1px solid #f5c6cb;
-        }
-        
-        .winner .label, .loser .label {
-            display: block;
-            font-size: 0.9em;
-            color: var(--text-secondary);
-            margin-bottom: 5px;
-        }
-        
-        .winner .value, .loser .value {
-            display: block;
-            font-size: 1.2em;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        
-        .data-table-container {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .financial-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        
-        .financial-table th {
-            background: #f8f9fa;
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-            color: var(--text-primary);
-            border-bottom: 2px solid #dee2e6;
-            cursor: pointer;
-            user-select: none;
-        }
-        
-        .financial-table th:hover {
-            background: #e9ecef;
-        }
-        
-        .financial-table td {
-            padding: 12px;
-            border-bottom: 1px solid #dee2e6;
-            color: var(--text-primary);
-        }
-        
-        .financial-table tbody tr {
-            cursor: pointer;
-            transition: background-color 0.2s ease;
-        }
-        
-        .financial-table tbody tr:hover {
-            background: #f8f9fa;
-        }
-        
-        .financial-table tbody tr.highlighted {
-            background: #e3f2fd;
-            border-left: 4px solid #2196F3;
-        }
-        
-        .total-cell {
-            font-weight: 600;
-        }
-        
-        .total-cell.positive {
-            color: #28a745;
-        }
-        
-        .total-cell.negative {
-            color: #dc3545;
-        }
-        
-        .bar-chart-container {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .bar-chart-container h3 {
-            color: var(--text-primary);
-            margin-bottom: 15px;
-            text-align: center;
-        }
-        
-        #financial-chart {
-            max-width: 100%;
-            height: auto;
         }
         
         /* Control Panel Styles */
@@ -1442,11 +1299,11 @@
                         });
                     }
                     
-                    // Load financial analysis data
-                    loadFinancialData();
+                    // Load knowledge graph data
+                    loadKnowledgeGraphData();
                 }
                 
-                function loadFinancialData() {
+                function loadKnowledgeGraphData() {
                     const jobId = getCurrentJobId();
                     if (!jobId) return;
                     
@@ -1457,248 +1314,186 @@
                             const graphPlaceholder = document.getElementById('knowledge-graph-placeholder');
                             
                             if (graphContainer && graphPlaceholder) {
-                                if (data.entries && data.entries.length > 0) {
-                                    renderFinancialDashboard(data);
+                                if (data.knowledge_graph && data.knowledge_graph.nodes) {
+                                    renderKnowledgeGraph(data.knowledge_graph);
                                     graphContainer.style.display = 'block';
                                     graphPlaceholder.style.display = 'none';
                                 } else {
-                                    graphPlaceholder.innerHTML = '<p>Financial analysis data not available yet.</p>';
+                                    graphPlaceholder.innerHTML = '<p>Knowledge graph data not available yet.</p>';
                                 }
                             }
                         })
                         .catch(error => {
-                            console.log('Financial analysis not available yet:', error);
+                            console.log('Knowledge graph not available yet:', error);
                             const graphPlaceholder = document.getElementById('knowledge-graph-placeholder');
                             if (graphPlaceholder) {
-                                graphPlaceholder.innerHTML = '<p>Financial analysis will be available shortly.</p>';
+                                graphPlaceholder.innerHTML = '<p>Knowledge graph will be available shortly.</p>';
                             }
                         });
                 }
                 
-                function renderFinancialDashboard(financialData) {
+                function renderKnowledgeGraph(graphData) {
                     const graphContainer = document.getElementById('knowledge-graph-container');
                     if (!graphContainer) return;
                     
                     // Clear container
                     graphContainer.innerHTML = '';
                     
-                    try {
-                        // Create the financial dashboard
-                        const dashboard = createFinancialDashboard(financialData);
-                        graphContainer.appendChild(dashboard);
-                        
-                        console.log('Financial dashboard rendered successfully');
-                        
-                    } catch (error) {
-                        console.error('Error rendering financial dashboard:', error);
-                        graphContainer.innerHTML = `
-                            <div style="padding: 20px; text-align: center;">
-                                <h4>Financial Analysis</h4>
-                                <p>Error rendering dashboard: ${error.message}</p>
-                            </div>
-                        `;
-                    }
-                }
-                
-                function createFinancialDashboard(data) {
-                    const dashboard = document.createElement('div');
-                    dashboard.className = 'financial-dashboard';
-                    
-                    // Insight Panel
-                    const insightPanel = document.createElement('div');
-                    insightPanel.className = 'insight-panel';
-                    insightPanel.innerHTML = `
-                        <div class="summary-box">
-                            <h3>Executive Summary</h3>
-                            <p>${data.summary || 'No summary available'}</p>
-                        </div>
-                        <div class="winner-loser-box">
-                            <div class="winner">
-                                <span class="label">🏆 Biggest Winner</span>
-                                <span class="value">${data.biggest_winner || 'Unknown'}</span>
-                            </div>
-                            <div class="loser">
-                                <span class="label">📉 Biggest Loser</span>
-                                <span class="value">${data.biggest_loser || 'Unknown'}</span>
-                            </div>
-                        </div>
-                    `;
-                    
-                    // Data Table
-                    const dataTable = createDataTable(data.entries || []);
-                    
-                    // Bar Chart
-                    const barChart = createBarChart(data.entries || []);
-                    
-                    dashboard.appendChild(insightPanel);
-                    dashboard.appendChild(dataTable);
-                    dashboard.appendChild(barChart);
-                    
-                    return dashboard;
-                }
-                
-                function createDataTable(entries) {
-                    const tableContainer = document.createElement('div');
-                    tableContainer.className = 'data-table-container';
-                    
-                    const table = document.createElement('table');
-                    table.className = 'financial-table';
-                    
-                    // Header
-                    const thead = document.createElement('thead');
-                    thead.innerHTML = `
-                        <tr>
-                            <th data-sort="person">Person ↕</th>
-                            <th data-sort="r1">R1 ↕</th>
-                            <th data-sort="r2">R2 ↕</th>
-                            <th data-sort="r3">R3 ↕</th>
-                            <th data-sort="r4">R4 ↕</th>
-                            <th data-sort="total">Total ↕</th>
-                        </tr>
-                    `;
-                    
-                    // Body
-                    const tbody = document.createElement('tbody');
-                    entries.forEach(entry => {
-                        const row = document.createElement('tr');
-                        row.dataset.person = entry.person;
-                        row.innerHTML = `
-                            <td>${entry.person}</td>
-                            <td>${entry.r1}</td>
-                            <td>${entry.r2}</td>
-                            <td>${entry.r3}</td>
-                            <td>${entry.r4}</td>
-                            <td class="total-cell ${entry.total >= 0 ? 'positive' : 'negative'}">${entry.total}</td>
-                        `;
-                        
-                        // Add click event for bidirectional linking
-                        row.addEventListener('click', () => {
-                            searchTextInPDF(entry.person);
-                            highlightRow(row);
-                        });
-                        
-                        tbody.appendChild(row);
-                    });
-                    
-                    table.appendChild(thead);
-                    table.appendChild(tbody);
-                    tableContainer.appendChild(table);
-                    
-                    // Add sorting functionality
-                    addTableSorting(table);
-                    
-                    return tableContainer;
-                }
-                
-                function createBarChart(entries) {
-                    const chartContainer = document.createElement('div');
-                    chartContainer.className = 'bar-chart-container';
-                    
-                    const chartTitle = document.createElement('h3');
-                    chartTitle.textContent = 'Financial Performance by Person';
-                    chartContainer.appendChild(chartTitle);
-                    
-                    const chartCanvas = document.createElement('canvas');
-                    chartCanvas.id = 'financial-chart';
-                    chartCanvas.width = 600;
-                    chartCanvas.height = 300;
-                    chartContainer.appendChild(chartCanvas);
-                    
-                    // Create simple bar chart using Canvas API
-                    const ctx = chartCanvas.getContext('2d');
-                    const maxTotal = Math.max(...entries.map(e => Math.abs(e.total)));
-                    const barWidth = 40;
-                    const barSpacing = 20;
-                    const startX = 100;
-                    const startY = 250;
-                    
-                    // Clear canvas
-                    ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
-                    
-                    // Draw bars
-                    entries.forEach((entry, index) => {
-                        const x = startX + index * (barWidth + barSpacing);
-                        const barHeight = (Math.abs(entry.total) / maxTotal) * 200;
-                        const y = entry.total >= 0 ? startY - barHeight : startY;
-                        
-                        // Bar color
-                        ctx.fillStyle = entry.total >= 0 ? '#4CAF50' : '#F44336';
-                        
-                        // Draw bar
-                        ctx.fillRect(x, y, barWidth, barHeight);
-                        
-                        // Draw label
-                        ctx.fillStyle = '#333';
-                        ctx.font = '12px Arial';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(entry.person, x + barWidth/2, startY + 20);
-                        
-                        // Draw value
-                        ctx.fillText(entry.total.toString(), x + barWidth/2, y - 5);
-                    });
-                    
-                    // Draw axis
-                    ctx.strokeStyle = '#333';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(startX - 10, startY);
-                    ctx.lineTo(chartCanvas.width - 20, startY);
-                    ctx.stroke();
-                    
-                    return chartContainer;
-                }
-                
-                function addTableSorting(table) {
-                    const headers = table.querySelectorAll('th[data-sort]');
-                    headers.forEach(header => {
-                        header.addEventListener('click', () => {
-                            const sortBy = header.dataset.sort;
-                            const tbody = table.querySelector('tbody');
-                            const rows = Array.from(tbody.querySelectorAll('tr'));
+                    // Load Sigma.js
+                    loadSigmaJS().then(() => {
+                        try {
+                            // Create graph data for Sigma.js
+                            const graph = {
+                                nodes: graphData.nodes.map(node => ({
+                                    id: node.id,
+                                    label: node.label,
+                                    x: Math.random() * 1000,
+                                    y: Math.random() * 1000,
+                                    size: 8,
+                                    color: getNodeColor(node.type)
+                                })),
+                                edges: graphData.edges.map(edge => ({
+                                    id: `${edge.source}-${edge.target}`,
+                                    source: edge.source,
+                                    target: edge.target,
+                                    label: edge.label,
+                                    size: 2,
+                                    color: '#666'
+                                }))
+                            };
                             
-                            rows.sort((a, b) => {
-                                const aValue = a.querySelector(`td:nth-child(${getColumnIndex(sortBy)})`).textContent;
-                                const bValue = b.querySelector(`td:nth-child(${getColumnIndex(sortBy)})`).textContent;
-                                
-                                if (sortBy === 'total' || sortBy.startsWith('r')) {
-                                    return parseInt(bValue) - parseInt(aValue);
-                                } else {
-                                    return aValue.localeCompare(bValue);
+                            // Initialize Sigma.js
+                            const sigma = new window.sigma({
+                                graph: graph,
+                                container: graphContainer,
+                                settings: {
+                                    nodeLabelSize: 'proportional',
+                                    edgeLabelSize: 'proportional',
+                                    minNodeSize: 4,
+                                    maxNodeSize: 12,
+                                    minEdgeSize: 1,
+                                    maxEdgeSize: 4,
+                                    enableEdgeHovering: true,
+                                    enableEdgeLabels: true,
+                                    enableNodeHovering: true,
+                                    enableNodeLabels: true
                                 }
                             });
                             
-                            // Reorder rows
-                            rows.forEach(row => tbody.appendChild(row));
-                        });
+                            // Add click event for bidirectional linking
+                            sigma.on('clickNode', function(event) {
+                                const node = event.data.node;
+                                console.log('Node clicked:', node.label);
+                                
+                                // Search for this text in the PDF
+                                searchTextInPDF(node.label);
+                                
+                                // Highlight the node in the graph
+                                highlightNodeInGraph(node.id);
+                            });
+                            
+                            // Add text selection event from PDF
+                            document.addEventListener('pdfTextSelected', function(event) {
+                                const selectedText = event.detail.text;
+                                searchNodeInGraph(selectedText);
+                            });
+                            
+                            console.log('Knowledge graph rendered with Sigma.js');
+                            
+                        } catch (error) {
+                            console.error('Error rendering knowledge graph:', error);
+                            graphContainer.innerHTML = `
+                                <div style="padding: 20px; text-align: center;">
+                                    <h4>Knowledge Graph</h4>
+                                    <p>Nodes: ${graphData.nodes.length}</p>
+                                    <p>Edges: ${graphData.edges.length}</p>
+                                    <p>Error rendering graph: ${error.message}</p>
+                                </div>
+                            `;
+                        }
+                    }).catch(error => {
+                        console.error('Failed to load Sigma.js:', error);
+                        graphContainer.innerHTML = `
+                            <div style="padding: 20px; text-align: center;">
+                                <h4>Knowledge Graph</h4>
+                                <p>Nodes: ${graphData.nodes.length}</p>
+                                <p>Edges: ${graphData.edges.length}</p>
+                                <p>Sigma.js not available</p>
+                            </div>
+                        `;
                     });
                 }
                 
-                function getColumnIndex(sortBy) {
-                    const columnMap = {
-                        'person': 1,
-                        'r1': 2,
-                        'r2': 3,
-                        'r3': 4,
-                        'r4': 5,
-                        'total': 6
+                function loadSigmaJS() {
+                    return new Promise((resolve, reject) => {
+                        if (window.sigma) {
+                            resolve(window.sigma);
+                            return;
+                        }
+                        
+                        // Try multiple CDN sources
+                        const sources = [
+                            'https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js',
+                            'https://unpkg.com/sigma@2.4.0/dist/sigma.min.js',
+                            'https://cdn.jsdelivr.net/npm/sigma@2.4.0/dist/sigma.min.js'
+                        ];
+                        
+                        function trySource(index) {
+                            if (index >= sources.length) {
+                                reject(new Error('Failed to load Sigma.js from all sources'));
+                                return;
+                            }
+                            
+                            const script = document.createElement('script');
+                            script.src = sources[index];
+                            script.onload = () => {
+                                console.log(`Sigma.js loaded from source ${index + 1}`);
+                                resolve(window.sigma);
+                            };
+                            script.onerror = () => {
+                                console.log(`Sigma.js failed to load from source ${index + 1}`);
+                                trySource(index + 1);
+                            };
+                            document.head.appendChild(script);
+                        }
+                        
+                        trySource(0);
+                    });
+                }
+                
+                function getNodeColor(type) {
+                    const colors = {
+                        'PERSON': '#4CAF50',
+                        'ORGANIZATION': '#2196F3',
+                        'CONTRACT': '#FF9800',
+                        'AMOUNT': '#9C27B0',
+                        'DATE': '#607D8B',
+                        'LOCATION': '#795548',
+                        'CLAUSE': '#E91E63',
+                        'TERM': '#00BCD4',
+                        'COLUMN': '#FF5722',
+                        'NUMBER': '#8BC34A',
+                        'DOCUMENT': '#9E9E9E'
                     };
-                    return columnMap[sortBy] || 1;
-                }
-                
-                function highlightRow(row) {
-                    // Remove previous highlights
-                    document.querySelectorAll('.financial-table tbody tr').forEach(r => {
-                        r.classList.remove('highlighted');
-                    });
-                    
-                    // Add highlight to clicked row
-                    row.classList.add('highlighted');
+                    return colors[type] || '#666';
                 }
                 
                 function searchTextInPDF(text) {
                     // This would integrate with PDF.js to search and highlight text
                     console.log('Searching for text in PDF:', text);
                     // TODO: Implement PDF text search and highlighting
+                }
+                
+                function highlightNodeInGraph(nodeId) {
+                    // This would highlight the node in the Sigma.js graph
+                    console.log('Highlighting node in graph:', nodeId);
+                    // TODO: Implement node highlighting
+                }
+                
+                function searchNodeInGraph(text) {
+                    // This would search for a node with matching text
+                    console.log('Searching for node in graph:', text);
+                    // TODO: Implement node search
                 }
 
                 function getCurrentJobId() {
