@@ -1363,7 +1363,7 @@
                             };
                             
                             // Initialize Sigma.js
-                            const sigma = new window.sigma({
+                            const sigma = new sigma({
                                 graph: graph,
                                 container: graphContainer,
                                 settings: {
@@ -1426,8 +1426,8 @@
                 
                 function loadSigmaJS() {
                     return new Promise((resolve, reject) => {
-                        if (window.sigma) {
-                            resolve(window.sigma);
+                        if (typeof sigma !== 'undefined') {
+                            resolve(sigma);
                             return;
                         }
                         
@@ -1447,8 +1447,8 @@
                             const script = document.createElement('script');
                             script.src = sources[index];
                             script.onload = () => {
-                                console.log(`Sigma.js loaded from source ${index + 1}`);
-                                resolve(window.sigma);
+                                                            console.log(`Sigma.js loaded from source ${index + 1}`);
+                            resolve(sigma);
                             };
                             script.onerror = () => {
                                 console.log(`Sigma.js failed to load from source ${index + 1}`);
