@@ -8,7 +8,23 @@
     <!-- PDF.js library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <!-- Sigma.js library with fallback -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js"></script>
+    <script>
+        // Fallback if Sigma.js fails to load from CDN
+        if (typeof sigma === 'undefined') {
+            console.log('Sigma.js not loaded from CDN, trying alternative source...');
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/sigma@2.4.0/dist/sigma.min.js';
+            script.onload = function() {
+                console.log('Sigma.js loaded from fallback source');
+            };
+            script.onerror = function() {
+                console.error('Failed to load Sigma.js from all sources');
+            };
+            document.head.appendChild(script);
+        }
+    </script>
     
     <style>
         :root {
@@ -754,7 +770,10 @@
         // Load test data when page loads
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Workspace loaded, attempting to load test knowledge graph...');
-            loadTestKnowledgeGraph();
+            // Add a small delay to ensure Sigma.js is loaded
+            setTimeout(() => {
+                loadTestKnowledgeGraph();
+            }, 1000);
         });
 
         // Load all conversion data using Promise.all()
@@ -835,6 +854,14 @@
                 return;
             }
             // --- END FIX ---
+
+            // Check if Sigma.js is available
+            if (typeof sigma === 'undefined') {
+                console.error("Sigma.js library not loaded");
+                document.getElementById('knowledge-graph-content').innerHTML =
+                    '<p class="placeholder-text">Error: Sigma.js library not loaded. Please refresh the page.</p>';
+                return;
+            }
 
             const container = document.getElementById('graph-container');
             
