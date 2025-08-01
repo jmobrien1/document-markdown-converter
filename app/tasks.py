@@ -795,11 +795,16 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                 
                 # Trigger knowledge graph generation after successful conversion
                 try:
+                    print(f"--- [Celery Task] About to trigger knowledge graph generation for conversion {conversion_id}")
                     from app.tasks import generate_knowledge_graph_task
-                    generate_knowledge_graph_task.delay(conversion_id)
+                    print(f"--- [Celery Task] Successfully imported generate_knowledge_graph_task")
+                    task_result = generate_knowledge_graph_task.delay(conversion_id)
                     print(f"--- [Celery Task] Triggered knowledge graph generation for conversion {conversion_id}")
+                    print(f"--- [Celery Task] Task ID: {task_result.id}")
                 except Exception as kg_error:
                     print(f"--- [Celery Task] Warning: Failed to trigger knowledge graph generation: {kg_error}")
+                    import traceback
+                    print(f"--- [Celery Task] Full traceback: {traceback.format_exc()}")
                 
                 # Track Pro usage if this was a Pro conversion
                 if use_pro_converter and conversion.user_id:
