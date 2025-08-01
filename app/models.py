@@ -114,7 +114,13 @@ class User(db.Model):
         try:
             # Check if user is on trial and trial hasn't expired
             if self.on_trial and self.trial_end_date:
-                if datetime.now(timezone.utc) < self.trial_end_date:
+                # Ensure timezone-aware comparison
+                current_time = datetime.now(timezone.utc)
+                trial_end = self.trial_end_date
+                if trial_end.tzinfo is None:
+                    # If trial_end_date is timezone-naive, assume UTC
+                    trial_end = trial_end.replace(tzinfo=timezone.utc)
+                if current_time < trial_end:
                     return True
             
             # Check if user has active subscription
@@ -122,8 +128,9 @@ class User(db.Model):
                 return True
             
             return False
-        except Exception:
+        except Exception as e:
             # If any error occurs (e.g., missing columns), default to False
+            print(f"Error in has_pro_access: {e}")
             return False
 
     @property
@@ -133,9 +140,17 @@ class User(db.Model):
             if not self.on_trial or not self.trial_end_date:
                 return 0
             
-            remaining = self.trial_end_date - datetime.now(timezone.utc)
+            # Ensure timezone-aware comparison
+            current_time = datetime.now(timezone.utc)
+            trial_end = self.trial_end_date
+            if trial_end.tzinfo is None:
+                # If trial_end_date is timezone-naive, assume UTC
+                trial_end = trial_end.replace(tzinfo=timezone.utc)
+            
+            remaining = trial_end - current_time
             return max(0, remaining.days)
-        except Exception:
+        except Exception as e:
+            print(f"Error in trial_days_remaining: {e}")
             return 0
 
     def generate_api_key(self):
