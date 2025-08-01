@@ -1187,8 +1187,19 @@ def _get_document_text_for_knowledge_graph(conversion):
         str: The document's text content
     """
     try:
+        # First, try to get the markdown content from the conversion result
+        if hasattr(conversion, 'result') and conversion.result:
+            try:
+                import json
+                result_data = json.loads(conversion.result)
+                if 'markdown' in result_data and result_data['markdown']:
+                    print(f"Using markdown content from conversion result for knowledge graph")
+                    return result_data['markdown']
+            except Exception as e:
+                print(f"Error parsing conversion result: {e}")
+        
+        # If no result data, try GCS download
         from google.cloud import storage
-        import json
         
         # Check if we have the necessary GCS configuration
         bucket_name = current_app.config.get('GCS_BUCKET_NAME')
