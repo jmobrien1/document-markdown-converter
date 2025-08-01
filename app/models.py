@@ -277,7 +277,7 @@ class Conversion(db.Model):
     original_filename = db.Column(db.String(255), nullable=False)
     file_size = db.Column(db.Integer)  # Size in bytes
     file_type = db.Column(db.String(10))
-    gcs_path = db.Column(db.String(500), nullable=True)  # Path to original file in GCS
+    # gcs_path = db.Column(db.String(500), nullable=True)  # Path to original file in GCS - temporarily disabled
 
     # Conversion details
     conversion_type = db.Column(db.String(20), default='standard')  # 'standard' or 'pro'
