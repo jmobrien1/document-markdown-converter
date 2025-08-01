@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>mdraft - Document to Markdown Converter</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- PDF.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
     <style>
         :root {
             --primary-start: #2563eb;
@@ -446,18 +449,18 @@
             opacity: 1;
         }
         
-        /* Workspace Layout Styles */
+        /* New Two-Pane Workspace Layout */
         .workspace-container {
             width: 100%;
             height: calc(100vh - 80px);
             margin: 0;
             padding: 0;
             display: flex;
-            flex-direction: column;
         }
         
         .workspace-layout {
             display: flex;
+            width: 100%;
             height: 100%;
             gap: 0;
         }
@@ -470,19 +473,14 @@
             overflow: hidden;
         }
         
-        #source-viewer-pane {
-            flex: 1;
+        #source-document-pane {
+            width: 60%;
             min-width: 0;
         }
         
-        #knowledge-pane {
-            flex: 1;
+        #intelligence-pane {
+            width: 40%;
             min-width: 0;
-        }
-        
-        #control-panel-pane {
-            width: 300px;
-            min-width: 300px;
             border-left: 1px solid #e9ecef;
         }
         
@@ -718,7 +716,7 @@
             <!-- Document Intelligence Workspace -->
             <div class="workspace-layout">
                 <!-- Pane 1: Source Document Viewer -->
-                <div id="source-viewer-pane" class="workspace-pane">
+                <div id="source-document-pane" class="workspace-pane">
                     <div class="pane-header">
                         <h3>Source Document</h3>
                         <div class="pdf-controls">
@@ -738,74 +736,49 @@
                     </div>
                 </div>
 
-                <!-- Pane 2: Knowledge Pane -->
-                <div id="knowledge-pane" class="workspace-pane">
+                <!-- Pane 2: Intelligence Pane -->
+                <div id="intelligence-pane" class="workspace-pane">
                     <div class="pane-header">
                         <h3>Document Intelligence</h3>
-                        <div class="tab-controls">
-                            <button id="clean-text-tab" class="tab-btn active">Clean Text</button>
-                            <button id="knowledge-graph-tab" class="tab-btn">Knowledge Graph</button>
-                        </div>
                     </div>
                     
-                    <!-- Clean Text Tab -->
-                    <div id="clean-text-content" class="tab-content active">
-                        <div id="clean-text-placeholder" class="content-placeholder">
-                            <p>Upload a document to see the extracted clean text here</p>
-                        </div>
-                        <div id="clean-text-output" class="text-output"></div>
-                    </div>
-                    
-                    <!-- Knowledge Graph Tab -->
-                    <div id="knowledge-graph-content" class="tab-content">
-                        <div id="knowledge-graph-placeholder" class="content-placeholder">
-                            <p>Upload a document to see the knowledge graph here</p>
-                        </div>
-                        <div id="knowledge-graph-container" class="graph-container"></div>
-                    </div>
-                </div>
-
-                <!-- Pane 3: Control Panel -->
-                <div id="control-panel-pane" class="workspace-pane control-panel">
-                    <div class="pane-header">
-                        <h3>Document Upload</h3>
-                    </div>
-                    
-                    <form id="uploadForm" method="POST" action="{{ url_for('main.convert') }}" enctype="multipart/form-data">
-                        <div class="file-input-wrapper">
-                            <div class="file-input">
-                                <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.pptx,.html,.htm,.csv,.json,.xml,.epub,.gif,.tiff,.tif,.jpg,.jpeg,.png,.bmp,.webp">
-                                <span id="fileLabel"><strong>Click to select a file</strong> or drag and drop</span>
-                            </div>
-                        </div>
-
-                        <!-- Converter Options Segmented Control -->
-                        <div class="converter-options">
-                            <div class="segmented-control" role="tablist" aria-label="Conversion Options">
-                                <button type="button" id="standard-tab" class="active" role="tab" aria-selected="true" aria-controls="standard-panel">
-                                    Standard
-                                </button>
-                                <button type="button" id="pro-tab" role="tab" aria-selected="false" aria-controls="pro-panel">
-                                    💎 Pro
-                                </button>
-                            </div>
-
-                            <div class="converter-details">
-                                <div id="standard-details">
-                                    <p class="static-description">Fast conversions for simple text documents.</p>
-                                    <p class="rotating-slogan"></p>
-                                    <div class="file-type-tags">
-                                        <span>DOCX</span><span>XLSX</span><span>PPTX</span><span>CSV</span><span>JSON</span><span>XML</span><span>EPUB</span>
+                    <div class="intelligence-content">
+                        <div class="upload-section">
+                            <form id="uploadForm" method="POST" action="{{ url_for('main.convert') }}" enctype="multipart/form-data">
+                                <div class="file-input-wrapper">
+                                    <div class="file-input">
+                                        <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.pptx,.html,.htm,.csv,.json,.xml,.epub,.gif,.tiff,.tif,.jpg,.jpeg,.png,.bmp,.webp">
+                                        <span id="fileLabel"><strong>Click to select a file</strong> or drag and drop</span>
                                     </div>
-                            </div>
-                            <div id="pro-details" style="display: none;">
-                                <p class="static-description">Advanced OCR for complex files, powered by Google Document AI.</p>
-                                <p class="rotating-slogan"></p>
-                                <div class="file-type-tags">
-                                    <span>PDF</span><span>JPG</span><span>PNG</span><span>GIF</span><span>TIFF</span><span>BMP</span><span>WebP</span><span>HTML</span>
                                 </div>
-                            </div>
-                        </div>
+
+                                <!-- Converter Options Segmented Control -->
+                                <div class="converter-options">
+                                    <div class="segmented-control" role="tablist" aria-label="Conversion Options">
+                                        <button type="button" id="standard-tab" class="active" role="tab" aria-selected="true" aria-controls="standard-panel">
+                                            Standard
+                                        </button>
+                                        <button type="button" id="pro-tab" role="tab" aria-selected="false" aria-controls="pro-panel">
+                                            💎 Pro
+                                        </button>
+                                    </div>
+
+                                    <div class="converter-details">
+                                        <div id="standard-details">
+                                            <p class="static-description">Fast conversions for simple text documents.</p>
+                                            <p class="rotating-slogan"></p>
+                                            <div class="file-type-tags">
+                                                <span>DOCX</span><span>XLSX</span><span>PPTX</span><span>CSV</span><span>JSON</span><span>XML</span><span>EPUB</span>
+                                            </div>
+                                    </div>
+                                    <div id="pro-details" style="display: none;">
+                                        <p class="static-description">Advanced OCR for complex files, powered by Google Document AI.</p>
+                                        <p class="rotating-slogan"></p>
+                                        <div class="file-type-tags">
+                                            <span>PDF</span><span>JPG</span><span>PNG</span><span>GIF</span><span>TIFF</span><span>BMP</span><span>WebP</span><span>HTML</span>
+                                        </div>
+                                    </div>
+                                </div>
 
                         <input type="hidden" name="pro_conversion" id="pro_conversion_hidden_input" value="off">
                     </div>
@@ -1576,110 +1549,12 @@
                     successMessage.style.display = 'none';
                 }
                 
-                // --- PDF.js Integration ---
-                let pdfDoc = null;
-                let pageNum = 1;
-                let pageRendering = false;
-                let pageNumPending = null;
-                let scale = 1.5;
-                
-                // Load PDF.js library
-                function loadPDFJS() {
-                    return new Promise((resolve, reject) => {
-                        if (window.pdfjsLib) {
-                            resolve(window.pdfjsLib);
-                            return;
-                        }
-                        
-                        const script = document.createElement('script');
-                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-                        script.onload = () => {
-                            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                            resolve(window.pdfjsLib);
-                        };
-                        script.onerror = reject;
-                        document.head.appendChild(script);
-                    });
-                }
-                
-                // Render PDF page
-                function renderPage(num) {
-                    pageRendering = true;
-                    
-                    pdfDoc.getPage(num).then((page) => {
-                        const viewport = page.getViewport({ scale: scale });
-                        const canvas = document.getElementById('pdf-canvas');
-                        const context = canvas.getContext('2d');
-                        
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-                        
-                        const renderContext = {
-                            canvasContext: context,
-                            viewport: viewport
-                        };
-                        
-                        const renderTask = page.render(renderContext);
-                        
-                        renderTask.promise.then(() => {
-                            pageRendering = false;
-                            if (pageNumPending !== null) {
-                                renderPage(pageNumPending);
-                                pageNumPending = null;
-                            }
-                        });
-                    });
-                    
-                    document.getElementById('current-page').textContent = num;
-                }
-                
-                // Queue rendering of the next page
-                function queueRenderPage(num) {
-                    if (pageRendering) {
-                        pageNumPending = num;
-                    } else {
-                        renderPage(num);
-                    }
-                }
-                
-                // Go to previous page
-                function onPrevPage() {
-                    if (pageNum <= 1) {
-                        return;
-                    }
-                    pageNum--;
-                    queueRenderPage(pageNum);
-                }
-                
-                // Go to next page
-                function onNextPage() {
-                    if (pageNum >= pdfDoc.numPages) {
-                        return;
-                    }
-                    pageNum++;
-                    queueRenderPage(pageNum);
-                }
-                
-                // Zoom functions
-                function zoomIn() {
-                    scale *= 1.2;
-                    queueRenderPage(pageNum);
-                }
-                
-                function zoomOut() {
-                    scale *= 0.8;
-                    queueRenderPage(pageNum);
-                }
-                
-                function resetZoom() {
-                    scale = 1.5;
-                    queueRenderPage(pageNum);
-                }
+
                 
                 // Main PDF rendering function
                 async function renderPdf(url) {
                     try {
-                        const pdfjsLib = await loadPDFJS();
+                        console.log('Rendering PDF from URL:', url);
                         
                         const loadingTask = pdfjsLib.getDocument(url);
                         pdfDoc = await loadingTask.promise;
@@ -1698,8 +1573,7 @@
                         document.getElementById('zoom-out').disabled = false;
                         document.getElementById('reset-zoom').disabled = false;
                         
-                        // Add text selection event listener
-                        setupPDFTextSelection();
+                        console.log('PDF rendered successfully');
                         
                     } catch (error) {
                         console.error('Error rendering PDF:', error);
@@ -1770,26 +1644,82 @@
                     return 'Sample selected text';
                 }
                 
-                // --- Tab Functionality ---
-                function initializeTabs() {
-                    const cleanTextTab = document.getElementById('clean-text-tab');
-                    const knowledgeGraphTab = document.getElementById('knowledge-graph-tab');
-                    const cleanTextContent = document.getElementById('clean-text-content');
-                    const knowledgeGraphContent = document.getElementById('knowledge-graph-content');
+
+                
+                // --- PDF Control Functions ---
+                let pdfDoc = null;
+                let pageNum = 1;
+                let pageRendering = false;
+                let pageNumPending = null;
+                let scale = 1.5;
+                
+                function renderPage(num) {
+                    pageRendering = true;
                     
-                    cleanTextTab.addEventListener('click', () => {
-                        cleanTextTab.classList.add('active');
-                        knowledgeGraphTab.classList.remove('active');
-                        cleanTextContent.classList.add('active');
-                        knowledgeGraphContent.classList.remove('active');
+                    pdfDoc.getPage(num).then(function(page) {
+                        const viewport = page.getViewport({scale: scale});
+                        const canvas = document.getElementById('pdf-canvas');
+                        const context = canvas.getContext('2d');
+                        
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        const renderContext = {
+                            canvasContext: context,
+                            viewport: viewport
+                        };
+                        
+                        const renderTask = page.render(renderContext);
+                        
+                        renderTask.promise.then(function() {
+                            pageRendering = false;
+                            if (pageNumPending !== null) {
+                                renderPage(pageNumPending);
+                                pageNumPending = null;
+                            }
+                        });
                     });
                     
-                    knowledgeGraphTab.addEventListener('click', () => {
-                        knowledgeGraphTab.classList.add('active');
-                        cleanTextTab.classList.remove('active');
-                        knowledgeGraphContent.classList.add('active');
-                        cleanTextContent.classList.remove('active');
-                    });
+                    document.getElementById('current-page').textContent = num;
+                }
+                
+                function queueRenderPage(num) {
+                    if (pageRendering) {
+                        pageNumPending = num;
+                    } else {
+                        renderPage(num);
+                    }
+                }
+                
+                function onPrevPage() {
+                    if (pageNum <= 1) {
+                        return;
+                    }
+                    pageNum--;
+                    queueRenderPage(pageNum);
+                }
+                
+                function onNextPage() {
+                    if (pageNum >= pdfDoc.numPages) {
+                        return;
+                    }
+                    pageNum++;
+                    queueRenderPage(pageNum);
+                }
+                
+                function zoomIn() {
+                    scale *= 1.2;
+                    queueRenderPage(pageNum);
+                }
+                
+                function zoomOut() {
+                    scale *= 0.8;
+                    queueRenderPage(pageNum);
+                }
+                
+                function resetZoom() {
+                    scale = 1.5;
+                    queueRenderPage(pageNum);
                 }
                 
                 // --- PDF Controls Event Listeners ---
@@ -1810,7 +1740,6 @@
                 
                 // --- Workspace Initialization ---
                 function initializeWorkspace() {
-                    initializeTabs();
                     initializePDFControls();
                 }
                 
