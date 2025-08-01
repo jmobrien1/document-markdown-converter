@@ -849,63 +849,8 @@
         let graphData = null;
         let currentJobId = null;
 
-        // Auto-load test knowledge graph data for debugging
-        function loadTestKnowledgeGraph() {
-            console.log('Loading test knowledge graph data...');
-            const testJobId = 'test-knowledge-graph-123';
-            
-            // Fetch test data
-            Promise.all([
-                fetch(`/result/${testJobId}`).then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    return response.json();
-                }),
-                fetch(`/result/${testJobId}/graph`).then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    return response.json();
-                })
-            ])
-            .then(([resultData, graphData]) => {
-                console.log('Test data loaded successfully');
-                console.log('Result data:', resultData);
-                console.log('Graph data:', graphData);
-                
-                // Store graph data globally
-                window.graphData = graphData;
-                currentJobId = testJobId;
-                
-                // Display clean text in the "Clean Text" tab
-                displayCleanText(resultData);
-                
-                // Render knowledge graph
-                renderKnowledgeGraph(graphData);
-                
-                console.log('Test knowledge graph loaded successfully');
-            })
-            .catch(error => {
-                console.error('Error loading test data:', error);
-                document.getElementById('knowledge-graph-content').innerHTML = 
-                    '<p class="placeholder-text">Error loading test data. Please try again.</p>';
-            });
-        }
-
-        // Load test data when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Workspace loaded, attempting to load test knowledge graph...');
-            // Add a small delay to ensure Sigma.js is loaded
-            setTimeout(() => {
-                loadTestKnowledgeGraph();
-            }, 1000);
-        });
-
         // Load all conversion data using Promise.all()
         function loadAllConversionData(jobId) {
-            console.log('Fetching result data and graph data in parallel...');
-            
             const resultUrl = `/result/${jobId}`;
             const graphUrl = `/result/${jobId}/graph`;
             
@@ -925,12 +870,6 @@
                 })
             ])
             .then(([resultData, graphData]) => {
-                console.log('Both fetches complete, rendering UI.');
-                console.log('Result data:', resultData);
-                console.log('Graph data:', graphData);
-                console.log('Graph data type:', typeof graphData);
-                console.log('Graph data keys:', Object.keys(graphData || {}));
-                
                 // Store graph data globally
                 window.graphData = graphData;
                 currentJobId = jobId;
@@ -940,8 +879,6 @@
                 
                 // Render knowledge graph
                 renderKnowledgeGraph(graphData);
-                
-                console.log('UI rendering complete.');
             })
             .catch(error => {
                 console.error('Error loading conversion data:', error);
@@ -957,13 +894,11 @@
 
         // Display clean text in the Clean Text tab
         function displayCleanText(resultData) {
-            console.log('Displaying clean text...');
             const cleanTextContainer = document.getElementById('clean-text-content');
             // Handle both 'result' and 'markdown' fields for compatibility
             const textContent = resultData.result || resultData.markdown;
             if (cleanTextContainer && textContent) {
                 cleanTextContainer.innerHTML = `<pre>${textContent}</pre>`;
-                console.log('Clean text displayed successfully.');
             } else {
                 console.warn('Clean text container not found or no result data.');
             }
@@ -1067,7 +1002,6 @@
 
         // Fallback graph visualization when Sigma.js is not available
         function renderFallbackGraph(graph) {
-            console.log('Rendering fallback graph visualization');
             const container = document.getElementById('knowledge-graph-content');
             
             let html = '<div class="fallback-graph">';
