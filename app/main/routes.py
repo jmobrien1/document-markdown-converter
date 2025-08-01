@@ -901,6 +901,40 @@ def export_text(job_id):
         abort(500, description="Error retrieving text content")
 
 
+@main.route('/result/<job_id>/pdf')
+@login_required
+def get_pdf(job_id):
+    """Get the original PDF file for viewing."""
+    conversion = Conversion.query.filter_by(job_id=job_id).first()
+    if not conversion:
+        abort(404)
+    
+    if conversion.user_id != current_user.id:
+        abort(403)
+    
+    if conversion.status != 'completed':
+        abort(400, description="Conversion must be completed before PDF is available")
+    
+    try:
+        # Get the original PDF from GCS
+        storage_client = get_storage_client()
+        bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
+        blob = bucket.blob(f"uploads/{job_id}/{conversion.filename}")
+        
+        # Download the PDF content
+        pdf_content = blob.download_as_bytes()
+        
+        # Create response with PDF content
+        response = make_response(pdf_content)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'inline; filename="{conversion.filename}"'
+        return response
+        
+    except Exception as e:
+        current_app.logger.error(f"Error retrieving PDF for job {job_id}: {e}")
+        abort(500, description="Error retrieving PDF content")
+
+
 @main.route('/workspace')
 @login_required
 def workspace():
