@@ -1333,18 +1333,167 @@
                 }
                 
                 function renderKnowledgeGraph(graphData) {
-                    // Placeholder for Sigma.js integration
                     const graphContainer = document.getElementById('knowledge-graph-container');
-                    if (graphContainer) {
+                    if (!graphContainer) return;
+                    
+                    // Clear container
+                    graphContainer.innerHTML = '';
+                    
+                    // Load Sigma.js
+                    loadSigmaJS().then(() => {
+                        try {
+                            // Create graph data for Sigma.js
+                            const graph = {
+                                nodes: graphData.nodes.map(node => ({
+                                    id: node.id,
+                                    label: node.label,
+                                    x: Math.random() * 1000,
+                                    y: Math.random() * 1000,
+                                    size: 8,
+                                    color: getNodeColor(node.type)
+                                })),
+                                edges: graphData.edges.map(edge => ({
+                                    id: `${edge.source}-${edge.target}`,
+                                    source: edge.source,
+                                    target: edge.target,
+                                    label: edge.label,
+                                    size: 2,
+                                    color: '#666'
+                                }))
+                            };
+                            
+                            // Initialize Sigma.js
+                            const sigma = new window.sigma({
+                                graph: graph,
+                                container: graphContainer,
+                                settings: {
+                                    nodeLabelSize: 'proportional',
+                                    edgeLabelSize: 'proportional',
+                                    minNodeSize: 4,
+                                    maxNodeSize: 12,
+                                    minEdgeSize: 1,
+                                    maxEdgeSize: 4,
+                                    enableEdgeHovering: true,
+                                    enableEdgeLabels: true,
+                                    enableNodeHovering: true,
+                                    enableNodeLabels: true
+                                }
+                            });
+                            
+                            // Add click event for bidirectional linking
+                            sigma.on('clickNode', function(event) {
+                                const node = event.data.node;
+                                console.log('Node clicked:', node.label);
+                                
+                                // Search for this text in the PDF
+                                searchTextInPDF(node.label);
+                                
+                                // Highlight the node in the graph
+                                highlightNodeInGraph(node.id);
+                            });
+                            
+                            // Add text selection event from PDF
+                            document.addEventListener('pdfTextSelected', function(event) {
+                                const selectedText = event.detail.text;
+                                searchNodeInGraph(selectedText);
+                            });
+                            
+                            console.log('Knowledge graph rendered with Sigma.js');
+                            
+                        } catch (error) {
+                            console.error('Error rendering knowledge graph:', error);
+                            graphContainer.innerHTML = `
+                                <div style="padding: 20px; text-align: center;">
+                                    <h4>Knowledge Graph</h4>
+                                    <p>Nodes: ${graphData.nodes.length}</p>
+                                    <p>Edges: ${graphData.edges.length}</p>
+                                    <p>Error rendering graph: ${error.message}</p>
+                                </div>
+                            `;
+                        }
+                    }).catch(error => {
+                        console.error('Failed to load Sigma.js:', error);
                         graphContainer.innerHTML = `
                             <div style="padding: 20px; text-align: center;">
                                 <h4>Knowledge Graph</h4>
                                 <p>Nodes: ${graphData.nodes.length}</p>
                                 <p>Edges: ${graphData.edges.length}</p>
-                                <p>Sigma.js integration coming soon...</p>
+                                <p>Sigma.js not available</p>
                             </div>
                         `;
-                    }
+                    });
+                }
+                
+                function loadSigmaJS() {
+                    return new Promise((resolve, reject) => {
+                        if (window.sigma) {
+                            resolve(window.sigma);
+                            return;
+                        }
+                        
+                        // Try multiple CDN sources
+                        const sources = [
+                            'https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js',
+                            'https://unpkg.com/sigma@2.4.0/dist/sigma.min.js',
+                            'https://cdn.jsdelivr.net/npm/sigma@2.4.0/dist/sigma.min.js'
+                        ];
+                        
+                        function trySource(index) {
+                            if (index >= sources.length) {
+                                reject(new Error('Failed to load Sigma.js from all sources'));
+                                return;
+                            }
+                            
+                            const script = document.createElement('script');
+                            script.src = sources[index];
+                            script.onload = () => {
+                                console.log(`Sigma.js loaded from source ${index + 1}`);
+                                resolve(window.sigma);
+                            };
+                            script.onerror = () => {
+                                console.log(`Sigma.js failed to load from source ${index + 1}`);
+                                trySource(index + 1);
+                            };
+                            document.head.appendChild(script);
+                        }
+                        
+                        trySource(0);
+                    });
+                }
+                
+                function getNodeColor(type) {
+                    const colors = {
+                        'PERSON': '#4CAF50',
+                        'ORGANIZATION': '#2196F3',
+                        'CONTRACT': '#FF9800',
+                        'AMOUNT': '#9C27B0',
+                        'DATE': '#607D8B',
+                        'LOCATION': '#795548',
+                        'CLAUSE': '#E91E63',
+                        'TERM': '#00BCD4',
+                        'COLUMN': '#FF5722',
+                        'NUMBER': '#8BC34A',
+                        'DOCUMENT': '#9E9E9E'
+                    };
+                    return colors[type] || '#666';
+                }
+                
+                function searchTextInPDF(text) {
+                    // This would integrate with PDF.js to search and highlight text
+                    console.log('Searching for text in PDF:', text);
+                    // TODO: Implement PDF text search and highlighting
+                }
+                
+                function highlightNodeInGraph(nodeId) {
+                    // This would highlight the node in the Sigma.js graph
+                    console.log('Highlighting node in graph:', nodeId);
+                    // TODO: Implement node highlighting
+                }
+                
+                function searchNodeInGraph(text) {
+                    // This would search for a node with matching text
+                    console.log('Searching for node in graph:', text);
+                    // TODO: Implement node search
                 }
 
                 function getCurrentJobId() {
@@ -1549,10 +1698,76 @@
                         document.getElementById('zoom-out').disabled = false;
                         document.getElementById('reset-zoom').disabled = false;
                         
+                        // Add text selection event listener
+                        setupPDFTextSelection();
+                        
                     } catch (error) {
                         console.error('Error rendering PDF:', error);
                         document.getElementById('pdf-placeholder').innerHTML = '<p>Error loading PDF. Please try again.</p>';
                     }
+                }
+                
+                // Setup PDF text selection for bidirectional linking
+                function setupPDFTextSelection() {
+                    const canvas = document.getElementById('pdf-canvas');
+                    if (!canvas) return;
+                    
+                    let isSelecting = false;
+                    let startX, startY, endX, endY;
+                    
+                    canvas.addEventListener('mousedown', function(e) {
+                        isSelecting = true;
+                        const rect = canvas.getBoundingClientRect();
+                        startX = e.clientX - rect.left;
+                        startY = e.clientY - rect.top;
+                    });
+                    
+                    canvas.addEventListener('mousemove', function(e) {
+                        if (!isSelecting) return;
+                        
+                        const rect = canvas.getBoundingClientRect();
+                        endX = e.clientX - rect.left;
+                        endY = e.clientY - rect.top;
+                        
+                        // Draw selection rectangle
+                        drawSelectionRectangle();
+                    });
+                    
+                    canvas.addEventListener('mouseup', function(e) {
+                        if (!isSelecting) return;
+                        
+                        isSelecting = false;
+                        
+                        // Get selected text (simplified - in real implementation, this would use PDF.js text layer)
+                        const selectedText = getSelectedTextFromPDF();
+                        if (selectedText) {
+                            // Dispatch custom event for knowledge graph
+                            const event = new CustomEvent('pdfTextSelected', {
+                                detail: { text: selectedText }
+                            });
+                            document.dispatchEvent(event);
+                        }
+                        
+                        // Clear selection rectangle
+                        clearSelectionRectangle();
+                    });
+                }
+                
+                function drawSelectionRectangle() {
+                    // This would draw a selection rectangle on the canvas
+                    // For now, just log the selection area
+                    console.log('Selection area:', { startX, startY, endX, endY });
+                }
+                
+                function clearSelectionRectangle() {
+                    // Clear the selection rectangle
+                    console.log('Clearing selection rectangle');
+                }
+                
+                function getSelectedTextFromPDF() {
+                    // This would extract text from the selected area in the PDF
+                    // For now, return a placeholder
+                    return 'Sample selected text';
                 }
                 
                 // --- Tab Functionality ---
