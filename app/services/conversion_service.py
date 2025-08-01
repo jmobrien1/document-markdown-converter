@@ -174,8 +174,8 @@ class ConversionService:
                 file_size=file_size,
                 file_type=file_type,
                 conversion_type='pro' if use_pro_converter else 'standard',
-                status='pending',
-                gcs_path=gcs_path
+                status='pending'
+                # gcs_path=gcs_path  # Temporarily disabled - column commented out in model
             )
             
             db.session.add(conversion)
