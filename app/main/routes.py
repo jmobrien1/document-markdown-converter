@@ -931,10 +931,22 @@ def get_pdf(job_id):
         # Get the original PDF from GCS
         storage_client = get_storage_client()
         bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
-        blob = bucket.blob(f"uploads/{job_id}/{conversion.original_filename}")
+        
+        # Debug: Log the file path we're trying to access
+        file_path = f"uploads/{job_id}/{conversion.original_filename}"
+        current_app.logger.info(f"Attempting to retrieve PDF from GCS: {file_path}")
+        current_app.logger.info(f"Job ID: {job_id}, Filename: {conversion.original_filename}")
+        
+        blob = bucket.blob(file_path)
+        
+        # Check if the blob exists
+        if not blob.exists():
+            current_app.logger.error(f"PDF file not found in GCS: {file_path}")
+            abort(404, description="PDF file not found in storage")
         
         # Download the PDF content
         pdf_content = blob.download_as_bytes()
+        current_app.logger.info(f"Successfully retrieved PDF from GCS: {len(pdf_content)} bytes")
         
         # Create response with PDF content
         response = make_response(pdf_content)
@@ -944,6 +956,7 @@ def get_pdf(job_id):
         
     except Exception as e:
         current_app.logger.error(f"Error retrieving PDF for job {job_id}: {e}")
+        current_app.logger.error(f"Exception type: {type(e).__name__}")
         abort(500, description="Error retrieving PDF content")
 
 
