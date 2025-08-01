@@ -446,6 +446,251 @@
             opacity: 1;
         }
         
+        /* Workspace Layout Styles */
+        .workspace-container {
+            width: 100%;
+            height: calc(100vh - 80px);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .workspace-layout {
+            display: flex;
+            height: 100%;
+            gap: 0;
+        }
+        
+        .workspace-pane {
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+            border: 1px solid #e9ecef;
+            overflow: hidden;
+        }
+        
+        #source-viewer-pane {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        #knowledge-pane {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        #control-panel-pane {
+            width: 300px;
+            min-width: 300px;
+            border-left: 1px solid #e9ecef;
+        }
+        
+        .pane-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .pane-header h3 {
+            margin: 0;
+            font-size: 1.1em;
+        }
+        
+        /* PDF Viewer Styles */
+        .pdf-viewer {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            background: #f8f9fa;
+        }
+        
+        .pdf-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-secondary);
+            font-size: 1.1em;
+        }
+        
+        #pdf-canvas {
+            display: none;
+            margin: 20px auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        
+        .pdf-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9em;
+        }
+        
+        .control-btn {
+            background: var(--primary-start);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+        
+        .control-btn:hover {
+            background: var(--primary-end);
+        }
+        
+        .control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Tab Controls */
+        .tab-controls {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .tab-btn {
+            background: transparent;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .tab-btn.active {
+            background: var(--primary-start);
+            color: white;
+            border-color: var(--primary-start);
+        }
+        
+        .tab-btn:hover:not(.active) {
+            background: #f8f9fa;
+        }
+        
+        /* Tab Content */
+        .tab-content {
+            display: none;
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .content-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-secondary);
+            font-size: 1.1em;
+            text-align: center;
+        }
+        
+        .text-output {
+            display: none;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .graph-container {
+            display: none;
+            height: 100%;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        /* Control Panel Styles */
+        .control-panel {
+            background: #f8f9fa;
+        }
+        
+        .control-panel .file-input-wrapper {
+            margin: 20px;
+        }
+        
+        .control-panel .file-input {
+            padding: 30px 20px;
+            border: 2px dashed #dee2e6;
+            border-radius: 12px;
+            background: white;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .control-panel .file-input:hover {
+            border-color: var(--primary-start);
+            background: #f8f9fa;
+        }
+        
+        .control-panel .converter-options {
+            margin: 20px;
+        }
+        
+        .control-panel .convert-btn {
+            margin: 20px;
+            width: calc(100% - 40px);
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .workspace-layout {
+                flex-direction: column;
+            }
+            
+            #control-panel-pane {
+                width: 100%;
+                min-width: auto;
+                border-left: none;
+                border-top: 1px solid #e9ecef;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .workspace-container {
+                height: calc(100vh - 120px);
+            }
+            
+            .pane-header {
+                padding: 10px 15px;
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .pdf-controls {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .tab-controls {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
 
     </style>
 </head>
@@ -468,36 +713,90 @@
         </nav>
     </header>
 
-    <main class="container">
+    <main class="workspace-container">
         {% if current_user.is_authenticated %}
-            <!-- Logged-in View -->
-            <section class="upload-section">
-                <form id="uploadForm" method="POST" action="{{ url_for('main.convert') }}" enctype="multipart/form-data">
-                    <div class="file-input-wrapper">
-                        <div class="file-input">
-                            <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.pptx,.html,.htm,.csv,.json,.xml,.epub,.gif,.tiff,.tif,.jpg,.jpeg,.png,.bmp,.webp">
-                            <span id="fileLabel"><strong>Click to select a file</strong> or drag and drop</span>
+            <!-- Document Intelligence Workspace -->
+            <div class="workspace-layout">
+                <!-- Pane 1: Source Document Viewer -->
+                <div id="source-viewer-pane" class="workspace-pane">
+                    <div class="pane-header">
+                        <h3>Source Document</h3>
+                        <div class="pdf-controls">
+                            <button id="prev-page" class="control-btn">‹</button>
+                            <span id="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
+                            <button id="next-page" class="control-btn">›</button>
+                            <button id="zoom-in" class="control-btn">+</button>
+                            <button id="zoom-out" class="control-btn">−</button>
+                            <button id="reset-zoom" class="control-btn">Reset</button>
                         </div>
                     </div>
+                    <div id="pdf-container" class="pdf-viewer">
+                        <div id="pdf-placeholder" class="pdf-placeholder">
+                            <p>Upload a document to view it here</p>
+                        </div>
+                        <canvas id="pdf-canvas"></canvas>
+                    </div>
+                </div>
 
-                    <!-- Converter Options Segmented Control -->
-                    <div class="converter-options">
-                        <div class="segmented-control" role="tablist" aria-label="Conversion Options">
-                            <button type="button" id="standard-tab" class="active" role="tab" aria-selected="true" aria-controls="standard-panel">
-                                Standard
-                            </button>
-                            <button type="button" id="pro-tab" role="tab" aria-selected="false" aria-controls="pro-panel">
-                                💎 Pro
-                            </button>
+                <!-- Pane 2: Knowledge Pane -->
+                <div id="knowledge-pane" class="workspace-pane">
+                    <div class="pane-header">
+                        <h3>Document Intelligence</h3>
+                        <div class="tab-controls">
+                            <button id="clean-text-tab" class="tab-btn active">Clean Text</button>
+                            <button id="knowledge-graph-tab" class="tab-btn">Knowledge Graph</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Clean Text Tab -->
+                    <div id="clean-text-content" class="tab-content active">
+                        <div id="clean-text-placeholder" class="content-placeholder">
+                            <p>Upload a document to see the extracted clean text here</p>
+                        </div>
+                        <div id="clean-text-output" class="text-output"></div>
+                    </div>
+                    
+                    <!-- Knowledge Graph Tab -->
+                    <div id="knowledge-graph-content" class="tab-content">
+                        <div id="knowledge-graph-placeholder" class="content-placeholder">
+                            <p>Upload a document to see the knowledge graph here</p>
+                        </div>
+                        <div id="knowledge-graph-container" class="graph-container"></div>
+                    </div>
+                </div>
+
+                <!-- Pane 3: Control Panel -->
+                <div id="control-panel-pane" class="workspace-pane control-panel">
+                    <div class="pane-header">
+                        <h3>Document Upload</h3>
+                    </div>
+                    
+                    <form id="uploadForm" method="POST" action="{{ url_for('main.convert') }}" enctype="multipart/form-data">
+                        <div class="file-input-wrapper">
+                            <div class="file-input">
+                                <input type="file" name="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.pptx,.html,.htm,.csv,.json,.xml,.epub,.gif,.tiff,.tif,.jpg,.jpeg,.png,.bmp,.webp">
+                                <span id="fileLabel"><strong>Click to select a file</strong> or drag and drop</span>
+                            </div>
                         </div>
 
-                        <div class="converter-details">
-                            <div id="standard-details">
-                                <p class="static-description">Fast conversions for simple text documents.</p>
-                                <p class="rotating-slogan"></p>
-                                <div class="file-type-tags">
-                                    <span>DOCX</span><span>XLSX</span><span>PPTX</span><span>CSV</span><span>JSON</span><span>XML</span><span>EPUB</span>
-                                </div>
+                        <!-- Converter Options Segmented Control -->
+                        <div class="converter-options">
+                            <div class="segmented-control" role="tablist" aria-label="Conversion Options">
+                                <button type="button" id="standard-tab" class="active" role="tab" aria-selected="true" aria-controls="standard-panel">
+                                    Standard
+                                </button>
+                                <button type="button" id="pro-tab" role="tab" aria-selected="false" aria-controls="pro-panel">
+                                    💎 Pro
+                                </button>
+                            </div>
+
+                            <div class="converter-details">
+                                <div id="standard-details">
+                                    <p class="static-description">Fast conversions for simple text documents.</p>
+                                    <p class="rotating-slogan"></p>
+                                    <div class="file-type-tags">
+                                        <span>DOCX</span><span>XLSX</span><span>PPTX</span><span>CSV</span><span>JSON</span><span>XML</span><span>EPUB</span>
+                                    </div>
                             </div>
                             <div id="pro-details" style="display: none;">
                                 <p class="static-description">Advanced OCR for complex files, powered by Google Document AI.</p>
@@ -748,6 +1047,9 @@
                                 // Use job_id to construct the status URL
                                 const statusUrl = `/status/${startData.job_id}`;
                                 pollForTaskStatus(statusUrl);
+                                
+                                // Store job ID for workspace integration
+                                window.currentJobId = startData.job_id;
                             } else {
                                 throw new Error(startData.error || 'Could not start conversion job.');
                             }
@@ -944,6 +1246,10 @@
                 }
 
                 function handleSuccess(result) {
+                    // Update workspace with results
+                    updateWorkspaceWithResults(result);
+                    
+                    // Also update the traditional result section for backward compatibility
                     markdownOutput.value = result.markdown;
                     resultSection.style.display = 'block';
                     showSuccess(`Successfully converted "${result.filename}"!`);
@@ -971,6 +1277,74 @@
                     }
 
                     resetUI();
+                }
+                
+                function updateWorkspaceWithResults(result) {
+                    // Update clean text tab
+                    const cleanTextOutput = document.getElementById('clean-text-output');
+                    const cleanTextPlaceholder = document.getElementById('clean-text-placeholder');
+                    
+                    if (cleanTextOutput && cleanTextPlaceholder) {
+                        cleanTextOutput.textContent = result.markdown;
+                        cleanTextOutput.style.display = 'block';
+                        cleanTextPlaceholder.style.display = 'none';
+                    }
+                    
+                    // Try to render PDF if it's a PDF file
+                    if (result.filename && result.filename.toLowerCase().endsWith('.pdf')) {
+                        // For now, we'll use a placeholder URL - in production this would be the actual PDF URL
+                        const pdfUrl = `/result/${window.currentJobId}/pdf`;
+                        renderPdf(pdfUrl).catch(error => {
+                            console.log('PDF rendering not available yet:', error);
+                        });
+                    }
+                    
+                    // Load knowledge graph data
+                    loadKnowledgeGraphData();
+                }
+                
+                function loadKnowledgeGraphData() {
+                    const jobId = getCurrentJobId();
+                    if (!jobId) return;
+                    
+                    fetch(`/result/${jobId}/graph`)
+                        .then(response => response.json())
+                        .then(data => {
+                            const graphContainer = document.getElementById('knowledge-graph-container');
+                            const graphPlaceholder = document.getElementById('knowledge-graph-placeholder');
+                            
+                            if (graphContainer && graphPlaceholder) {
+                                if (data.knowledge_graph && data.knowledge_graph.nodes) {
+                                    renderKnowledgeGraph(data.knowledge_graph);
+                                    graphContainer.style.display = 'block';
+                                    graphPlaceholder.style.display = 'none';
+                                } else {
+                                    graphPlaceholder.innerHTML = '<p>Knowledge graph data not available yet.</p>';
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.log('Knowledge graph not available yet:', error);
+                            const graphPlaceholder = document.getElementById('knowledge-graph-placeholder');
+                            if (graphPlaceholder) {
+                                graphPlaceholder.innerHTML = '<p>Knowledge graph will be available shortly.</p>';
+                            }
+                        });
+                }
+                
+                function renderKnowledgeGraph(graphData) {
+                    // Placeholder for Sigma.js integration
+                    const graphContainer = document.getElementById('knowledge-graph-container');
+                    if (graphContainer) {
+                        graphContainer.innerHTML = `
+                            <div style="padding: 20px; text-align: center;">
+                                <h4>Knowledge Graph</h4>
+                                <p>Nodes: ${graphData.nodes.length}</p>
+                                <p>Edges: ${graphData.edges.length}</p>
+                                <p>Sigma.js integration coming soon...</p>
+                            </div>
+                        `;
+                    }
                 }
 
                 function getCurrentJobId() {
@@ -1051,6 +1425,185 @@
                 function hideMessages() {
                     errorMessage.style.display = 'none';
                     successMessage.style.display = 'none';
+                }
+                
+                // --- PDF.js Integration ---
+                let pdfDoc = null;
+                let pageNum = 1;
+                let pageRendering = false;
+                let pageNumPending = null;
+                let scale = 1.5;
+                
+                // Load PDF.js library
+                function loadPDFJS() {
+                    return new Promise((resolve, reject) => {
+                        if (window.pdfjsLib) {
+                            resolve(window.pdfjsLib);
+                            return;
+                        }
+                        
+                        const script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+                        script.onload = () => {
+                            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                            resolve(window.pdfjsLib);
+                        };
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                }
+                
+                // Render PDF page
+                function renderPage(num) {
+                    pageRendering = true;
+                    
+                    pdfDoc.getPage(num).then((page) => {
+                        const viewport = page.getViewport({ scale: scale });
+                        const canvas = document.getElementById('pdf-canvas');
+                        const context = canvas.getContext('2d');
+                        
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        const renderContext = {
+                            canvasContext: context,
+                            viewport: viewport
+                        };
+                        
+                        const renderTask = page.render(renderContext);
+                        
+                        renderTask.promise.then(() => {
+                            pageRendering = false;
+                            if (pageNumPending !== null) {
+                                renderPage(pageNumPending);
+                                pageNumPending = null;
+                            }
+                        });
+                    });
+                    
+                    document.getElementById('current-page').textContent = num;
+                }
+                
+                // Queue rendering of the next page
+                function queueRenderPage(num) {
+                    if (pageRendering) {
+                        pageNumPending = num;
+                    } else {
+                        renderPage(num);
+                    }
+                }
+                
+                // Go to previous page
+                function onPrevPage() {
+                    if (pageNum <= 1) {
+                        return;
+                    }
+                    pageNum--;
+                    queueRenderPage(pageNum);
+                }
+                
+                // Go to next page
+                function onNextPage() {
+                    if (pageNum >= pdfDoc.numPages) {
+                        return;
+                    }
+                    pageNum++;
+                    queueRenderPage(pageNum);
+                }
+                
+                // Zoom functions
+                function zoomIn() {
+                    scale *= 1.2;
+                    queueRenderPage(pageNum);
+                }
+                
+                function zoomOut() {
+                    scale *= 0.8;
+                    queueRenderPage(pageNum);
+                }
+                
+                function resetZoom() {
+                    scale = 1.5;
+                    queueRenderPage(pageNum);
+                }
+                
+                // Main PDF rendering function
+                async function renderPdf(url) {
+                    try {
+                        const pdfjsLib = await loadPDFJS();
+                        
+                        const loadingTask = pdfjsLib.getDocument(url);
+                        pdfDoc = await loadingTask.promise;
+                        
+                        document.getElementById('total-pages').textContent = pdfDoc.numPages;
+                        document.getElementById('pdf-placeholder').style.display = 'none';
+                        document.getElementById('pdf-canvas').style.display = 'block';
+                        
+                        pageNum = 1;
+                        renderPage(pageNum);
+                        
+                        // Enable controls
+                        document.getElementById('prev-page').disabled = false;
+                        document.getElementById('next-page').disabled = false;
+                        document.getElementById('zoom-in').disabled = false;
+                        document.getElementById('zoom-out').disabled = false;
+                        document.getElementById('reset-zoom').disabled = false;
+                        
+                    } catch (error) {
+                        console.error('Error rendering PDF:', error);
+                        document.getElementById('pdf-placeholder').innerHTML = '<p>Error loading PDF. Please try again.</p>';
+                    }
+                }
+                
+                // --- Tab Functionality ---
+                function initializeTabs() {
+                    const cleanTextTab = document.getElementById('clean-text-tab');
+                    const knowledgeGraphTab = document.getElementById('knowledge-graph-tab');
+                    const cleanTextContent = document.getElementById('clean-text-content');
+                    const knowledgeGraphContent = document.getElementById('knowledge-graph-content');
+                    
+                    cleanTextTab.addEventListener('click', () => {
+                        cleanTextTab.classList.add('active');
+                        knowledgeGraphTab.classList.remove('active');
+                        cleanTextContent.classList.add('active');
+                        knowledgeGraphContent.classList.remove('active');
+                    });
+                    
+                    knowledgeGraphTab.addEventListener('click', () => {
+                        knowledgeGraphTab.classList.add('active');
+                        cleanTextTab.classList.remove('active');
+                        knowledgeGraphContent.classList.add('active');
+                        cleanTextContent.classList.remove('active');
+                    });
+                }
+                
+                // --- PDF Controls Event Listeners ---
+                function initializePDFControls() {
+                    document.getElementById('prev-page').addEventListener('click', onPrevPage);
+                    document.getElementById('next-page').addEventListener('click', onNextPage);
+                    document.getElementById('zoom-in').addEventListener('click', zoomIn);
+                    document.getElementById('zoom-out').addEventListener('click', zoomOut);
+                    document.getElementById('reset-zoom').addEventListener('click', resetZoom);
+                    
+                    // Initially disable controls
+                    document.getElementById('prev-page').disabled = true;
+                    document.getElementById('next-page').disabled = true;
+                    document.getElementById('zoom-in').disabled = true;
+                    document.getElementById('zoom-out').disabled = true;
+                    document.getElementById('reset-zoom').disabled = true;
+                }
+                
+                // --- Workspace Initialization ---
+                function initializeWorkspace() {
+                    initializeTabs();
+                    initializePDFControls();
+                }
+                
+                // Initialize workspace when DOM is loaded
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initializeWorkspace);
+                } else {
+                    initializeWorkspace();
                 }
             }
         });
