@@ -810,7 +810,57 @@ def task_result_graph(job_id):
     if not conversion.structured_data:
         abort(404, description="No graph data available for this conversion")
     
-    # Wrap the structured_data in a knowledge_graph object for frontend compatibility
+    # Convert financial data to knowledge graph format for frontend compatibility
+    if conversion.structured_data and 'entries' in conversion.structured_data:
+        # Convert financial data to knowledge graph nodes and edges
+        nodes = []
+        edges = []
+        
+        entries = conversion.structured_data.get('entries', [])
+        for i, entry in enumerate(entries):
+            # Create node for each person
+            nodes.append({
+                "id": f"person_{i}",
+                "label": entry['person'],
+                "type": "PERSON"
+            })
+            
+            # Create nodes for financial values
+            nodes.append({
+                "id": f"total_{i}",
+                "label": f"Total: {entry['total']}",
+                "type": "AMOUNT"
+            })
+            
+            # Create edge between person and their total
+            edges.append({
+                "source": f"person_{i}",
+                "target": f"total_{i}",
+                "label": "HAS_TOTAL"
+            })
+        
+        # Add summary node
+        if 'summary' in conversion.structured_data:
+            nodes.append({
+                "id": "summary",
+                "label": conversion.structured_data['summary'],
+                "type": "SUMMARY"
+            })
+        
+        knowledge_graph = {
+            "nodes": nodes,
+            "edges": edges,
+            "metadata": {
+                "source": "financial_analysis",
+                "entries_count": len(entries),
+                "biggest_winner": conversion.structured_data.get('biggest_winner', 'Unknown'),
+                "biggest_loser": conversion.structured_data.get('biggest_loser', 'Unknown')
+            }
+        }
+        
+        return jsonify({"knowledge_graph": knowledge_graph})
+    
+    # Fallback to original format
     return jsonify({"knowledge_graph": conversion.structured_data})
 
 
