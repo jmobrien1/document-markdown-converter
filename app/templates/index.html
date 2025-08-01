@@ -1567,8 +1567,18 @@
                     try {
                         console.log('Rendering PDF from URL:', url);
                         
+                        // First, test if the URL is accessible
+                        const response = await fetch(url);
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        
+                        console.log('PDF URL is accessible, loading with PDF.js...');
+                        
                         const loadingTask = pdfjsLib.getDocument(url);
                         pdfDoc = await loadingTask.promise;
+                        
+                        console.log('PDF loaded successfully, pages:', pdfDoc.numPages);
                         
                         document.getElementById('total-pages').textContent = pdfDoc.numPages;
                         document.getElementById('pdf-placeholder').style.display = 'none';
@@ -1588,7 +1598,7 @@
                         
                     } catch (error) {
                         console.error('Error rendering PDF:', error);
-                        document.getElementById('pdf-placeholder').innerHTML = '<p>Error loading PDF. Please try again.</p>';
+                        document.getElementById('pdf-placeholder').innerHTML = `<p>Error loading PDF: ${error.message}</p>`;
                     }
                 }
                 
