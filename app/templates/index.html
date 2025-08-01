@@ -743,6 +743,11 @@
                     </div>
                     
                     <div class="intelligence-content">
+                        <div class="export-section" style="padding: 20px; text-align: center;">
+                            <button id="exportTextBtn" class="export-btn" style="display: none; background: var(--primary-start); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.2s ease;">
+                                Export Clean Text
+                            </button>
+                        </div>
                         <div class="upload-section">
                             <form id="uploadForm" method="POST" action="{{ url_for('main.convert') }}" enctype="multipart/form-data">
                                 <div class="file-input-wrapper">
@@ -1231,6 +1236,12 @@
                     downloadBtn.href = URL.createObjectURL(blob);
                     downloadBtn.download = 'mdraft_output.md';
                     downloadBtn.style.display = 'inline-block';
+
+                    // Show export button
+                    const exportTextBtn = document.getElementById('exportTextBtn');
+                    if (exportTextBtn) {
+                        exportTextBtn.style.display = 'inline-block';
+                    }
 
                     // Show Pro download buttons if user has Pro access
                     const downloadTextBtn = document.getElementById('downloadTextBtn');
@@ -1741,6 +1752,17 @@
                 // --- Workspace Initialization ---
                 function initializeWorkspace() {
                     initializePDFControls();
+                }
+                
+                // Export functionality
+                const exportTextBtn = document.getElementById('exportTextBtn');
+                if (exportTextBtn) {
+                    exportTextBtn.addEventListener('click', () => {
+                        const jobId = getCurrentJobId();
+                        if (jobId) {
+                            window.open(`/result/${jobId}/export/text`, '_blank');
+                        }
+                    });
                 }
                 
                 // Initialize workspace when DOM is loaded

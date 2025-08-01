@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 from flask import (
-    render_template, request, jsonify, url_for, current_app, session, send_file, abort, flash, redirect
+    render_template, request, jsonify, url_for, current_app, session, send_file, abort, flash, redirect, make_response
 )
 from werkzeug.utils import secure_filename
 from app.tasks import convert_file_task
@@ -862,6 +862,43 @@ def task_result_graph(job_id):
     
     # Fallback to original format
     return jsonify({"knowledge_graph": conversion.structured_data})
+
+
+@main.route('/result/<job_id>/export/text')
+@login_required
+def export_text(job_id):
+    """Export clean text as a downloadable file."""
+    conversion = Conversion.query.filter_by(job_id=job_id).first()
+    if not conversion:
+        abort(404)
+    
+    if conversion.user_id != current_user.id:
+        abort(403)
+    
+    if conversion.status != 'completed':
+        abort(400, description="Conversion must be completed before export is available")
+    
+    # Get the clean text content
+    try:
+        # Try to get the result from the conversion record first
+        if conversion.result:
+            text_content = conversion.result
+        else:
+            # Fallback to fetching from GCS
+            storage_client = get_storage_client()
+            bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
+            blob = bucket.blob(f"results/{job_id}/result.txt")
+            text_content = blob.download_as_text()
+        
+        # Create response with file download
+        response = make_response(text_content)
+        response.headers['Content-Type'] = 'text/plain'
+        response.headers['Content-Disposition'] = f'attachment; filename="document.txt"'
+        return response
+        
+    except Exception as e:
+        current_app.logger.error(f"Error exporting text for job {job_id}: {e}")
+        abort(500, description="Error retrieving text content")
 
 
 @main.route('/workspace')
