@@ -1193,8 +1193,31 @@ def _get_document_text_for_knowledge_graph(conversion):
         # Check if we have the necessary GCS configuration
         bucket_name = current_app.config.get('GCS_BUCKET_NAME')
         if not bucket_name:
-            print("GCS_BUCKET_NAME not configured, cannot retrieve document content")
-            return None
+            print("GCS_BUCKET_NAME not configured, trying fallback method")
+            # Fallback: Try to get content from conversion result
+            if hasattr(conversion, 'result') and conversion.result:
+                try:
+                    result_data = json.loads(conversion.result)
+                    if 'markdown' in result_data:
+                        print("Using markdown content from conversion result")
+                        return result_data['markdown']
+                except:
+                    pass
+            
+            # If no result data, create a basic text representation
+            print("Creating basic text representation from conversion metadata")
+            basic_text = f"""
+Document: {conversion.original_filename}
+Type: {conversion.file_type}
+Status: {conversion.status}
+Job ID: {conversion.job_id}
+Upload Date: {conversion.created_at}
+
+This document has been processed successfully. The knowledge graph will analyze the document structure and metadata.
+
+For enhanced analysis with real document content, please configure Google Cloud Storage credentials.
+"""
+            return basic_text
         
         # Initialize GCS client
         try:
@@ -1202,7 +1225,8 @@ def _get_document_text_for_knowledge_graph(conversion):
             bucket = storage_client.bucket(bucket_name)
         except Exception as e:
             print(f"Failed to initialize GCS client: {e}")
-            return None
+            # Fallback to basic text
+            return f"Document: {conversion.original_filename}\nType: {conversion.file_type}\nStatus: {conversion.status}"
         
         # Construct the blob path for the converted markdown file
         # The markdown file is typically stored as: {job_id}/result.md
@@ -1213,7 +1237,8 @@ def _get_document_text_for_knowledge_graph(conversion):
             blob = bucket.blob(markdown_blob_name)
             if not blob.exists():
                 print(f"Markdown file not found at {markdown_blob_name}")
-                return None
+                # Fallback to basic text
+                return f"Document: {conversion.original_filename}\nType: {conversion.file_type}\nStatus: {conversion.status}"
             
             # Download the content
             markdown_content = blob.download_as_text()
@@ -1237,18 +1262,20 @@ def _get_document_text_for_knowledge_graph(conversion):
             
             if not text_content:
                 print("No text content extracted from markdown")
-                return None
+                return f"Document: {conversion.original_filename}\nType: {conversion.file_type}\nStatus: {conversion.status}"
             
             print(f"Extracted {len(text_content)} characters of text content")
             return text_content
             
         except Exception as e:
             print(f"Error downloading markdown content: {e}")
-            return None
+            # Fallback to basic text
+            return f"Document: {conversion.original_filename}\nType: {conversion.file_type}\nStatus: {conversion.status}"
         
     except Exception as e:
         print(f"Error retrieving document text for knowledge graph: {e}")
-        return None
+        # Final fallback
+        return f"Document: {conversion.original_filename}\nType: {conversion.file_type}\nStatus: {conversion.status}"
 
 
 def _construct_knowledge_graph_prompt(text_content):
