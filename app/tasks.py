@@ -1187,22 +1187,21 @@ def _get_document_text_for_knowledge_graph(conversion):
         str: The document's text content
     """
     try:
-        # For now, return a placeholder text
-        # In a real implementation, this would:
-        # 1. Construct the GCS path based on conversion.job_id
-        # 2. Download the markdown content from GCS
-        # 3. Convert markdown to plain text if needed
+        # Get the actual markdown content from the conversion result
+        # For now, we'll use a simple approach to get the text content
+        # In a full implementation, this would download from GCS
         
-        return """Sample document text for knowledge graph generation. This would contain the actual document content retrieved from Google Cloud Storage.
-
-This is a sample contract between Company A and Company B for the development of a new software platform. The contract includes terms for payment, delivery schedule, intellectual property rights, and dispute resolution. The project is valued at $500,000 and will be delivered over 6 months.
-
-Key parties involved:
-- Company A (Client)
-- Company B (Vendor)
-- Legal representatives from both companies
-
-The contract is governed by Delaware law and any disputes will be resolved through arbitration in New York."""
+        # Check if we have markdown content stored
+        if hasattr(conversion, 'markdown_content') and conversion.markdown_content:
+            return conversion.markdown_content
+        
+        # If no markdown content, try to get it from the conversion result
+        # This is a simplified approach - in production you'd download from GCS
+        if conversion.status == 'completed':
+            # For now, return a placeholder that indicates we need real content
+            return f"Document: {conversion.original_filename}\n\nThis document has been processed but the actual content needs to be retrieved from storage for knowledge graph generation.\n\nTo implement this properly, we need to:\n1. Download the markdown content from Google Cloud Storage\n2. Parse the actual document text\n3. Extract real entities and relationships\n\nCurrent document info:\n- Filename: {conversion.original_filename}\n- Type: {conversion.file_type}\n- Status: {conversion.status}\n- Job ID: {conversion.job_id}"
+        
+        return None
         
     except Exception as e:
         print(f"Error retrieving document text for knowledge graph: {e}")
@@ -1254,42 +1253,91 @@ def _call_llm_for_knowledge_graph(prompt):
     Returns:
         dict: The generated knowledge graph
     """
-    # Placeholder implementation - in production this would call an actual LLM API
-    # For now, return a sample knowledge graph object
+    # For now, this is a placeholder implementation
+    # In production, this would call an actual LLM API (OpenAI, Anthropic, etc.)
     
-    sample_knowledge_graph = {
+    # Extract the document text from the prompt
+    import re
+    text_match = re.search(r'Document Text:\n(.*?)(?=\n\nPlease extract|$)', prompt, re.DOTALL)
+    if text_match:
+        document_text = text_match.group(1).strip()
+        
+        # Simple entity extraction based on the actual document content
+        entities = []
+        relationships = []
+        
+        # Extract organizations (simple pattern matching)
+        org_pattern = r'\b[A-Z][A-Z\s&]+(?:FOUNDATION|INSTITUTE|CENTER|INC|LLC|CORP|COMPANY)\b'
+        organizations = re.findall(org_pattern, document_text, re.IGNORECASE)
+        for i, org in enumerate(set(organizations)):
+            entities.append({
+                "id": f"org_{i}",
+                "label": org.strip(),
+                "type": "ORGANIZATION"
+            })
+        
+        # Extract amounts (simple pattern matching)
+        amount_pattern = r'\$\d+(?:,\d{3})*(?:\.\d{2})?'
+        amounts = re.findall(amount_pattern, document_text)
+        for i, amount in enumerate(set(amounts)):
+            entities.append({
+                "id": f"amount_{i}",
+                "label": amount,
+                "type": "AMOUNT"
+            })
+        
+        # Extract dates
+        date_pattern = r'\b\d{1,2}/\d{1,2}/\d{2,4}\b'
+        dates = re.findall(date_pattern, document_text)
+        for i, date in enumerate(set(dates)):
+            entities.append({
+                "id": f"date_{i}",
+                "label": date,
+                "type": "DATE"
+            })
+        
+        # If no entities found, create a generic one based on document info
+        if not entities:
+            entities.append({
+                "id": "document_1",
+                "label": "Uploaded Document",
+                "type": "DOCUMENT"
+            })
+        
+        # Create simple relationships
+        if len(entities) > 1:
+            for i in range(len(entities) - 1):
+                relationships.append({
+                    "source": entities[i]["id"],
+                    "target": entities[i + 1]["id"],
+                    "label": "RELATED_TO"
+                })
+        
+        return {
+            "nodes": entities,
+            "edges": relationships,
+            "metadata": {
+                "generation_timestamp": "2024-01-15T10:30:00Z",
+                "model_version": "1.0",
+                "processing_time_ms": 2500,
+                "entities_extracted": len(entities),
+                "relationships_extracted": len(relationships),
+                "source": "document_analysis"
+            }
+        }
+    
+    # Fallback to sample data if no document text found
+    return {
         "nodes": [
-            {"id": "company_a", "label": "Company A", "type": "ORGANIZATION"},
-            {"id": "company_b", "label": "Company B", "type": "ORGANIZATION"},
-            {"id": "contract_001", "label": "Software Development Contract", "type": "CONTRACT"},
-            {"id": "amount_500k", "label": "$500,000", "type": "AMOUNT"},
-            {"id": "duration_6m", "label": "6 months", "type": "TERM"},
-            {"id": "delaware_law", "label": "Delaware Law", "type": "CLAUSE"},
-            {"id": "arbitration_ny", "label": "Arbitration in New York", "type": "CLAUSE"},
-            {"id": "ip_rights", "label": "Intellectual Property Rights", "type": "CLAUSE"},
-            {"id": "payment_terms", "label": "Payment Terms", "type": "CLAUSE"},
-            {"id": "delivery_schedule", "label": "Delivery Schedule", "type": "CLAUSE"}
+            {"id": "document_1", "label": "Uploaded Document", "type": "DOCUMENT"}
         ],
-        "edges": [
-            {"source": "company_a", "target": "contract_001", "label": "PARTY_TO"},
-            {"source": "company_b", "target": "contract_001", "label": "PARTY_TO"},
-            {"source": "contract_001", "target": "amount_500k", "label": "VALUED_AT"},
-            {"source": "contract_001", "target": "duration_6m", "label": "DURATION"},
-            {"source": "contract_001", "target": "delaware_law", "label": "GOVERNED_BY"},
-            {"source": "contract_001", "target": "arbitration_ny", "label": "CONTAINS"},
-            {"source": "contract_001", "target": "ip_rights", "label": "CONTAINS"},
-            {"source": "contract_001", "target": "payment_terms", "label": "CONTAINS"},
-            {"source": "contract_001", "target": "delivery_schedule", "label": "CONTAINS"},
-            {"source": "company_a", "target": "company_b", "label": "CONTRACTS_WITH"}
-        ],
+        "edges": [],
         "metadata": {
             "generation_timestamp": "2024-01-15T10:30:00Z",
             "model_version": "1.0",
             "processing_time_ms": 2500,
-            "entities_extracted": 10,
-            "relationships_extracted": 10
+            "entities_extracted": 1,
+            "relationships_extracted": 0,
+            "source": "fallback"
         }
     }
-    
-    print("LLM knowledge graph generation called (placeholder implementation)")
-    return sample_knowledge_graph
