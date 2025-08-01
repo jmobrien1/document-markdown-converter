@@ -932,8 +932,14 @@ def get_pdf(job_id):
         storage_client = get_storage_client()
         bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
         
-        # Debug: Log the file path we're trying to access
-        file_path = f"uploads/{job_id}/{conversion.original_filename}"
+        # Use the stored GCS path if available, otherwise fall back to job_id
+        if conversion.gcs_path:
+            file_path = conversion.gcs_path
+            current_app.logger.info(f"Using stored GCS path: {file_path}")
+        else:
+            file_path = f"uploads/{job_id}/{conversion.original_filename}"
+            current_app.logger.info(f"Using fallback path: {file_path}")
+        
         current_app.logger.info(f"Attempting to retrieve PDF from GCS: {file_path}")
         current_app.logger.info(f"Job ID: {job_id}, Filename: {conversion.original_filename}")
         

@@ -164,7 +164,7 @@ class ConversionService:
         }
         return content_types.get(file_extension, 'application/octet-stream')
     
-    def create_conversion_record(self, user_id, session_id, filename, file_size, file_type, use_pro_converter=False):
+    def create_conversion_record(self, user_id, session_id, filename, file_size, file_type, use_pro_converter=False, gcs_path=None):
         """Create a new conversion record in the database."""
         try:
             conversion = Conversion(
@@ -174,7 +174,8 @@ class ConversionService:
                 file_size=file_size,
                 file_type=file_type,
                 conversion_type='pro' if use_pro_converter else 'standard',
-                status='pending'
+                status='pending',
+                gcs_path=gcs_path
             )
             
             db.session.add(conversion)
@@ -284,7 +285,7 @@ class ConversionService:
                 user_id = user.id if user else None
                 session_id = request.cookies.get('session_id', 'anonymous')
                 conversion = self.create_conversion_record(
-                    user_id, session_id, filename, file_size, file_extension, use_pro_converter
+                    user_id, session_id, filename, file_size, file_extension, use_pro_converter, blob_name
                 )
                 current_app.logger.info(f"8. Conversion record created: {conversion.id} ✓")
             except Exception as db_error:
