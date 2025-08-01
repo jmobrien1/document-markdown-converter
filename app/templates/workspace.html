@@ -733,6 +733,8 @@
                 console.log('Both fetches complete, rendering UI.');
                 console.log('Result data:', resultData);
                 console.log('Graph data:', graphData);
+                console.log('Graph data type:', typeof graphData);
+                console.log('Graph data keys:', Object.keys(graphData || {}));
                 
                 // Store graph data globally
                 window.graphData = graphData;
@@ -748,6 +750,11 @@
             })
             .catch(error => {
                 console.error('Error loading conversion data:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    name: error.name
+                });
                 document.getElementById('knowledge-graph-content').innerHTML = 
                     '<p class="placeholder-text">Error loading conversion data. Please try again.</p>';
             });
