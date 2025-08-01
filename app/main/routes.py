@@ -880,15 +880,27 @@ def export_text(job_id):
     
     # Get the clean text content
     try:
-        # Try to get the result from the conversion record first
-        if conversion.result:
-            text_content = conversion.result
+        # Get the text content from the Celery task result
+        from celery.result import AsyncResult
+        task_result = AsyncResult(job_id)
+        
+        if task_result.ready() and task_result.successful():
+            # Get the markdown content from the task result
+            result_data = task_result.get()
+            if isinstance(result_data, dict) and 'markdown' in result_data:
+                text_content = result_data['markdown']
+            else:
+                # Fallback: try to get from GCS if available
+                try:
+                    storage_client = get_storage_client()
+                    bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
+                    blob = bucket.blob(f"results/{job_id}/result.txt")
+                    text_content = blob.download_as_text()
+                except Exception as gcs_error:
+                    current_app.logger.error(f"GCS fallback failed for job {job_id}: {gcs_error}")
+                    abort(500, description="Text content not available")
         else:
-            # Fallback to fetching from GCS
-            storage_client = get_storage_client()
-            bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
-            blob = bucket.blob(f"results/{job_id}/result.txt")
-            text_content = blob.download_as_text()
+            abort(400, description="Conversion task not completed")
         
         # Create response with file download
         response = make_response(text_content)
