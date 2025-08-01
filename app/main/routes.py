@@ -450,7 +450,7 @@ def task_result(job_id):
         if isinstance(result, dict) and result.get('status') == 'SUCCESS':
             return jsonify({
                 'status': 'success',
-                'markdown': result.get('markdown', ''),
+                'result': result.get('markdown', ''),  # Frontend expects 'result' field
                 'filename': result.get('filename', '')
             })
         else:
@@ -877,7 +877,8 @@ def task_result_graph(job_id):
     if not conversion.structured_data:
         abort(404, description="No graph data available for this conversion")
     
-    return jsonify(conversion.structured_data)
+    # Wrap the structured_data in a knowledge_graph object for frontend compatibility
+    return jsonify({"knowledge_graph": conversion.structured_data})
 
 
 @main.route('/workspace')
