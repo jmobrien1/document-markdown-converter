@@ -30,6 +30,11 @@ ENV/
 instance/
 .webassets-cache
 
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
 # Uploads directory (temporary files)
 /uploads/
 *.tmp

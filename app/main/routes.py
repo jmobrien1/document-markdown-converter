@@ -970,7 +970,7 @@ def get_pdf(job_id):
 @login_required
 def workspace():
     """Document Intelligence Workspace."""
-    return render_template('workspace.html')
+    return render_template('index.html')
 
 # Team Management Routes
 @main.route('/team/<int:team_id>/manage')

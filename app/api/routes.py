@@ -1,14 +1,39 @@
-from flask import request, jsonify, current_app, g, url_for
+from flask import request, jsonify, current_app, g, url_for, Blueprint
 import os
 import uuid
 from werkzeug.utils import secure_filename
-from app.models import Conversion, Batch, ConversionJob, db
+from app.models import Conversion, Batch, ConversionJob, Summary, db, User
 from app.tasks import convert_file_task, extract_data_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
 from app.services.conversion_service import ConversionService
+from functools import wraps
 
-from . import api, api_key_required
+api = Blueprint('api', __name__)
+
+def api_key_required(f):
+    """Decorator to require valid API key and Pro access."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Allow CORS preflight requests
+        if request.method == 'OPTIONS':
+            return f(*args, **kwargs)
+            
+        api_key = request.headers.get('X-API-Key')
+        if not api_key:
+            return jsonify({'error': 'API key is missing'}), 401
+            
+        user = User.query.filter_by(api_key=api_key).first()
+        if not user:
+            return jsonify({'error': 'Invalid API key'}), 401
+            
+        # Check if user has Pro access (either premium or on trial)
+        if not user.has_pro_access:
+            return jsonify({'error': 'Pro access required. Please upgrade to Pro or check your trial status.'}), 403
+            
+        g.current_user = user
+        return f(*args, **kwargs)
+    return decorated_function
 
 @api.route('/convert', methods=['POST'])
 @api_key_required
@@ -234,3 +259,163 @@ def api_extract_data(job_id):
             'job_id': job_id,
             'details': str(e)
         }), 500 
+
+from flask import Blueprint, request, jsonify, current_app
+from flask_login import current_user, login_required
+from app.models import Conversion, Summary
+from app import db
+import os
+import requests
+import json
+
+api = Blueprint('api', __name__, url_prefix='/api/v1')
+
+def require_api_key(f):
+    """Decorator to require API key authentication."""
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-Key')
+        if not api_key:
+            return jsonify({'error': 'API key required'}), 401
+        
+        # For now, we'll use a simple API key check
+        # In production, this should be a proper API key validation
+        expected_key = os.getenv('API_KEY', 'test-api-key')
+        if api_key != expected_key:
+            return jsonify({'error': 'Invalid API key'}), 401
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+@api.route('/conversion/<job_id>/summarize', methods=['POST'])
+@api_key_required
+def summarize_conversion(job_id):
+    """Generate a configurable executive summary for a conversion."""
+    try:
+        # Validate request
+        data = request.get_json()
+        if not data or 'length' not in data:
+            return jsonify({'error': 'Length parameter is required'}), 400
+        
+        length = data['length']
+        if length not in ['sentence', 'paragraph', 'bullets']:
+            return jsonify({'error': 'Length must be one of: sentence, paragraph, bullets'}), 400
+        
+        # Get conversion and verify ownership
+        conversion = Conversion.query.filter_by(job_id=job_id).first()
+        if not conversion:
+            return jsonify({'error': 'Conversion not found'}), 404
+        
+        # Check if user owns this conversion
+        user = g.current_user
+        if conversion.user_id != user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        if conversion.status != 'completed':
+            return jsonify({'error': 'Conversion must be completed before summarization'}), 400
+        
+        # Get document text content
+        document_text = get_document_text(conversion)
+        if not document_text:
+            return jsonify({'error': 'Document text not available'}), 400
+        
+        # Generate summary using LLM
+        summary_content = generate_summary(document_text, length)
+        if not summary_content:
+            return jsonify({'error': 'Failed to generate summary'}), 500
+        
+        # Save summary to database
+        summary = Summary(
+            conversion_id=conversion.id,
+            length_type=length,
+            content=summary_content
+        )
+        db.session.add(summary)
+        db.session.commit()
+        
+        return jsonify({
+            'summary': summary_content,
+            'length': length,
+            'summary_id': summary.id
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating summary: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+def get_document_text(conversion):
+    """Retrieve the document text content for summarization."""
+    try:
+        # Try to get from Celery task result first
+        from celery.result import AsyncResult
+        task_result = AsyncResult(conversion.job_id)
+        
+        if task_result.ready() and task_result.successful():
+            result_data = task_result.get()
+            if isinstance(result_data, dict) and 'markdown' in result_data:
+                return result_data['markdown']
+        
+        # Fallback to GCS if available
+        try:
+            from app.main.routes import get_storage_client
+            storage_client = get_storage_client()
+            bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
+            blob = bucket.blob(f"results/{conversion.job_id}/result.txt")
+            return blob.download_as_text()
+        except Exception as gcs_error:
+            current_app.logger.error(f"GCS fallback failed: {gcs_error}")
+            return None
+            
+    except Exception as e:
+        current_app.logger.error(f"Error retrieving document text: {e}")
+        return None
+
+def generate_summary(text_content, length):
+    """Generate summary using external LLM API."""
+    try:
+        # Use OpenAI API (you can replace with other LLM providers)
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            current_app.logger.error("OpenAI API key not configured")
+            return None
+        
+        # Construct prompt based on length
+        if length == 'sentence':
+            prompt = f"Summarize the following document in exactly one sentence:\n\n{text_content[:4000]}"
+        elif length == 'paragraph':
+            prompt = f"Summarize the following document in a well-structured paragraph of 4-6 sentences:\n\n{text_content[:4000]}"
+        elif length == 'bullets':
+            prompt = f"Summarize the following document as 3-5 distinct bullet points:\n\n{text_content[:4000]}"
+        
+        # Make API call to OpenAI
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        data = {
+            'model': 'gpt-4',
+            'messages': [
+                {'role': 'system', 'content': 'You are a professional document summarizer. Provide clear, accurate summaries.'},
+                {'role': 'user', 'content': prompt}
+            ],
+            'max_tokens': 500,
+            'temperature': 0.3
+        }
+        
+        response = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result['choices'][0]['message']['content'].strip()
+        else:
+            current_app.logger.error(f"OpenAI API error: {response.status_code} - {response.text}")
+            return None
+            
+    except Exception as e:
+        current_app.logger.error(f"Error calling LLM API: {e}")
+        return None 

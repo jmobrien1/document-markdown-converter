@@ -449,7 +449,7 @@
             opacity: 1;
         }
         
-        /* New Two-Pane Workspace Layout */
+        /* Clean Two-Pane Workspace Layout */
         .workspace-container {
             width: 100%;
             height: calc(100vh - 80px);
@@ -621,46 +621,13 @@
             border: 1px solid #e9ecef;
         }
         
-        /* Control Panel Styles */
-        .control-panel {
-            background: #f8f9fa;
-        }
-        
-        .control-panel .file-input-wrapper {
-            margin: 20px;
-        }
-        
-        .control-panel .file-input {
-            padding: 30px 20px;
-            border: 2px dashed #dee2e6;
-            border-radius: 12px;
-            background: white;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .control-panel .file-input:hover {
-            border-color: var(--primary-start);
-            background: #f8f9fa;
-        }
-        
-        .control-panel .converter-options {
-            margin: 20px;
-        }
-        
-        .control-panel .convert-btn {
-            margin: 20px;
-            width: calc(100% - 40px);
-        }
-        
         /* Responsive Design */
         @media (max-width: 1200px) {
             .workspace-layout {
                 flex-direction: column;
             }
             
-            #control-panel-pane {
+            #intelligence-pane {
                 width: 100%;
                 min-width: auto;
                 border-left: none;
@@ -748,6 +715,31 @@
                                 Export Clean Text
                             </button>
                         </div>
+                        
+                        <!-- Executive Summary Section -->
+                        <div class="executive-summary-section" style="padding: 20px; border-top: 1px solid #e9ecef;">
+                            <h4 style="margin-bottom: 15px; color: var(--text-primary);">Executive Summary</h4>
+                            <div style="margin-bottom: 15px;">
+                                <label for="summaryLength" style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-secondary);">Summary Length:</label>
+                                <select id="summaryLength" style="width: 100%; padding: 8px 12px; border: 1px solid #dee2e6; border-radius: 6px; background: white; font-size: 14px;">
+                                    <option value="sentence">One Sentence</option>
+                                    <option value="paragraph">One Paragraph</option>
+                                    <option value="bullets">Bullet Points</option>
+                                </select>
+                            </div>
+                            <button id="generateSummaryBtn" class="summary-btn" style="display: none; background: var(--primary-start); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: background 0.2s ease; width: 100%;">
+                                Generate Summary
+                            </button>
+                            <div id="summaryLoading" style="display: none; text-align: center; padding: 15px;">
+                                <div class="spinner" style="width: 20px; height: 20px; margin: 0 auto 10px;"></div>
+                                <p style="font-size: 14px; color: var(--text-secondary);">Generating summary...</p>
+                            </div>
+                            <div id="summaryResult" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
+                                <h5 style="margin-bottom: 10px; color: var(--text-primary);">Summary</h5>
+                                <div id="summaryContent" style="font-size: 14px; line-height: 1.6; color: var(--text-primary);"></div>
+                            </div>
+                        </div>
+                        
                         <div class="upload-section">
                             <form id="uploadForm" method="POST" action="{{ url_for('main.convert') }}" enctype="multipart/form-data">
                                 <div class="file-input-wrapper">
@@ -1241,6 +1233,12 @@
                     const exportTextBtn = document.getElementById('exportTextBtn');
                     if (exportTextBtn) {
                         exportTextBtn.style.display = 'inline-block';
+                    }
+
+                    // Show generate summary button
+                    const generateSummaryBtn = document.getElementById('generateSummaryBtn');
+                    if (generateSummaryBtn) {
+                        generateSummaryBtn.style.display = 'block';
                     }
 
                     // Show Pro download buttons if user has Pro access
@@ -1771,6 +1769,58 @@
                         const jobId = getCurrentJobId();
                         if (jobId) {
                             window.open(`/result/${jobId}/export/text`, '_blank');
+                        }
+                    });
+                }
+                
+                // Executive Summary functionality
+                const generateSummaryBtn = document.getElementById('generateSummaryBtn');
+                const summaryLength = document.getElementById('summaryLength');
+                const summaryLoading = document.getElementById('summaryLoading');
+                const summaryResult = document.getElementById('summaryResult');
+                const summaryContent = document.getElementById('summaryContent');
+                
+                if (generateSummaryBtn) {
+                    generateSummaryBtn.addEventListener('click', async () => {
+                        const jobId = getCurrentJobId();
+                        if (!jobId) {
+                            showError('No conversion available for summarization');
+                            return;
+                        }
+                        
+                        const length = summaryLength.value;
+                        
+                        // Show loading state
+                        generateSummaryBtn.style.display = 'none';
+                        summaryLoading.style.display = 'block';
+                        summaryResult.style.display = 'none';
+                        
+                        try {
+                            const response = await fetch(`/api/v1/conversion/${jobId}/summarize`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-API-Key': 'test-api-key' // For development
+                                },
+                                body: JSON.stringify({ length: length })
+                            });
+                            
+                            const data = await response.json();
+                            
+                            if (response.ok) {
+                                // Display summary
+                                summaryContent.textContent = data.summary;
+                                summaryResult.style.display = 'block';
+                                showSuccess('Summary generated successfully!');
+                            } else {
+                                showError(`Failed to generate summary: ${data.error}`);
+                            }
+                        } catch (error) {
+                            showError(`Error generating summary: ${error.message}`);
+                        } finally {
+                            // Hide loading state
+                            summaryLoading.style.display = 'none';
+                            generateSummaryBtn.style.display = 'block';
                         }
                     });
                 }

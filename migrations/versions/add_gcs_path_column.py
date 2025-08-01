@@ -1,7 +1,7 @@
 """Add gcs_path column to conversions table
 
 Revision ID: add_gcs_path_column
-Revises: consolidate_schema_canonical
+Revises: 4dfacf4ae44f
 Create Date: 2025-08-01 10:18:00.000000
 
 """
