@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'add_gcs_path_column'
-down_revision = 'consolidate_schema_canonical'
+down_revision = '4dfacf4ae44f'
 branch_labels = None
 depends_on = None
 
