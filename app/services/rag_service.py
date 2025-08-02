@@ -17,11 +17,12 @@ class RAGService:
     
     def __init__(self):
         self._sentence_transformer = None
-        self._faiss_index = None
+        self._annoy_index = None
         self._tiktoken_encoder = None
         self._initialized = False
         self._metrics = defaultdict(int)
         self._last_health_check = None
+        self._embeddings_list = []  # Store embeddings for annoy index
         
         # Environment variable configuration
         self.enabled = os.environ.get('ENABLE_RAG', 'true').lower() == 'true'
@@ -43,16 +44,16 @@ class RAGService:
         try:
             # Import heavy dependencies only when needed
             import tiktoken
-            import faiss
+            from annoy import AnnoyIndex
             from sentence_transformers import SentenceTransformer
             
             # Initialize components
             self._tiktoken_encoder = tiktoken.encoding_for_model("gpt-3.5-turbo")
             self._sentence_transformer = SentenceTransformer(self.model_name)
             
-            # Initialize FAISS index
+            # Initialize Annoy index
             dimension = 384  # all-MiniLM-L6-v2 embedding dimension
-            self._faiss_index = faiss.IndexFlatIP(dimension)
+            self._annoy_index = AnnoyIndex(dimension, 'angular')  # Use angular distance for cosine similarity
             
             # Load existing embeddings if any
             self._load_existing_embeddings()
@@ -87,7 +88,7 @@ class RAGService:
         }
     
     def _load_existing_embeddings(self):
-        """Load existing embeddings into FAISS index"""
+        """Load existing embeddings into Annoy index"""
         try:
             chunks = RAGChunk.query.filter(RAGChunk.embedding.isnot(None)).all()
             if chunks:
@@ -98,9 +99,14 @@ class RAGService:
                     embeddings.append(embedding)
                 
                 if embeddings:
-                    embeddings_matrix = np.vstack(embeddings)
-                    self._faiss_index.add(embeddings_matrix)
-                    logger.info(f"Loaded {len(embeddings)} existing embeddings into FAISS index")
+                    self._embeddings_list = embeddings
+                    # Build Annoy index
+                    for i, embedding in enumerate(embeddings):
+                        self._annoy_index.add_item(i, embedding.tolist())
+                    
+                    # Build the index
+                    self._annoy_index.build(10)  # 10 trees for good accuracy
+                    logger.info(f"Loaded {len(embeddings)} existing embeddings into Annoy index")
                     
         except Exception as e:
             logger.error(f"Error loading existing embeddings: {e}")
@@ -192,10 +198,15 @@ class RAGService:
             db.session.bulk_save_objects(chunk_objects)
             db.session.commit()
             
-            # Add to FAISS index if embeddings were generated
+            # Add to Annoy index if embeddings were generated
             if embeddings_to_add and self._initialized:
-                embeddings_matrix = np.vstack(embeddings_to_add)
-                self._faiss_index.add(embeddings_matrix)
+                start_index = len(self._embeddings_list)
+                for i, embedding in enumerate(embeddings_to_add):
+                    self._annoy_index.add_item(start_index + i, embedding.tolist())
+                    self._embeddings_list.append(embedding)
+                
+                # Rebuild the index
+                self._annoy_index.build(10)
             
             logger.info(f"Stored {len(chunks)} chunks for document {document_id}")
             return True
@@ -220,22 +231,24 @@ class RAGService:
             if query_embedding is None:
                 return self._fallback_text_search(query, top_k)
             
-            # Search FAISS index
-            query_vector = query_embedding.reshape(1, -1)
-            scores, indices = self._faiss_index.search(query_vector, top_k)
+            # Search Annoy index
+            indices = self._annoy_index.get_nns_by_vector(query_embedding.tolist(), top_k, include_distances=True)
+            chunk_indices, distances = indices
             
             # Get corresponding chunks from database
             results = []
             chunks = RAGChunk.query.filter(RAGChunk.embedding.isnot(None)).all()
             
-            for i, (score, idx) in enumerate(zip(scores[0], indices[0])):
+            for i, (idx, distance) in enumerate(zip(chunk_indices, distances)):
                 if idx < len(chunks):
                     chunk = chunks[idx]
+                    # Convert distance to similarity score (1 - normalized distance)
+                    similarity_score = 1.0 - (distance / np.sqrt(len(query_embedding)))
                     results.append({
                         'chunk_id': chunk.id,
                         'document_id': chunk.document_id,
                         'chunk_text': chunk.chunk_text,
-                        'similarity_score': float(score),
+                        'similarity_score': float(similarity_score),
                         'chunk_index': chunk.chunk_index
                     })
             
