@@ -739,6 +739,38 @@
                                 <div id="summaryContent" style="font-size: 14px; line-height: 1.6; color: var(--text-primary);"></div>
                             </div>
                         </div>
+
+                        <!-- Citation-Backed Q&A Section -->
+                        <div class="rag-qa-section" style="padding: 20px; border-top: 1px solid #e9ecef;">
+                            <h4 style="margin-bottom: 15px; color: var(--text-primary);">Ask Questions About Your Document</h4>
+                            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 15px;">Get AI-powered answers with citations from your document.</p>
+                            
+                            <div style="margin-bottom: 15px;">
+                                <label for="questionInput" style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-secondary);">Your Question:</label>
+                                <textarea id="questionInput" placeholder="Ask a question about your document..." style="width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 6px; background: white; font-size: 14px; min-height: 80px; resize: vertical;"></textarea>
+                            </div>
+                            
+                            <button id="askQuestionBtn" class="qa-btn" style="display: none; background: var(--primary-start); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: background 0.2s ease; width: 100%;">
+                                Ask Question
+                            </button>
+                            
+                            <div id="qaLoading" style="display: none; text-align: center; padding: 15px;">
+                                <div class="spinner" style="width: 20px; height: 20px; margin: 0 auto 10px;"></div>
+                                <p style="font-size: 14px; color: var(--text-secondary);">Analyzing document and generating answer...</p>
+                            </div>
+                            
+                            <div id="qaResult" style="display: none; margin-top: 15px;">
+                                <div style="padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef; margin-bottom: 15px;">
+                                    <h5 style="margin-bottom: 10px; color: var(--text-primary);">Answer</h5>
+                                    <div id="qaAnswer" style="font-size: 14px; line-height: 1.6; color: var(--text-primary); margin-bottom: 15px;"></div>
+                                    
+                                    <div id="qaCitations" style="margin-top: 15px;">
+                                        <h6 style="margin-bottom: 10px; color: var(--text-primary); font-size: 14px;">Citations:</h6>
+                                        <div id="citationsList" style="font-size: 12px; color: var(--text-secondary);"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         
                         <div class="upload-section">
                             <form id="uploadForm" method="POST" action="{{ url_for('main.convert') }}" enctype="multipart/form-data">
@@ -1239,6 +1271,12 @@
                     const generateSummaryBtn = document.getElementById('generateSummaryBtn');
                     if (generateSummaryBtn) {
                         generateSummaryBtn.style.display = 'block';
+                    }
+
+                    // Show Q&A button
+                    const askQuestionBtn = document.getElementById('askQuestionBtn');
+                    if (askQuestionBtn) {
+                        askQuestionBtn.style.display = 'block';
                     }
 
                     // Show Pro download buttons if user has Pro access
@@ -1823,6 +1861,73 @@
                             // Hide loading state
                             summaryLoading.style.display = 'none';
                             generateSummaryBtn.style.display = 'block';
+                        }
+                    });
+                }
+
+                // Citation-Backed Q&A functionality
+                const askQuestionBtn = document.getElementById('askQuestionBtn');
+                const questionInput = document.getElementById('questionInput');
+                const qaLoading = document.getElementById('qaLoading');
+                const qaResult = document.getElementById('qaResult');
+                const qaAnswer = document.getElementById('qaAnswer');
+                const citationsList = document.getElementById('citationsList');
+                
+                if (askQuestionBtn) {
+                    askQuestionBtn.addEventListener('click', async () => {
+                        const jobId = getCurrentJobId();
+                        if (!jobId) {
+                            showError('No conversion available for Q&A');
+                            return;
+                        }
+                        
+                        const question = questionInput.value.trim();
+                        if (!question) {
+                            showError('Please enter a question');
+                            return;
+                        }
+                        
+                        askQuestionBtn.style.display = 'none';
+                        qaLoading.style.display = 'block';
+                        qaResult.style.display = 'none';
+                        
+                        try {
+                            const response = await fetch(`/api/v1/conversion/${jobId}/query`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-API-Key': 'test-api-key' // For development
+                                },
+                                body: JSON.stringify({ question: question })
+                            });
+                            
+                            const data = await response.json();
+                            
+                            if (response.ok) {
+                                qaAnswer.textContent = data.answer;
+                                
+                                // Display citations
+                                if (data.citations && data.citations.length > 0) {
+                                    const citationsHtml = data.citations.map(citation => 
+                                        `<div style="margin-bottom: 8px; padding: 8px; background: white; border-radius: 4px; border-left: 3px solid var(--primary-start);">
+                                            <strong>Chunk ${citation.chunk_id}:</strong> ${citation.text.substring(0, 150)}...
+                                        </div>`
+                                    ).join('');
+                                    citationsList.innerHTML = citationsHtml;
+                                } else {
+                                    citationsList.innerHTML = '<em>No citations available</em>';
+                                }
+                                
+                                qaResult.style.display = 'block';
+                                showSuccess('Answer generated successfully!');
+                            } else {
+                                showError(`Failed to generate answer: ${data.error}`);
+                            }
+                        } catch (error) {
+                            showError(`Error generating answer: ${error.message}`);
+                        } finally {
+                            qaLoading.style.display = 'none';
+                            askQuestionBtn.style.display = 'block';
                         }
                     });
                 }

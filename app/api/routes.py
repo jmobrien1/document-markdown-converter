@@ -7,6 +7,7 @@ from app.tasks import convert_file_task, extract_data_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
 from app.services.conversion_service import ConversionService
+from app.services.rag_service import RAGService
 from functools import wraps
 
 api = Blueprint('api', __name__)
@@ -418,4 +419,100 @@ def generate_summary(text_content, length):
             
     except Exception as e:
         current_app.logger.error(f"Error calling LLM API: {e}")
+        return None 
+
+from flask import Blueprint, request, jsonify, current_app
+from flask_login import current_user, login_required
+from app.models import Conversion, Summary
+from app import db
+import os
+import requests
+import json
+
+api = Blueprint('api', __name__, url_prefix='/api/v1')
+
+def require_api_key(f):
+    """Decorator to require API key authentication."""
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-Key')
+        if not api_key:
+            return jsonify({'error': 'API key required'}), 401
+        
+        # For now, we'll use a simple API key check
+        # In production, this should be a proper API key validation
+        expected_key = os.getenv('API_KEY', 'test-api-key')
+        if api_key != expected_key:
+            return jsonify({'error': 'Invalid API key'}), 401
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+@api.route('/conversion/<job_id>/query', methods=['POST'])
+@api_key_required
+def rag_query(job_id):
+    """Perform a RAG (Retrieval-Augmented Generation) query on a completed conversion."""
+    try:
+        data = request.get_json()
+        if not data or 'question' not in data:
+            return jsonify({'error': 'Question is required'}), 400
+
+        question = data['question']
+
+        # Get conversion and verify ownership
+        conversion = Conversion.query.filter_by(job_id=job_id).first()
+        if not conversion:
+            return jsonify({'error': 'Conversion not found'}), 404
+        
+        # Check if user owns this conversion
+        user = g.current_user
+        if conversion.user_id != user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        if conversion.status != 'completed':
+            return jsonify({'error': 'Conversion must be completed before querying'}), 400
+        
+        # Use RAGService to perform the query
+        rag_service = RAGService()
+        result = rag_service.query_document(conversion.id, question)
+
+        if not result:
+            return jsonify({'error': 'Failed to generate answer'}), 500
+
+        return jsonify({
+            'job_id': job_id,
+            'question': question,
+            'answer': result['answer'],
+            'citations': result['citations'],
+            'relevant_chunks': result['relevant_chunks']
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"RAG query API error: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+def get_document_text(conversion):
+    """Retrieve the document text content for RAG query."""
+    try:
+        # Try to get from Celery task result first
+        from celery.result import AsyncResult
+        task_result = AsyncResult(conversion.job_id)
+        
+        if task_result.ready() and task_result.successful():
+            result_data = task_result.get()
+            if isinstance(result_data, dict) and 'markdown' in result_data:
+                return result_data['markdown']
+        
+        # Fallback to GCS if available
+        try:
+            from app.main.routes import get_storage_client
+            storage_client = get_storage_client()
+            bucket = storage_client.bucket(current_app.config['GCS_BUCKET_NAME'])
+            blob = bucket.blob(f"results/{conversion.job_id}/result.txt")
+            return blob.download_as_text()
+        except Exception as gcs_error:
+            current_app.logger.error(f"GCS fallback failed for RAG query: {gcs_error}")
+            return None
+            
+    except Exception as e:
+        current_app.logger.error(f"Error retrieving document text for RAG query: {e}")
         return None 

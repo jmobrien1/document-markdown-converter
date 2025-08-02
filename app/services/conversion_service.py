@@ -320,6 +320,25 @@ class ConversionService:
                 current_app.logger.info(f"10.5. Job ID saved to database: {task.id} ✓")
                 # --- END FIX ---
                 
+                # Process document for RAG (citation-backed Q&A)
+                current_app.logger.info("11. Starting RAG processing...")
+                try:
+                    from app.services.rag_service import RAGService
+                    rag_service = RAGService()
+                    
+                    # Get document text for RAG processing
+                    document_text = self._get_document_text_for_rag(conversion)
+                    if document_text:
+                        rag_success = rag_service.process_document(conversion.id, document_text)
+                        if rag_success:
+                            current_app.logger.info("11. RAG processing completed ✓")
+                        else:
+                            current_app.logger.warning("11. RAG processing failed, but conversion continues")
+                    else:
+                        current_app.logger.warning("11. No document text available for RAG processing")
+                except Exception as rag_error:
+                    current_app.logger.warning(f"11. RAG processing error (non-critical): {rag_error}")
+                
             except Exception as celery_error:
                 current_app.logger.error(f"Celery task dispatch failed: {celery_error}")
                 return False, f"Failed to queue conversion task: {str(celery_error)}"
@@ -390,3 +409,17 @@ class ConversionService:
         except Exception as e:
             current_app.logger.error(f"Error getting conversion result: {e}")
             return False, str(e) 
+
+    def _get_document_text_for_rag(self, conversion):
+        """Get document text for RAG processing."""
+        try:
+            # For now, we'll use a placeholder that gets text from the conversion
+            # In a full implementation, this would retrieve the actual document text
+            # from the conversion result or GCS
+            
+            # Placeholder: return a sample text for testing
+            return f"Sample document text for conversion {conversion.id}. This is placeholder content for RAG processing."
+            
+        except Exception as e:
+            current_app.logger.error(f"Error getting document text for RAG: {e}")
+            return None 
