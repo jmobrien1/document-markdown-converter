@@ -6,7 +6,7 @@ from app.models import Conversion, db
 from app.tasks import convert_file_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
-from app.api import api_key_required
+from app.decorators import api_key_required
 
 from . import api_docs
 

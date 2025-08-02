@@ -2,39 +2,15 @@ from flask import request, jsonify, current_app, g, url_for, Blueprint
 import os
 import uuid
 from werkzeug.utils import secure_filename
-from app.models import Conversion, Batch, ConversionJob, Summary, db, User
+from app.models import Conversion, Batch, ConversionJob, Summary, db, User, RAGChunk, RAGQuery # Added RAGChunk, RAGQuery
 from app.tasks import convert_file_task, extract_data_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
 from app.services.conversion_service import ConversionService
-from app.services.rag_service import RAGService
-from functools import wraps
+from app.services.rag_service import RAGService # Added RAGService
+from app.decorators import api_key_required
 
 api = Blueprint('api', __name__)
-
-def api_key_required(f):
-    """Decorator to require valid API key and Pro access."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Allow CORS preflight requests
-        if request.method == 'OPTIONS':
-            return f(*args, **kwargs)
-            
-        api_key = request.headers.get('X-API-Key')
-        if not api_key:
-            return jsonify({'error': 'API key is missing'}), 401
-            
-        user = User.query.filter_by(api_key=api_key).first()
-        if not user:
-            return jsonify({'error': 'Invalid API key'}), 401
-            
-        # Check if user has Pro access (either premium or on trial)
-        if not user.has_pro_access:
-            return jsonify({'error': 'Pro access required. Please upgrade to Pro or check your trial status.'}), 403
-            
-        g.current_user = user
-        return f(*args, **kwargs)
-    return decorated_function
 
 @api.route('/convert', methods=['POST'])
 @api_key_required
