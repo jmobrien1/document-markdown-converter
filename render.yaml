@@ -8,30 +8,53 @@ services:
 
   # The main Flask web application
   - type: web
-    name: mdraft-web
-    env: docker
-    dockerfilePath: ./Dockerfile.render
-    plan: free
-    buildCommand: pip install -r requirements-web.txt
-    startCommand: flask db upgrade && gunicorn run:app
+    name: mdraft-app
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn run:app
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
-      - key: FLASK_APP
-        value: run.py
-      - key: FLASK_CONFIG
+      - key: FLASK_ENV
         value: production
-      - key: CELERY_BROKER_URL
-        fromService:
-          type: redis
-          name: redis-mdraft
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mdraft-db
           property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          type: redis
-          name: redis-mdraft
-          property: connectionString
-      - fromGroup: mdraft-secrets
+      - key: GCS_BUCKET_NAME
+        value: mdraft-storage
+      - key: GCS_CREDENTIALS_JSON
+        sync: false
+      - key: DOCAI_PROCESSOR_ID
+        value: projects/your-project/locations/us/processors/your-processor-id
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: MAIL_SERVER
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: 587
+      - key: MAIL_USE_TLS
+        value: true
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      # RAG Feature Environment Variables
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: VECTOR_STORAGE_PATH
+        value: /opt/render/project/src/vector_storage
+      - key: SENTENCE_TRANSFORMER_MODEL
+        value: all-MiniLM-L6-v2
+      - key: CHUNK_SIZE
+        value: 256
+      - key: CHUNK_OVERLAP
+        value: 64
+      - key: TOP_K_CHUNKS
+        value: 5
 
   # The Celery background worker
   - type: worker
