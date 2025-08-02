@@ -161,10 +161,13 @@ def health_check():
         try:
             from app.services.rag_service import get_rag_service
             rag_service = get_rag_service()
-            rag_available = rag_service.is_available()
-            health_status['services']['rag_service'] = 'healthy' if rag_available else 'unavailable'
-            if not rag_available:
-                health_status['status'] = 'degraded'
+            if rag_service:
+                rag_available = rag_service.is_available()
+                health_status['services']['rag_service'] = 'healthy' if rag_available else 'unavailable'
+                if not rag_available:
+                    health_status['status'] = 'degraded'
+            else:
+                health_status['services']['rag_service'] = 'disabled'
         except Exception as e:
             health_status['services']['rag_service'] = 'error'
             health_status['status'] = 'degraded'
@@ -498,7 +501,7 @@ def rag_query(job_id):
         rag_service = get_rag_service()
         
         # Check if RAG service is available
-        if not rag_service.is_available():
+        if not rag_service or not rag_service.is_available():
             return jsonify({'error': 'RAG service is not available. Please try again later.'}), 503
 
         # Get document text for processing
@@ -581,9 +584,19 @@ def get_metrics():
     try:
         from app.services.rag_service import get_rag_service
         rag_service = get_rag_service()
+        
+        if rag_service:
+            rag_metrics = rag_service.get_metrics()
+        else:
+            rag_metrics = {
+                'is_available': False,
+                'is_enabled': False,
+                'error': 'RAG service disabled'
+            }
+            
         metrics = {
             'timestamp': time.time(),
-            'rag_service': rag_service.get_metrics(),
+            'rag_service': rag_metrics,
             'database': {
                 'connections': 'healthy'  # Simplified for now
             }

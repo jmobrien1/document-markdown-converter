@@ -1,5 +1,5 @@
 """
-RAG Service with lazy loading to avoid import errors during app startup
+RAG Service with complete isolation - can be disabled entirely via environment variable
 """
 import logging
 import os
@@ -12,8 +12,11 @@ from app.models import RAGChunk, RAGQuery, db
 
 logger = logging.getLogger(__name__)
 
+# Global flag to completely disable RAG functionality
+RAG_ENABLED = os.environ.get('ENABLE_RAG', 'false').lower() == 'true'
+
 class RAGService:
-    """Service for RAG (Retrieval Augmented Generation) operations with lazy loading"""
+    """Service for RAG (Retrieval Augmented Generation) operations"""
     
     def __init__(self):
         self._sentence_transformer = None
@@ -22,18 +25,22 @@ class RAGService:
         self._initialized = False
         self._metrics = defaultdict(int)
         self._last_health_check = None
-        self._embeddings_list = []  # Store embeddings for annoy index
+        self._embeddings_list = []
         
         # Environment variable configuration
-        self.enabled = os.environ.get('ENABLE_RAG', 'true').lower() == 'true'
+        self.enabled = RAG_ENABLED
         self.model_name = os.environ.get('RAG_MODEL', 'all-MiniLM-L6-v2')
         self.max_tokens = int(os.environ.get('RAG_MAX_TOKENS', '500'))
         self.chunk_overlap = int(os.environ.get('RAG_CHUNK_OVERLAP', '50'))
         
         logger.info(f"RAG Service initialized - Enabled: {self.enabled}, Model: {self.model_name}")
+        
+        # Only initialize if enabled
+        if self.enabled:
+            self._initialize_dependencies()
     
-    def _lazy_init(self):
-        """Initialize heavy dependencies only when needed"""
+    def _initialize_dependencies(self):
+        """Initialize heavy dependencies only if RAG is enabled"""
         if self._initialized:
             return True
             
@@ -42,7 +49,7 @@ class RAGService:
             return False
             
         try:
-            # Import heavy dependencies only when needed
+            # Import heavy dependencies only when enabled
             import tiktoken
             from annoy import AnnoyIndex
             from sentence_transformers import SentenceTransformer
@@ -53,7 +60,7 @@ class RAGService:
             
             # Initialize Annoy index
             dimension = 384  # all-MiniLM-L6-v2 embedding dimension
-            self._annoy_index = AnnoyIndex(dimension, 'angular')  # Use angular distance for cosine similarity
+            self._annoy_index = AnnoyIndex(dimension, 'angular')
             
             # Load existing embeddings if any
             self._load_existing_embeddings()
@@ -89,23 +96,23 @@ class RAGService:
     
     def _load_existing_embeddings(self):
         """Load existing embeddings into Annoy index"""
+        if not self.enabled:
+            return
+            
         try:
             chunks = RAGChunk.query.filter(RAGChunk.embedding.isnot(None)).all()
             if chunks:
                 embeddings = []
                 for chunk in chunks:
-                    # Convert stored embedding back to numpy array
                     embedding = np.frombuffer(chunk.embedding, dtype=np.float32)
                     embeddings.append(embedding)
                 
                 if embeddings:
                     self._embeddings_list = embeddings
-                    # Build Annoy index
                     for i, embedding in enumerate(embeddings):
                         self._annoy_index.add_item(i, embedding.tolist())
                     
-                    # Build the index
-                    self._annoy_index.build(10)  # 10 trees for good accuracy
+                    self._annoy_index.build(10)
                     logger.info(f"Loaded {len(embeddings)} existing embeddings into Annoy index")
                     
         except Exception as e:
@@ -113,12 +120,15 @@ class RAGService:
     
     def chunk_text(self, text: str, max_tokens: int = None, overlap: int = None) -> List[str]:
         """Split text into chunks with token-aware splitting"""
+        if not self.enabled:
+            return []
+            
         max_tokens = max_tokens or self.max_tokens
         overlap = overlap or self.chunk_overlap
         
-        if not self._lazy_init():
+        if not self._initialized:
             # Fallback to simple character-based chunking
-            chunk_size = max_tokens * 4  # Rough approximation
+            chunk_size = max_tokens * 4
             chunks = []
             for i in range(0, len(text), chunk_size - overlap):
                 chunk = text[i:i + chunk_size]
@@ -129,7 +139,6 @@ class RAGService:
             return chunks
         
         try:
-            # Token-aware chunking
             tokens = self._tiktoken_encoder.encode(text)
             chunks = []
             
@@ -144,14 +153,13 @@ class RAGService:
             
         except Exception as e:
             logger.error(f"Error in chunk_text: {e}")
-            # Fallback to simple splitting
             fallback_chunks = [text[i:i+2000] for i in range(0, len(text), 1500)]
             self._metrics['chunks_created'] += len(fallback_chunks)
             return fallback_chunks
     
     def generate_embedding(self, text: str) -> Optional[np.ndarray]:
         """Generate embedding for text"""
-        if not self._lazy_init():
+        if not self.enabled or not self._initialized:
             return None
             
         try:
@@ -164,18 +172,17 @@ class RAGService:
     
     def store_document_chunks(self, document_id: int, chunks: List[str]) -> bool:
         """Store document chunks with embeddings"""
-        if not self._lazy_init():
-            logger.warning("RAG service not available - storing chunks without embeddings")
+        if not self.enabled:
+            logger.warning("RAG service is disabled - not storing chunks")
+            return False
             
         try:
-            # Delete existing chunks for this document
             RAGChunk.query.filter_by(document_id=document_id).delete()
             
             chunk_objects = []
             embeddings_to_add = []
             
             for i, chunk_text in enumerate(chunks):
-                # Generate embedding if RAG is available
                 embedding = None
                 embedding_bytes = None
                 
@@ -185,7 +192,6 @@ class RAGService:
                         embedding_bytes = embedding.tobytes()
                         embeddings_to_add.append(embedding)
                 
-                # Create chunk object
                 chunk = RAGChunk(
                     document_id=document_id,
                     chunk_index=i,
@@ -194,18 +200,15 @@ class RAGService:
                 )
                 chunk_objects.append(chunk)
             
-            # Save to database
             db.session.bulk_save_objects(chunk_objects)
             db.session.commit()
             
-            # Add to Annoy index if embeddings were generated
             if embeddings_to_add and self._initialized:
                 start_index = len(self._embeddings_list)
                 for i, embedding in enumerate(embeddings_to_add):
                     self._annoy_index.add_item(start_index + i, embedding.tolist())
                     self._embeddings_list.append(embedding)
                 
-                # Rebuild the index
                 self._annoy_index.build(10)
             
             logger.info(f"Stored {len(chunks)} chunks for document {document_id}")
@@ -221,28 +224,27 @@ class RAGService:
     
     def search_similar_chunks(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Search for similar chunks using vector similarity"""
-        if not self._lazy_init():
-            logger.warning("RAG service not available - falling back to text search")
+        if not self.enabled:
+            logger.warning("RAG service is disabled - falling back to text search")
+            return self._fallback_text_search(query, top_k)
+        
+        if not self._initialized:
             return self._fallback_text_search(query, top_k)
         
         try:
-            # Generate query embedding
             query_embedding = self.generate_embedding(query)
             if query_embedding is None:
                 return self._fallback_text_search(query, top_k)
             
-            # Search Annoy index
             indices = self._annoy_index.get_nns_by_vector(query_embedding.tolist(), top_k, include_distances=True)
             chunk_indices, distances = indices
             
-            # Get corresponding chunks from database
             results = []
             chunks = RAGChunk.query.filter(RAGChunk.embedding.isnot(None)).all()
             
             for i, (idx, distance) in enumerate(zip(chunk_indices, distances)):
                 if idx < len(chunks):
                     chunk = chunks[idx]
-                    # Convert distance to similarity score (1 - normalized distance)
                     similarity_score = 1.0 - (distance / np.sqrt(len(query_embedding)))
                     results.append({
                         'chunk_id': chunk.id,
@@ -262,7 +264,6 @@ class RAGService:
     def _fallback_text_search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Fallback text-based search when vector search is unavailable"""
         try:
-            # Simple text search using PostgreSQL's text search
             chunks = RAGChunk.query.filter(
                 RAGChunk.chunk_text.ilike(f'%{query}%')
             ).limit(top_k).all()
@@ -273,7 +274,7 @@ class RAGService:
                     'chunk_id': chunk.id,
                     'document_id': chunk.document_id,
                     'chunk_text': chunk.chunk_text,
-                    'similarity_score': 0.5,  # Default score for text match
+                    'similarity_score': 0.5,
                     'chunk_index': chunk.chunk_index
                 })
             
@@ -286,6 +287,9 @@ class RAGService:
     
     def save_query(self, query_text: str, results: List[Dict[str, Any]], user_id: Optional[int] = None) -> Optional[int]:
         """Save query and results for analytics"""
+        if not self.enabled:
+            return None
+            
         try:
             query_obj = RAGQuery(
                 query_text=query_text,
@@ -307,9 +311,18 @@ class RAGService:
     def is_available(self) -> bool:
         """Check if RAG service is fully available"""
         self._last_health_check = time.time()
-        return self._lazy_init()
+        return self.enabled and self._initialized
 
-# Factory function to create RAG service instance
+# Create global instance only if RAG is enabled
+if RAG_ENABLED:
+    try:
+        rag_service = RAGService()
+    except Exception as e:
+        logger.error(f"Failed to create RAG service: {e}")
+        rag_service = None
+else:
+    rag_service = None
+
 def get_rag_service():
-    """Factory function to get RAG service instance - only creates when needed"""
-    return RAGService() 
+    """Get RAG service instance - returns None if disabled"""
+    return rag_service 

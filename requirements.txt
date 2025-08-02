@@ -37,17 +37,7 @@ python-dotenv==1.0.1
 click==8.2.1
 python-json-logger==3.3.0
 
-# RAG Pipeline Dependencies - Using alternatives to faiss
-tiktoken==0.5.2
-sentence-transformers==2.2.2
-numpy==1.26.4
-scikit-learn==1.3.2
-torch==2.1.2
-transformers==4.36.2
-huggingface-hub==0.20.3
-
-# Vector similarity search alternative (lighter weight)
-annoy==1.17.3
-
 # Production server
-gunicorn==21.2.0 
+gunicorn==21.2.0
+
+# Note: ML dependencies are in requirements-ml.txt and only installed when ENABLE_RAG=true 

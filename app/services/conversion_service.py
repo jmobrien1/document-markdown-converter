@@ -328,7 +328,7 @@ class ConversionService:
                     
                     # Get document text for RAG processing
                     document_text = self._get_document_text_for_rag(conversion)
-                    if document_text and rag_service.is_available():
+                    if document_text and rag_service and rag_service.is_available():
                         # Chunk the text and store chunks
                         chunks = rag_service.chunk_text(document_text)
                         if chunks:
