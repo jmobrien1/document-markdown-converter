@@ -7,7 +7,7 @@ from app.tasks import convert_file_task, extract_data_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
 from app.services.conversion_service import ConversionService
-from app.services.rag_service import rag_service # Updated to use global instance
+# RAG service will be imported only when needed to avoid startup imports
 from app.decorators import api_key_required
 import time
 
@@ -159,6 +159,8 @@ def health_check():
         
         # Check RAG service status
         try:
+            from app.services.rag_service import get_rag_service
+            rag_service = get_rag_service()
             rag_available = rag_service.is_available()
             health_status['services']['rag_service'] = 'healthy' if rag_available else 'unavailable'
             if not rag_available:
@@ -491,6 +493,10 @@ def rag_query(job_id):
         if conversion.status != 'completed':
             return jsonify({'error': 'Conversion must be completed before querying'}), 400
 
+        # Import RAG service only when needed
+        from app.services.rag_service import get_rag_service
+        rag_service = get_rag_service()
+        
         # Check if RAG service is available
         if not rag_service.is_available():
             return jsonify({'error': 'RAG service is not available. Please try again later.'}), 503
@@ -573,6 +579,8 @@ def get_document_text(conversion):
 def get_metrics():
     """Get application metrics including RAG service metrics"""
     try:
+        from app.services.rag_service import get_rag_service
+        rag_service = get_rag_service()
         metrics = {
             'timestamp': time.time(),
             'rag_service': rag_service.get_metrics(),

@@ -309,5 +309,7 @@ class RAGService:
         self._last_health_check = time.time()
         return self._lazy_init()
 
-# Global instance
-rag_service = RAGService() 
+# Factory function to create RAG service instance
+def get_rag_service():
+    """Factory function to get RAG service instance - only creates when needed"""
+    return RAGService() 

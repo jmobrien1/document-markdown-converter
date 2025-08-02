@@ -323,7 +323,8 @@ class ConversionService:
                 # Process document for RAG (citation-backed Q&A)
                 current_app.logger.info("11. Starting RAG processing...")
                 try:
-                    from app.services.rag_service import rag_service
+                    from app.services.rag_service import get_rag_service
+                    rag_service = get_rag_service()
                     
                     # Get document text for RAG processing
                     document_text = self._get_document_text_for_rag(conversion)
