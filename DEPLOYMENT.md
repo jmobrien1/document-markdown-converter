@@ -54,6 +54,15 @@ RAG_MAX_TOKENS=500
 RAG_CHUNK_OVERLAP=50
 ```
 
+## Vector Search Library
+
+The application uses **Annoy** (Approximate Nearest Neighbors Oh Yeah) for vector similarity search instead of FAISS. This choice was made because:
+
+- **Deployment-friendly**: Annoy has fewer build dependencies and works better on platforms like Render
+- **Lighter weight**: Smaller memory footprint and faster installation
+- **Good performance**: Provides excellent approximate nearest neighbor search for RAG applications
+- **No SWIG dependency**: Avoids the SWIG build issues that commonly occur with FAISS
+
 ## Verification Steps
 
 ### 1. Health Check
@@ -136,6 +145,11 @@ Expected response:
 - Check Celery worker is running
 - Ensure `CELERY_BROKER_URL` is set correctly
 
+### Vector Search Issues
+- Annoy should install without issues on most platforms
+- If Annoy fails, the system will fallback to text search
+- Check logs for any Annoy-specific errors
+
 ## Monitoring
 
 ### Health Endpoints
@@ -153,4 +167,5 @@ Expected response:
 - Database connection health
 - Celery worker status
 - Error rates
-- Response times 
+- Response times
+- Vector search performance 
