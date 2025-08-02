@@ -9,6 +9,7 @@ from celery.result import AsyncResult
 from app.services.conversion_service import ConversionService
 from app.services.rag_service import rag_service # Updated to use global instance
 from app.decorators import api_key_required
+import time
 
 api = Blueprint('api', __name__)
 
@@ -133,13 +134,56 @@ def api_result(job_id):
         }), 500
 
 @api.route('/health', methods=['GET'])
-def api_health():
-    """Health check endpoint for the API."""
-    return jsonify({
-        'status': 'healthy',
-        'service': 'mdraft-api',
-        'version': '1.0.0'
-    })
+def health_check():
+    """Health check endpoint with RAG service status"""
+    try:
+        # Check basic application health
+        health_status = {
+            'status': 'healthy',
+            'timestamp': time.time(),
+            'version': '1.0.0',
+            'services': {
+                'database': 'healthy',
+                'celery': 'healthy',
+                'rag_service': 'unknown'
+            }
+        }
+        
+        # Check database connectivity
+        try:
+            db.session.execute('SELECT 1')
+            health_status['services']['database'] = 'healthy'
+        except Exception as e:
+            health_status['services']['database'] = 'unhealthy'
+            health_status['status'] = 'degraded'
+        
+        # Check RAG service status
+        try:
+            rag_available = rag_service.is_available()
+            health_status['services']['rag_service'] = 'healthy' if rag_available else 'unavailable'
+            if not rag_available:
+                health_status['status'] = 'degraded'
+        except Exception as e:
+            health_status['services']['rag_service'] = 'error'
+            health_status['status'] = 'degraded'
+        
+        # Check Celery (if configured)
+        try:
+            from celery import current_app as celery_app
+            celery_app.control.inspect().active()
+            health_status['services']['celery'] = 'healthy'
+        except Exception as e:
+            health_status['services']['celery'] = 'unavailable'
+            health_status['status'] = 'degraded'
+        
+        return jsonify(health_status), 200 if health_status['status'] == 'healthy' else 503
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': time.time()
+        }), 500
 
 
 @api.route('/batch/<batch_id>/status', methods=['GET'])
@@ -523,3 +567,22 @@ def get_document_text(conversion):
     except Exception as e:
         current_app.logger.error(f"Error retrieving document text for RAG query: {e}")
         return None 
+
+@api.route('/metrics', methods=['GET'])
+@api_key_required
+def get_metrics():
+    """Get application metrics including RAG service metrics"""
+    try:
+        metrics = {
+            'timestamp': time.time(),
+            'rag_service': rag_service.get_metrics(),
+            'database': {
+                'connections': 'healthy'  # Simplified for now
+            }
+        }
+        
+        return jsonify(metrics), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting metrics: {e}")
+        return jsonify({'error': 'Failed to get metrics'}), 500 

@@ -2,7 +2,10 @@
 RAG Service with lazy loading to avoid import errors during app startup
 """
 import logging
+import os
+import time
 from typing import List, Dict, Optional, Any
+from collections import defaultdict
 import numpy as np
 from sqlalchemy.exc import SQLAlchemyError
 from app.models import RAGChunk, RAGQuery, db
@@ -17,11 +20,25 @@ class RAGService:
         self._faiss_index = None
         self._tiktoken_encoder = None
         self._initialized = False
+        self._metrics = defaultdict(int)
+        self._last_health_check = None
+        
+        # Environment variable configuration
+        self.enabled = os.environ.get('ENABLE_RAG', 'true').lower() == 'true'
+        self.model_name = os.environ.get('RAG_MODEL', 'all-MiniLM-L6-v2')
+        self.max_tokens = int(os.environ.get('RAG_MAX_TOKENS', '500'))
+        self.chunk_overlap = int(os.environ.get('RAG_CHUNK_OVERLAP', '50'))
+        
+        logger.info(f"RAG Service initialized - Enabled: {self.enabled}, Model: {self.model_name}")
     
     def _lazy_init(self):
         """Initialize heavy dependencies only when needed"""
         if self._initialized:
             return True
+            
+        if not self.enabled:
+            logger.info("RAG service is disabled via ENABLE_RAG environment variable")
+            return False
             
         try:
             # Import heavy dependencies only when needed
@@ -31,7 +48,7 @@ class RAGService:
             
             # Initialize components
             self._tiktoken_encoder = tiktoken.encoding_for_model("gpt-3.5-turbo")
-            self._sentence_transformer = SentenceTransformer('all-MiniLM-L6-v2')
+            self._sentence_transformer = SentenceTransformer(self.model_name)
             
             # Initialize FAISS index
             dimension = 384  # all-MiniLM-L6-v2 embedding dimension
@@ -41,15 +58,33 @@ class RAGService:
             self._load_existing_embeddings()
             
             self._initialized = True
+            self._metrics['initializations'] += 1
             logger.info("RAG service initialized successfully")
             return True
             
         except ImportError as e:
             logger.error(f"Failed to import RAG dependencies: {e}")
+            self._metrics['import_errors'] += 1
             return False
         except Exception as e:
             logger.error(f"Failed to initialize RAG service: {e}")
+            self._metrics['init_errors'] += 1
             return False
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get service metrics for monitoring"""
+        return {
+            'initializations': self._metrics['initializations'],
+            'import_errors': self._metrics['import_errors'],
+            'init_errors': self._metrics['init_errors'],
+            'queries_processed': self._metrics['queries_processed'],
+            'chunks_created': self._metrics['chunks_created'],
+            'embeddings_generated': self._metrics['embeddings_generated'],
+            'is_available': self.is_available(),
+            'is_enabled': self.enabled,
+            'model_name': self.model_name,
+            'last_health_check': self._last_health_check
+        }
     
     def _load_existing_embeddings(self):
         """Load existing embeddings into FAISS index"""
@@ -70,8 +105,11 @@ class RAGService:
         except Exception as e:
             logger.error(f"Error loading existing embeddings: {e}")
     
-    def chunk_text(self, text: str, max_tokens: int = 500, overlap: int = 50) -> List[str]:
+    def chunk_text(self, text: str, max_tokens: int = None, overlap: int = None) -> List[str]:
         """Split text into chunks with token-aware splitting"""
+        max_tokens = max_tokens or self.max_tokens
+        overlap = overlap or self.chunk_overlap
+        
         if not self._lazy_init():
             # Fallback to simple character-based chunking
             chunk_size = max_tokens * 4  # Rough approximation
@@ -80,6 +118,8 @@ class RAGService:
                 chunk = text[i:i + chunk_size]
                 if chunk.strip():
                     chunks.append(chunk.strip())
+            
+            self._metrics['chunks_created'] += len(chunks)
             return chunks
         
         try:
@@ -93,12 +133,15 @@ class RAGService:
                 if chunk_text.strip():
                     chunks.append(chunk_text.strip())
             
+            self._metrics['chunks_created'] += len(chunks)
             return chunks
             
         except Exception as e:
             logger.error(f"Error in chunk_text: {e}")
             # Fallback to simple splitting
-            return [text[i:i+2000] for i in range(0, len(text), 1500)]
+            fallback_chunks = [text[i:i+2000] for i in range(0, len(text), 1500)]
+            self._metrics['chunks_created'] += len(fallback_chunks)
+            return fallback_chunks
     
     def generate_embedding(self, text: str) -> Optional[np.ndarray]:
         """Generate embedding for text"""
@@ -107,6 +150,7 @@ class RAGService:
             
         try:
             embedding = self._sentence_transformer.encode(text, convert_to_numpy=True)
+            self._metrics['embeddings_generated'] += 1
             return embedding
         except Exception as e:
             logger.error(f"Error generating embedding: {e}")
@@ -195,6 +239,7 @@ class RAGService:
                         'chunk_index': chunk.chunk_index
                     })
             
+            self._metrics['queries_processed'] += 1
             return results
             
         except Exception as e:
@@ -219,6 +264,7 @@ class RAGService:
                     'chunk_index': chunk.chunk_index
                 })
             
+            self._metrics['queries_processed'] += 1
             return results
             
         except Exception as e:
@@ -247,6 +293,7 @@ class RAGService:
     
     def is_available(self) -> bool:
         """Check if RAG service is fully available"""
+        self._last_health_check = time.time()
         return self._lazy_init()
 
 # Global instance

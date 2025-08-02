@@ -3,21 +3,17 @@ import os
 import json
 import tempfile
 from dotenv import load_dotenv
+from datetime import timedelta
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '.env'))
 
 class Config:
     """Base configuration class."""
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'a-very-secret-dev-key-for-local-testing')
-    MAX_CONTENT_LENGTH = 10 * 1024 * 1024
-    ALLOWED_EXTENSIONS = {
-        # Document AI (Pro) supported formats
-        'pdf', 'gif', 'tiff', 'tif', 'jpg', 'jpeg', 'png', 'bmp', 'webp', 'html',
-        # Markitdown (Standard) supported formats  
-        'docx', 'xlsx', 'xls', 'pptx', 'htm', 'csv', 'json', 'xml', 'zip', 'epub'
-    }
-
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB max file size
+    ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'txt'}
+    
     # --- File Upload Configuration ---
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
     ANONYMOUS_DAILY_LIMIT = 5
@@ -51,10 +47,10 @@ class Config:
     API_RATE_LIMIT_STORAGE_URL = 'memory://'
     
     # --- Session Configuration ---
-    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+    SESSION_COOKIE_SECURE = os.environ.get('FLASK_ENV') == 'production'
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
-    PERMANENT_SESSION_LIFETIME = 30 * 24 * 60 * 60  # 30 days
+    PERMANENT_SESSION_LIFETIME = timedelta(days=7)
     
     # --- Error Handling Configuration ---
     MAX_ERROR_MESSAGE_LENGTH = 500
@@ -67,8 +63,8 @@ class Config:
     # Use environment variables for Redis connection
     # In production (Render), these will point to the managed Redis service
     # In development, fall back to localhost
-    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') or 'redis://localhost:6379/0'
+    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND') or 'redis://localhost:6379/0'
     
     # Fix for CPendingDeprecationWarning - explicitly set the new configuration
     CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
@@ -79,8 +75,8 @@ class Config:
         print("WARNING: CELERY_BROKER_URL not set on Render. Cron jobs may fail.")
 
     # --- Flask-Mail Configuration ---
-    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-    MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
+    MAIL_SERVER = os.environ.get('MAIL_SERVER')
+    MAIL_PORT = int(os.environ.get('MAIL_PORT') or 587)
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
@@ -196,6 +192,31 @@ class Config:
         ]
     }
 
+    # RAG Service Configuration
+    ENABLE_RAG = os.environ.get('ENABLE_RAG', 'true').lower() == 'true'
+    RAG_MODEL = os.environ.get('RAG_MODEL', 'all-MiniLM-L6-v2')
+    RAG_MAX_TOKENS = int(os.environ.get('RAG_MAX_TOKENS', '500'))
+    RAG_CHUNK_OVERLAP = int(os.environ.get('RAG_CHUNK_OVERLAP', '50'))
+    
+    # Logging
+    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+    
+    # Application settings
+    FLASK_ENV = os.environ.get('FLASK_ENV', 'production')
+    DEBUG = os.environ.get('FLASK_ENV') == 'development'
+    
+    # Rate limiting
+    RATELIMIT_DEFAULT = "100 per minute"
+    RATELIMIT_STORAGE_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
+    
+    # Session configuration
+    PERMANENT_SESSION_LIFETIME = timedelta(days=7)
+    
+    # Security
+    SESSION_COOKIE_SECURE = os.environ.get('FLASK_ENV') == 'production'
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Strict'
+    
     @staticmethod
     def init_app(app):
         """Performs application-initialization tasks."""
@@ -214,14 +235,20 @@ class Config:
 class DevelopmentConfig(Config):
     """Configuration settings for the development environment."""
     DEBUG = True
+    FLASK_ENV = 'development'
+    LOG_LEVEL = 'DEBUG'
 
 
 class ProductionConfig(Config):
     """Configuration settings for the production environment."""
     DEBUG = False
-
+    FLASK_ENV = 'production'
+    LOG_LEVEL = 'INFO'
+    
     # Production-specific settings
-    SQLALCHEMY_ECHO = False
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Strict'
 
     @classmethod
     def init_app(cls, app):
@@ -255,9 +282,17 @@ class ProductionConfig(Config):
             app.logger.info('mdraft startup (JSON logger enabled)')
 
 
+class TestingConfig(Config):
+    """Testing configuration."""
+    TESTING = True
+    DEBUG = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    WTF_CSRF_ENABLED = False
+
 # A dictionary to easily access configuration classes by name.
 config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
+    'testing': TestingConfig,
     'default': DevelopmentConfig
 }
