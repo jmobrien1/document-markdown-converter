@@ -7,7 +7,7 @@ from app.tasks import convert_file_task, extract_data_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
 from app.services.conversion_service import ConversionService
-from app.services.rag_service import RAGService # Added RAGService
+from app.services.rag_service import rag_service # Updated to use global instance
 from app.decorators import api_key_required
 
 api = Blueprint('api', __name__)
@@ -438,28 +438,59 @@ def rag_query(job_id):
         conversion = Conversion.query.filter_by(job_id=job_id).first()
         if not conversion:
             return jsonify({'error': 'Conversion not found'}), 404
-        
+
         # Check if user owns this conversion
         user = g.current_user
         if conversion.user_id != user.id:
             return jsonify({'error': 'Unauthorized'}), 403
-        
+
         if conversion.status != 'completed':
             return jsonify({'error': 'Conversion must be completed before querying'}), 400
-        
-        # Use RAGService to perform the query
-        rag_service = RAGService()
-        result = rag_service.query_document(conversion.id, question)
 
-        if not result:
-            return jsonify({'error': 'Failed to generate answer'}), 500
+        # Check if RAG service is available
+        if not rag_service.is_available():
+            return jsonify({'error': 'RAG service is not available. Please try again later.'}), 503
+
+        # Get document text for processing
+        document_text = conversion.extracted_text
+        if not document_text:
+            return jsonify({'error': 'No document text available for querying'}), 400
+
+        # Process document through RAG pipeline
+        chunks = rag_service.chunk_text(document_text)
+        if not chunks:
+            return jsonify({'error': 'Failed to process document text'}), 500
+
+        # Store chunks in database
+        if not rag_service.store_document_chunks(conversion.id, chunks):
+            return jsonify({'error': 'Failed to store document chunks'}), 500
+
+        # Search for relevant chunks
+        relevant_chunks = rag_service.search_similar_chunks(question, top_k=5)
+        if not relevant_chunks:
+            return jsonify({'error': 'No relevant information found in document'}), 404
+
+        # Generate answer using LLM (simplified for now)
+        answer = f"Based on the document, here's what I found: {relevant_chunks[0]['chunk_text'][:200]}..."
+
+        # Format citations
+        citations = []
+        for chunk in relevant_chunks:
+            citations.append({
+                'chunk_id': chunk['chunk_id'],
+                'text': chunk['chunk_text'][:150] + '...',
+                'score': chunk['similarity_score']
+            })
+
+        # Save query for analytics
+        rag_service.save_query(question, relevant_chunks, user.id)
 
         return jsonify({
             'job_id': job_id,
             'question': question,
-            'answer': result['answer'],
-            'citations': result['citations'],
-            'relevant_chunks': result['relevant_chunks']
+            'answer': answer,
+            'citations': citations,
+            'relevant_chunks': relevant_chunks
         }), 200
 
     except Exception as e:

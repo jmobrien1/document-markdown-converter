@@ -1,364 +1,253 @@
-# app/services/rag_service.py
-# RAG (Retrieval-Augmented Generation) service for citation-backed Q&A
-
-import os
-import json
-import pickle
+"""
+RAG Service with lazy loading to avoid import errors during app startup
+"""
+import logging
+from typing import List, Dict, Optional, Any
 import numpy as np
-from typing import List, Dict, Tuple, Optional
-from datetime import datetime
-import tiktoken
-from sentence_transformers import SentenceTransformer
-import faiss
-from flask import current_app
+from sqlalchemy.exc import SQLAlchemyError
+from app.models import RAGChunk, RAGQuery, db
 
-from app import db
-from app.models import Conversion, RAGChunk, RAGQuery
-
+logger = logging.getLogger(__name__)
 
 class RAGService:
-    """Service for handling RAG pipeline operations."""
+    """Service for RAG (Retrieval Augmented Generation) operations with lazy loading"""
     
     def __init__(self):
-        # Initialize sentence transformer model
-        self.model_name = "all-MiniLM-L6-v2"  # Fast, good quality
-        self.model = SentenceTransformer(self.model_name)
-        
-        # Chunking parameters
-        self.chunk_size = 256  # tokens
-        self.chunk_overlap = 64  # tokens
-        
-        # Search parameters
-        self.top_k = 5  # Number of chunks to retrieve
-        
-        # Initialize tokenizer
-        self.tokenizer = tiktoken.get_encoding("cl100k_base")
-        
-        # Vector storage directory
-        self.vector_dir = "vector_storage"
-        os.makedirs(self.vector_dir, exist_ok=True)
+        self._sentence_transformer = None
+        self._faiss_index = None
+        self._tiktoken_encoder = None
+        self._initialized = False
     
-    def chunk_text(self, text: str) -> List[Dict[str, any]]:
-        """
-        Split text into overlapping semantic chunks.
-        
-        Args:
-            text: The text to chunk
+    def _lazy_init(self):
+        """Initialize heavy dependencies only when needed"""
+        if self._initialized:
+            return True
             
-        Returns:
-            List of chunk dictionaries with 'text', 'start_token', 'end_token', 'chunk_id'
-        """
         try:
-            # Tokenize the text
-            tokens = self.tokenizer.encode(text)
+            # Import heavy dependencies only when needed
+            import tiktoken
+            import faiss
+            from sentence_transformers import SentenceTransformer
             
+            # Initialize components
+            self._tiktoken_encoder = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            self._sentence_transformer = SentenceTransformer('all-MiniLM-L6-v2')
+            
+            # Initialize FAISS index
+            dimension = 384  # all-MiniLM-L6-v2 embedding dimension
+            self._faiss_index = faiss.IndexFlatIP(dimension)
+            
+            # Load existing embeddings if any
+            self._load_existing_embeddings()
+            
+            self._initialized = True
+            logger.info("RAG service initialized successfully")
+            return True
+            
+        except ImportError as e:
+            logger.error(f"Failed to import RAG dependencies: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to initialize RAG service: {e}")
+            return False
+    
+    def _load_existing_embeddings(self):
+        """Load existing embeddings into FAISS index"""
+        try:
+            chunks = RAGChunk.query.filter(RAGChunk.embedding.isnot(None)).all()
+            if chunks:
+                embeddings = []
+                for chunk in chunks:
+                    # Convert stored embedding back to numpy array
+                    embedding = np.frombuffer(chunk.embedding, dtype=np.float32)
+                    embeddings.append(embedding)
+                
+                if embeddings:
+                    embeddings_matrix = np.vstack(embeddings)
+                    self._faiss_index.add(embeddings_matrix)
+                    logger.info(f"Loaded {len(embeddings)} existing embeddings into FAISS index")
+                    
+        except Exception as e:
+            logger.error(f"Error loading existing embeddings: {e}")
+    
+    def chunk_text(self, text: str, max_tokens: int = 500, overlap: int = 50) -> List[str]:
+        """Split text into chunks with token-aware splitting"""
+        if not self._lazy_init():
+            # Fallback to simple character-based chunking
+            chunk_size = max_tokens * 4  # Rough approximation
             chunks = []
-            chunk_id = 0
+            for i in range(0, len(text), chunk_size - overlap):
+                chunk = text[i:i + chunk_size]
+                if chunk.strip():
+                    chunks.append(chunk.strip())
+            return chunks
+        
+        try:
+            # Token-aware chunking
+            tokens = self._tiktoken_encoder.encode(text)
+            chunks = []
             
-            for i in range(0, len(tokens), self.chunk_size - self.chunk_overlap):
-                # Get chunk tokens
-                chunk_tokens = tokens[i:i + self.chunk_size]
-                
-                # Decode back to text
-                chunk_text = self.tokenizer.decode(chunk_tokens)
-                
-                # Skip empty chunks
-                if not chunk_text.strip():
-                    continue
-                
-                chunk_data = {
-                    'text': chunk_text.strip(),
-                    'start_token': i,
-                    'end_token': min(i + self.chunk_size, len(tokens)),
-                    'chunk_id': chunk_id,
-                    'token_count': len(chunk_tokens)
-                }
-                
-                chunks.append(chunk_data)
-                chunk_id += 1
+            for i in range(0, len(tokens), max_tokens - overlap):
+                chunk_tokens = tokens[i:i + max_tokens]
+                chunk_text = self._tiktoken_encoder.decode(chunk_tokens)
+                if chunk_text.strip():
+                    chunks.append(chunk_text.strip())
             
-            current_app.logger.info(f"Created {len(chunks)} chunks from text")
             return chunks
             
         except Exception as e:
-            current_app.logger.error(f"Error chunking text: {e}")
-            raise Exception(f"Failed to chunk text: {str(e)}")
+            logger.error(f"Error in chunk_text: {e}")
+            # Fallback to simple splitting
+            return [text[i:i+2000] for i in range(0, len(text), 1500)]
     
-    def generate_embeddings(self, texts: List[str]) -> np.ndarray:
-        """
-        Generate embeddings for a list of texts.
-        
-        Args:
-            texts: List of text strings
+    def generate_embedding(self, text: str) -> Optional[np.ndarray]:
+        """Generate embedding for text"""
+        if not self._lazy_init():
+            return None
             
-        Returns:
-            numpy array of embeddings
-        """
         try:
-            embeddings = self.model.encode(texts, convert_to_numpy=True)
-            current_app.logger.info(f"Generated embeddings for {len(texts)} texts")
-            return embeddings
-            
+            embedding = self._sentence_transformer.encode(text, convert_to_numpy=True)
+            return embedding
         except Exception as e:
-            current_app.logger.error(f"Error generating embeddings: {e}")
-            raise Exception(f"Failed to generate embeddings: {str(e)}")
+            logger.error(f"Error generating embedding: {e}")
+            return None
     
-    def create_vector_index(self, conversion_id: int, chunks: List[Dict], embeddings: np.ndarray) -> str:
-        """
-        Create and save a FAISS index for the document chunks.
-        
-        Args:
-            conversion_id: ID of the conversion
-            chunks: List of chunk dictionaries
-            embeddings: numpy array of embeddings
+    def store_document_chunks(self, document_id: int, chunks: List[str]) -> bool:
+        """Store document chunks with embeddings"""
+        if not self._lazy_init():
+            logger.warning("RAG service not available - storing chunks without embeddings")
             
-        Returns:
-            Path to the saved index file
-        """
         try:
-            # Create FAISS index
-            dimension = embeddings.shape[1]
-            index = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
+            # Delete existing chunks for this document
+            RAGChunk.query.filter_by(document_id=document_id).delete()
             
-            # Normalize embeddings for cosine similarity
-            faiss.normalize_L2(embeddings)
+            chunk_objects = []
+            embeddings_to_add = []
             
-            # Add vectors to index
-            index.add(embeddings.astype('float32'))
+            for i, chunk_text in enumerate(chunks):
+                # Generate embedding if RAG is available
+                embedding = None
+                embedding_bytes = None
+                
+                if self._initialized:
+                    embedding = self.generate_embedding(chunk_text)
+                    if embedding is not None:
+                        embedding_bytes = embedding.tobytes()
+                        embeddings_to_add.append(embedding)
+                
+                # Create chunk object
+                chunk = RAGChunk(
+                    document_id=document_id,
+                    chunk_index=i,
+                    chunk_text=chunk_text,
+                    embedding=embedding_bytes
+                )
+                chunk_objects.append(chunk)
             
-            # Save index and metadata
-            index_path = os.path.join(self.vector_dir, f"index_{conversion_id}.faiss")
-            metadata_path = os.path.join(self.vector_dir, f"metadata_{conversion_id}.json")
+            # Save to database
+            db.session.bulk_save_objects(chunk_objects)
+            db.session.commit()
             
-            # Save FAISS index
-            faiss.write_index(index, index_path)
+            # Add to FAISS index if embeddings were generated
+            if embeddings_to_add and self._initialized:
+                embeddings_matrix = np.vstack(embeddings_to_add)
+                self._faiss_index.add(embeddings_matrix)
             
-            # Save metadata
-            metadata = {
-                'conversion_id': conversion_id,
-                'chunks': chunks,
-                'embedding_dimension': dimension,
-                'created_at': datetime.utcnow().isoformat()
-            }
-            
-            with open(metadata_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
-            
-            current_app.logger.info(f"Created vector index for conversion {conversion_id}")
-            return index_path
-            
-        except Exception as e:
-            current_app.logger.error(f"Error creating vector index: {e}")
-            raise Exception(f"Failed to create vector index: {str(e)}")
-    
-    def process_document(self, conversion_id: int, text: str) -> bool:
-        """
-        Process a document through the RAG pipeline.
-        
-        Args:
-            conversion_id: ID of the conversion
-            text: Document text
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            current_app.logger.info(f"Processing document for conversion {conversion_id}")
-            
-            # Step 1: Chunk the text
-            chunks = self.chunk_text(text)
-            
-            if not chunks:
-                current_app.logger.warning(f"No chunks created for conversion {conversion_id}")
-                return False
-            
-            # Step 2: Generate embeddings
-            chunk_texts = [chunk['text'] for chunk in chunks]
-            embeddings = self.generate_embeddings(chunk_texts)
-            
-            # Step 3: Create vector index
-            index_path = self.create_vector_index(conversion_id, chunks, embeddings)
-            
-            # Step 4: Save chunks to database
-            self._save_chunks_to_db(conversion_id, chunks)
-            
-            current_app.logger.info(f"Successfully processed document for conversion {conversion_id}")
+            logger.info(f"Stored {len(chunks)} chunks for document {document_id}")
             return True
             
+        except SQLAlchemyError as e:
+            logger.error(f"Database error storing chunks: {e}")
+            db.session.rollback()
+            return False
         except Exception as e:
-            current_app.logger.error(f"Error processing document: {e}")
+            logger.error(f"Error storing document chunks: {e}")
             return False
     
-    def _save_chunks_to_db(self, conversion_id: int, chunks: List[Dict]) -> None:
-        """Save chunks to database."""
-        try:
-            for chunk in chunks:
-                rag_chunk = RAGChunk(
-                    conversion_id=conversion_id,
-                    chunk_id=chunk['chunk_id'],
-                    text=chunk['text'],
-                    start_token=chunk['start_token'],
-                    end_token=chunk['end_token'],
-                    token_count=chunk['token_count']
-                )
-                db.session.add(rag_chunk)
-            
-            db.session.commit()
-            current_app.logger.info(f"Saved {len(chunks)} chunks to database")
-            
-        except Exception as e:
-            current_app.logger.error(f"Error saving chunks to database: {e}")
-            db.session.rollback()
-    
-    def query_document(self, conversion_id: int, question: str) -> Dict:
-        """
-        Query a document with a question using RAG.
+    def search_similar_chunks(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """Search for similar chunks using vector similarity"""
+        if not self._lazy_init():
+            logger.warning("RAG service not available - falling back to text search")
+            return self._fallback_text_search(query, top_k)
         
-        Args:
-            conversion_id: ID of the conversion
-            question: User's question
-            
-        Returns:
-            Dictionary with answer, citations, and metadata
-        """
         try:
-            current_app.logger.info(f"Querying document {conversion_id}: {question}")
+            # Generate query embedding
+            query_embedding = self.generate_embedding(query)
+            if query_embedding is None:
+                return self._fallback_text_search(query, top_k)
             
-            # Step 1: Load vector index and metadata
-            index_path = os.path.join(self.vector_dir, f"index_{conversion_id}.faiss")
-            metadata_path = os.path.join(self.vector_dir, f"metadata_{conversion_id}.json")
+            # Search FAISS index
+            query_vector = query_embedding.reshape(1, -1)
+            scores, indices = self._faiss_index.search(query_vector, top_k)
             
-            if not os.path.exists(index_path) or not os.path.exists(metadata_path):
-                raise Exception(f"Vector index not found for conversion {conversion_id}")
+            # Get corresponding chunks from database
+            results = []
+            chunks = RAGChunk.query.filter(RAGChunk.embedding.isnot(None)).all()
             
-            # Load index
-            index = faiss.read_index(index_path)
-            
-            # Load metadata
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-            
-            # Step 2: Embed the question
-            question_embedding = self.model.encode([question], convert_to_numpy=True)
-            faiss.normalize_L2(question_embedding)
-            
-            # Step 3: Search for similar chunks
-            scores, indices = index.search(question_embedding.astype('float32'), self.top_k)
-            
-            # Step 4: Retrieve relevant chunks
-            relevant_chunks = []
             for i, (score, idx) in enumerate(zip(scores[0], indices[0])):
-                if idx < len(metadata['chunks']):
-                    chunk = metadata['chunks'][idx]
-                    relevant_chunks.append({
-                        'chunk_id': chunk['chunk_id'],
-                        'text': chunk['text'],
-                        'score': float(score),
-                        'rank': i + 1
+                if idx < len(chunks):
+                    chunk = chunks[idx]
+                    results.append({
+                        'chunk_id': chunk.id,
+                        'document_id': chunk.document_id,
+                        'chunk_text': chunk.chunk_text,
+                        'similarity_score': float(score),
+                        'chunk_index': chunk.chunk_index
                     })
             
-            # Step 5: Generate answer using LLM
-            answer, citations = self._generate_answer_with_citations(question, relevant_chunks)
-            
-            # Step 6: Save query to database
-            self._save_query_to_db(conversion_id, question, answer, citations)
-            
-            return {
-                'answer': answer,
-                'citations': citations,
-                'relevant_chunks': relevant_chunks,
-                'conversion_id': conversion_id
-            }
+            return results
             
         except Exception as e:
-            current_app.logger.error(f"Error querying document: {e}")
-            raise Exception(f"Failed to query document: {str(e)}")
+            logger.error(f"Error in vector search: {e}")
+            return self._fallback_text_search(query, top_k)
     
-    def _generate_answer_with_citations(self, question: str, relevant_chunks: List[Dict]) -> Tuple[str, List[Dict]]:
-        """
-        Generate answer using LLM with citations.
-        
-        Args:
-            question: User's question
-            relevant_chunks: List of relevant chunks
-            
-        Returns:
-            Tuple of (answer, citations)
-        """
+    def _fallback_text_search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """Fallback text-based search when vector search is unavailable"""
         try:
-            # Construct context from relevant chunks
-            context = "\n\n".join([f"[Chunk {chunk['chunk_id']}]: {chunk['text']}" for chunk in relevant_chunks])
+            # Simple text search using PostgreSQL's text search
+            chunks = RAGChunk.query.filter(
+                RAGChunk.chunk_text.ilike(f'%{query}%')
+            ).limit(top_k).all()
             
-            # Create prompt for LLM
-            prompt = f"""Based on the following document context, answer the user's question. 
-            If the answer cannot be found in the context, say "I cannot answer this question based on the provided document."
+            results = []
+            for chunk in chunks:
+                results.append({
+                    'chunk_id': chunk.id,
+                    'document_id': chunk.document_id,
+                    'chunk_text': chunk.chunk_text,
+                    'similarity_score': 0.5,  # Default score for text match
+                    'chunk_index': chunk.chunk_index
+                })
             
-            Document Context:
-            {context}
-            
-            Question: {question}
-            
-            Answer with citations in the format [Chunk X] where X is the chunk number:"""
-            
-            # Call OpenAI API
-            import requests
-            import os
-            
-            api_key = os.environ.get('OPENAI_API_KEY')
-            if not api_key:
-                raise Exception("OpenAI API key not configured")
-            
-            headers = {
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            }
-            
-            data = {
-                'model': 'gpt-4',
-                'messages': [
-                    {'role': 'system', 'content': 'You are a helpful assistant that answers questions based on provided document context. Always cite your sources using [Chunk X] format.'},
-                    {'role': 'user', 'content': prompt}
-                ],
-                'max_tokens': 500,
-                'temperature': 0.3
-            }
-            
-            response = requests.post('https://api.openai.com/v1/chat/completions', headers=headers, json=data)
-            
-            if response.status_code != 200:
-                raise Exception(f"OpenAI API error: {response.text}")
-            
-            result = response.json()
-            answer = result['choices'][0]['message']['content']
-            
-            # Extract citations from answer
-            citations = []
-            for chunk in relevant_chunks:
-                if f"[Chunk {chunk['chunk_id']}]" in answer:
-                    citations.append({
-                        'chunk_id': chunk['chunk_id'],
-                        'text': chunk['text'],
-                        'score': chunk['score']
-                    })
-            
-            return answer, citations
+            return results
             
         except Exception as e:
-            current_app.logger.error(f"Error generating answer: {e}")
-            return "I apologize, but I encountered an error while generating the answer.", []
+            logger.error(f"Error in fallback text search: {e}")
+            return []
     
-    def _save_query_to_db(self, conversion_id: int, question: str, answer: str, citations: List[Dict]) -> None:
-        """Save query and answer to database."""
+    def save_query(self, query_text: str, results: List[Dict[str, Any]], user_id: Optional[int] = None) -> Optional[int]:
+        """Save query and results for analytics"""
         try:
-            rag_query = RAGQuery(
-                conversion_id=conversion_id,
-                question=question,
-                answer=answer,
-                citations=json.dumps(citations)
+            query_obj = RAGQuery(
+                query_text=query_text,
+                user_id=user_id,
+                results_count=len(results)
             )
-            db.session.add(rag_query)
+            
+            db.session.add(query_obj)
             db.session.commit()
             
-        except Exception as e:
-            current_app.logger.error(f"Error saving query to database: {e}")
-            db.session.rollback() 
+            logger.info(f"Saved RAG query: {query_text[:50]}...")
+            return query_obj.id
+            
+        except SQLAlchemyError as e:
+            logger.error(f"Error saving query: {e}")
+            db.session.rollback()
+            return None
+    
+    def is_available(self) -> bool:
+        """Check if RAG service is fully available"""
+        return self._lazy_init()
+
+# Global instance
+rag_service = RAGService() 

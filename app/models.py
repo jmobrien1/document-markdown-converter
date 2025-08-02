@@ -588,36 +588,33 @@ class Summary(db.Model):
 class RAGChunk(db.Model):
     """Model for storing document chunks for RAG."""
     __tablename__ = 'rag_chunks'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    conversion_id = db.Column(db.Integer, db.ForeignKey('conversions.id'), nullable=False)
-    chunk_id = db.Column(db.Integer, nullable=False)  # Sequential chunk ID
-    text = db.Column(db.Text, nullable=False)  # Chunk text content
-    start_token = db.Column(db.Integer, nullable=False)  # Start token position
-    end_token = db.Column(db.Integer, nullable=False)  # End token position
-    token_count = db.Column(db.Integer, nullable=False)  # Number of tokens in chunk
+    document_id = db.Column(db.Integer, db.ForeignKey('conversions.id'), nullable=False)  # Changed from conversion_id
+    chunk_index = db.Column(db.Integer, nullable=False)  # Changed from chunk_id
+    chunk_text = db.Column(db.Text, nullable=False)  # Changed from text
+    embedding = db.Column(db.LargeBinary, nullable=True)  # Store embedding as bytes
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # Relationship
     conversion = db.relationship('Conversion', backref=db.backref('rag_chunks', lazy=True))
-    
+
     def __repr__(self):
-        return f'<RAGChunk {self.chunk_id} for conversion {self.conversion_id}>'
+        return f'<RAGChunk {self.chunk_index} for conversion {self.document_id}>'
 
 
 class RAGQuery(db.Model):
     """Model for storing RAG queries and answers."""
     __tablename__ = 'rag_queries'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    conversion_id = db.Column(db.Integer, db.ForeignKey('conversions.id'), nullable=False)
-    question = db.Column(db.Text, nullable=False)  # User's question
-    answer = db.Column(db.Text, nullable=False)  # Generated answer
-    citations = db.Column(db.Text, nullable=True)  # JSON string of citations
+    query_text = db.Column(db.Text, nullable=False)  # Changed from question
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Added user_id
+    results_count = db.Column(db.Integer, nullable=True)  # Added results_count
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # Relationship
-    conversion = db.relationship('Conversion', backref=db.backref('rag_queries', lazy=True))
-    
+    user = db.relationship('User', backref=db.backref('rag_queries', lazy=True))
+
     def __repr__(self):
-        return f'<RAGQuery {self.id} for conversion {self.conversion_id}>'
+        return f'<RAGQuery {self.id} by user {self.user_id}>'
