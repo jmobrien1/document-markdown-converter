@@ -2,7 +2,7 @@ from flask import request, jsonify, current_app, g, url_for, Blueprint
 import os
 import uuid
 from werkzeug.utils import secure_filename
-from app.models import Conversion, Batch, ConversionJob, Summary, db, User, RAGChunk, RAGQuery # Added RAGChunk, RAGQuery
+from app.models import Conversion, Batch, ConversionJob, Summary, db, User
 from app.tasks import convert_file_task, extract_data_task
 from app.main.routes import allowed_file, get_storage_client
 from celery.result import AsyncResult
