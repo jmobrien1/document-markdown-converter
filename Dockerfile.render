@@ -5,8 +5,8 @@ FROM render/python:3.11
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy the requirements files into the container
-COPY requirements-web.txt requirements-worker.txt requirements-ml.txt ./
+# Copy the consolidated requirements file
+COPY requirements.txt ./
 
 # Install system dependencies that might be needed for building packages
 RUN apt-get update && apt-get install -y build-essential
@@ -14,17 +14,8 @@ RUN apt-get update && apt-get install -y build-essential
 # Upgrade pip to get the latest wheel support
 RUN pip install --upgrade pip setuptools wheel
 
-# Install core dependencies first
-RUN pip install -r requirements-web.txt
-
-# Install ML dependencies conditionally based on build argument
-ARG ENABLE_RAG=false
-RUN if [ "$ENABLE_RAG" = "true" ]; then \
-        echo "Installing ML dependencies..."; \
-        pip install -r requirements-ml.txt; \
-    else \
-        echo "Skipping ML dependencies (ENABLE_RAG=false)"; \
-    fi
+# Install all dependencies from consolidated requirements file
+RUN pip install -r requirements.txt
 
 # Copy the rest of your application code into the container
 COPY . . 

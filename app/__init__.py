@@ -81,6 +81,49 @@ def create_app(config_name=None):
     except ImportError:
         app.logger.warning("⚠️ bcrypt not available, using fallback")
     
+    # Startup validation and dependency checks
+    app.logger.info("🔍 Starting dependency validation...")
+    
+    # Check RAG dependencies
+    rag_dependencies_available = True
+    try:
+        import tiktoken
+        import sentence_transformers
+        from annoy import AnnoyIndex
+        app.logger.info("✅ RAG dependencies available")
+    except ImportError as e:
+        app.logger.warning(f"⚠️ RAG dependencies not available: {e}")
+        rag_dependencies_available = False
+    
+    # Check OpenAI
+    openai_available = bool(app.config.get('OPENAI_API_KEY'))
+    if openai_available:
+        app.logger.info("✅ OpenAI API key configured")
+    else:
+        app.logger.warning("⚠️ OpenAI API key not configured")
+    
+    # Check database
+    try:
+        with app.app_context():
+            db.session.execute('SELECT 1')
+        app.logger.info("✅ Database connection available")
+    except Exception as e:
+        app.logger.warning(f"⚠️ Database connection failed: {e}")
+    
+    # Check Redis/Celery
+    try:
+        from celery import current_app as celery_app
+        celery_app.control.inspect().active()
+        app.logger.info("✅ Celery/Redis connection available")
+    except Exception as e:
+        app.logger.warning(f"⚠️ Celery/Redis connection failed: {e}")
+    
+    # Store dependency status in app config
+    app.config['RAG_DEPENDENCIES_AVAILABLE'] = rag_dependencies_available
+    app.config['OPENAI_AVAILABLE'] = openai_available
+    
+    app.logger.info("🎯 Dependency validation complete")
+    
     # Register blueprints
     from .auth import auth as auth_blueprint
     app.register_blueprint(auth_blueprint, url_prefix='/auth')
@@ -137,6 +180,7 @@ def create_app(config_name=None):
     except Exception as e:
         app.logger.warning(f"Database migration check failed: {e}")
     
+    app.logger.info("🚀 Application startup complete")
     return app
 
 # Create celery instance for worker

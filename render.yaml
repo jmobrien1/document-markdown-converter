@@ -13,8 +13,7 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
-    buildCommand: |
-      docker build --build-arg ENABLE_RAG=true -f Dockerfile.render -t mdraft-app .
+    buildCommand: docker build -f Dockerfile.render -t mdraft-app .
     startCommand: gunicorn run:app
     envVars:
       - key: FLASK_ENV
@@ -65,8 +64,7 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
-    buildCommand: |
-      docker build --build-arg ENABLE_RAG=true -f Dockerfile.render -t mdraft-worker .
+    buildCommand: docker build -f Dockerfile.render -t mdraft-worker .
     startCommand: celery -A celery_worker.celery worker --loglevel=info
     envVars:
       - key: FLASK_ENV

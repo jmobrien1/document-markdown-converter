@@ -18,10 +18,112 @@ api = Blueprint('api', __name__)
 def ping():
     return jsonify({'pong': True})
 
+@api.route('/health', methods=['GET'])
+def health_check():
+    """Comprehensive health check endpoint"""
+    try:
+        # Basic app health
+        health_status = {
+            'status': 'healthy',
+            'timestamp': time.time(),
+            'app': {
+                'name': 'mdraft-app',
+                'version': '1.0.0',
+                'environment': os.environ.get('FLASK_ENV', 'development')
+            },
+            'dependencies': {},
+            'services': {}
+        }
+        
+        # Check RAG service
+        try:
+            from app.services.rag_service import get_rag_service
+            rag_service = get_rag_service()
+            rag_metrics = rag_service.get_metrics()
+            health_status['services']['rag'] = {
+                'enabled': rag_metrics.get('is_enabled', False),
+                'available': rag_metrics.get('is_available', False),
+                'dependencies_available': rag_metrics.get('dependencies_available', False),
+                'model': rag_metrics.get('model_name', 'unknown'),
+                'initializations': rag_metrics.get('initializations', 0),
+                'import_errors': rag_metrics.get('import_errors', 0)
+            }
+        except Exception as e:
+            health_status['services']['rag'] = {
+                'error': str(e),
+                'enabled': False,
+                'available': False
+            }
+        
+        # Check database connection
+        try:
+            db.session.execute('SELECT 1')
+            health_status['services']['database'] = {'status': 'connected'}
+        except Exception as e:
+            health_status['services']['database'] = {'status': 'error', 'error': str(e)}
+            health_status['status'] = 'degraded'
+        
+        # Check Redis/Celery
+        try:
+            from celery import current_app as celery_app
+            celery_app.control.inspect().active()
+            health_status['services']['celery'] = {'status': 'connected'}
+        except Exception as e:
+            health_status['services']['celery'] = {'status': 'error', 'error': str(e)}
+        
+        # Check environment variables
+        env_vars = {
+            'ENABLE_RAG': os.environ.get('ENABLE_RAG', 'not_set'),
+            'OPENAI_API_KEY': 'set' if os.environ.get('OPENAI_API_KEY') else 'not_set',
+            'DATABASE_URL': 'set' if os.environ.get('DATABASE_URL') else 'not_set',
+            'GCS_BUCKET_NAME': os.environ.get('GCS_BUCKET_NAME', 'not_set')
+        }
+        health_status['environment'] = env_vars
+        
+        return jsonify(health_status), 200
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'timestamp': time.time()
+        }), 500
+
+def check_rag_availability():
+    """Check if RAG service is available and return appropriate response"""
+    if not current_app.config.get('ENABLE_RAG', False):
+        return jsonify({
+            'error': 'RAG service is disabled',
+            'message': 'RAG features are not enabled in this environment',
+            'code': 'RAG_DISABLED'
+        }), 503
+    
+    if not current_app.config.get('RAG_DEPENDENCIES_AVAILABLE', False):
+        return jsonify({
+            'error': 'RAG service unavailable',
+            'message': 'RAG dependencies are not installed or available',
+            'code': 'RAG_DEPENDENCIES_MISSING'
+        }), 503
+    
+    if not current_app.config.get('OPENAI_AVAILABLE', False):
+        return jsonify({
+            'error': 'OpenAI service unavailable',
+            'message': 'OpenAI API key is not configured',
+            'code': 'OPENAI_NOT_CONFIGURED'
+        }), 503
+    
+    return None  # RAG is available
+
 @api.route('/conversion/<job_id>/summarize', methods=['POST'])
 @api_key_required
 def summarize_conversion(job_id):
     """Generate a configurable executive summary for a conversion."""
+    
+    # Check RAG availability first
+    rag_check = check_rag_availability()
+    if rag_check:
+        return rag_check
+    
     try:
         # Validate request
         data = request.get_json()
@@ -100,63 +202,57 @@ def get_document_text(conversion):
         return None
 
 def generate_summary(text_content, length):
-    """Generate summary using OpenAI API."""
+    """Generate summary using OpenAI API"""
+    if not current_app.config.get('OPENAI_API_KEY'):
+        current_app.logger.error("OpenAI API key not configured")
+        return None
+    
     try:
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
-            current_app.logger.error("OpenAI API key not configured")
-            return None
+        import openai
+        openai.api_key = current_app.config['OPENAI_API_KEY']
         
-        # Create prompt based on length type
+        # Configure summary based on length
         if length == 'sentence':
-            prompt = f"Summarize the following document in one sentence:\n\n{text_content[:3000]}"
+            max_tokens = 50
+            prompt = f"Summarize this document in one sentence: {text_content[:2000]}"
         elif length == 'paragraph':
-            prompt = f"Summarize the following document in one paragraph:\n\n{text_content[:3000]}"
+            max_tokens = 150
+            prompt = f"Summarize this document in one paragraph: {text_content[:2000]}"
         else:  # bullets
-            prompt = f"Summarize the following document in 3-5 bullet points:\n\n{text_content[:3000]}"
+            max_tokens = 200
+            prompt = f"Summarize this document in 3-5 bullet points: {text_content[:2000]}"
         
-        headers = {
-            'Authorization': f"Bearer {api_key}",
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'model': 'gpt-4',
-            'messages': [
-                {'role': 'system', 'content': 'You are a helpful assistant that creates concise summaries.'},
-                {'role': 'user', 'content': prompt}
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that summarizes documents clearly and concisely."},
+                {"role": "user", "content": prompt}
             ],
-            'max_tokens': 500,
-            'temperature': 0.3
-        }
-        
-        response = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers=headers,
-            json=data,
-            timeout=30
+            max_tokens=max_tokens,
+            temperature=0.7
         )
         
-        if response.status_code == 200:
-            result = response.json()
-            return result['choices'][0]['message']['content'].strip()
-        else:
-            current_app.logger.error(f"OpenAI API error: {response.status_code} - {response.text}")
-            return None
-            
+        return response.choices[0].message.content.strip()
+        
     except Exception as e:
-        current_app.logger.error(f"Error calling LLM API: {e}")
+        current_app.logger.error(f"Error generating summary with OpenAI: {e}")
         return None
 
 @api.route('/conversion/<job_id>/query', methods=['POST'])
 @api_key_required
 def rag_query(job_id):
     """Query the document using RAG (Retrieval-Augmented Generation)."""
+    
+    # Check RAG availability first
+    rag_check = check_rag_availability()
+    if rag_check:
+        return rag_check
+    
     try:
         # Validate request
         data = request.get_json()
         if not data or 'question' not in data:
-            return jsonify({'error': 'Question is required'}), 400
+            return jsonify({'error': 'Question parameter is required'}), 400
         
         question = data['question']
         
@@ -173,16 +269,30 @@ def rag_query(job_id):
         if conversion.status != 'completed':
             return jsonify({'error': 'Conversion must be completed before querying'}), 400
         
-        # For now, return a simple response without RAG
-        # TODO: Implement full RAG functionality when dependencies are available
-        answer = f"Document query feature is being implemented. Your question was: {question}"
+        # Get document text content
+        document_text = get_document_text(conversion)
+        if not document_text:
+            return jsonify({'error': 'Document text not available'}), 400
+        
+        # Use RAG service to generate answer
+        from app.services.rag_service import get_rag_service
+        rag_service = get_rag_service()
+        
+        if not rag_service.is_available():
+            return jsonify({
+                'error': 'RAG service unavailable',
+                'message': 'RAG service is not properly initialized'
+            }), 503
+        
+        # Generate answer using RAG
+        answer = rag_service.generate_rag_answer(question, document_text)
+        if not answer:
+            return jsonify({'error': 'Failed to generate answer'}), 500
         
         return jsonify({
-            'job_id': job_id,
-            'question': question,
             'answer': answer,
-            'citations': [],
-            'relevant_chunks': []
+            'question': question,
+            'conversion_id': conversion.id
         }), 200
         
     except Exception as e:
@@ -192,17 +302,22 @@ def rag_query(job_id):
 @api.route('/metrics', methods=['GET'])
 @api_key_required
 def get_metrics():
-    """Get application metrics."""
+    """Get application metrics and health status."""
     try:
-        # Basic metrics for now
+        from app.services.rag_service import get_rag_service
+        rag_service = get_rag_service()
+        
         metrics = {
-            'status': 'healthy',
-            'timestamp': time.time(),
-            'version': '1.0.0'
+            'rag_service': rag_service.get_metrics(),
+            'app_config': {
+                'enable_rag': current_app.config.get('ENABLE_RAG', False),
+                'rag_dependencies_available': current_app.config.get('RAG_DEPENDENCIES_AVAILABLE', False),
+                'openai_available': current_app.config.get('OPENAI_AVAILABLE', False)
+            }
         }
         
         return jsonify(metrics), 200
         
     except Exception as e:
         current_app.logger.error(f"Error getting metrics: {e}")
-        return jsonify({'error': 'Internal server error'}), 500 
+        return jsonify({'error': 'Failed to get metrics'}), 500 

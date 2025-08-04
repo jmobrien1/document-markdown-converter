@@ -9,6 +9,7 @@ from collections import defaultdict
 import numpy as np
 from sqlalchemy.exc import SQLAlchemyError
 from app.models import RAGChunk, RAGQuery, db
+from flask import current_app
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class RAGService:
         self._metrics = defaultdict(int)
         self._last_health_check = None
         self._embeddings_list = []
+        self._dependencies_available = False
         
         # Environment variable configuration
         self.enabled = RAG_ENABLED
@@ -52,6 +54,10 @@ class RAGService:
             from annoy import AnnoyIndex
             from sentence_transformers import SentenceTransformer
             
+            # Test if imports work
+            logger.info("RAG dependencies imported successfully")
+            self._dependencies_available = True
+            
             # Initialize components
             self._tiktoken_encoder = tiktoken.encoding_for_model("gpt-3.5-turbo")
             self._sentence_transformer = SentenceTransformer(self.model_name)
@@ -71,10 +77,12 @@ class RAGService:
         except ImportError as e:
             logger.error(f"Failed to import RAG dependencies: {e}")
             self._metrics['import_errors'] += 1
+            self._dependencies_available = False
             return False
         except Exception as e:
             logger.error(f"Failed to initialize RAG service: {e}")
             self._metrics['init_errors'] += 1
+            self._dependencies_available = False
             return False
     
     def get_metrics(self) -> Dict[str, Any]:
@@ -88,6 +96,7 @@ class RAGService:
             'embeddings_generated': self._metrics['embeddings_generated'],
             'is_available': self.is_available(),
             'is_enabled': self.enabled,
+            'dependencies_available': self._dependencies_available,
             'model_name': self.model_name,
             'last_health_check': self._last_health_check
         }
@@ -322,11 +331,75 @@ class RAGService:
     
     def is_available(self) -> bool:
         """Check if RAG service is fully available"""
-        if not self.enabled:
-            return False
-            
-        # Try lazy initialization
         return self._lazy_init()
+    
+    def generate_rag_answer(self, question: str, document_text: str) -> Optional[str]:
+        """Generate an answer to a question using RAG on the provided document text"""
+        if not self.is_available():
+            logger.warning("RAG service not available for answer generation")
+            return None
+        
+        try:
+            # Chunk the document text
+            chunks = self.chunk_text(document_text)
+            if not chunks:
+                logger.warning("No chunks generated from document text")
+                return None
+            
+            # Store chunks temporarily for this query
+            temp_document_id = 999999  # Temporary ID
+            self.store_document_chunks(temp_document_id, chunks)
+            
+            # Search for relevant chunks
+            relevant_chunks = self.search_similar_chunks(question, top_k=3)
+            if not relevant_chunks:
+                logger.warning("No relevant chunks found for question")
+                return None
+            
+            # Combine relevant chunks for context
+            context = "\n\n".join([chunk['chunk_text'] for chunk in relevant_chunks])
+            
+            # Generate answer using OpenAI
+            if not current_app.config.get('OPENAI_API_KEY'):
+                logger.error("OpenAI API key not configured")
+                return None
+            
+            import openai
+            openai.api_key = current_app.config['OPENAI_API_KEY']
+            
+            prompt = f"""Based on the following document context, answer the question.
+
+Document Context:
+{context}
+
+Question: {question}
+
+Please provide a clear and accurate answer based only on the information in the document context."""
+
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that answers questions based on document content. Only use information from the provided document context."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
+                temperature=0.3
+            )
+            
+            answer = response.choices[0].message.content.strip()
+            
+            # Clean up temporary chunks
+            try:
+                RAGChunk.query.filter_by(document_id=temp_document_id).delete()
+                db.session.commit()
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary chunks: {e}")
+            
+            return answer
+            
+        except Exception as e:
+            logger.error(f"Error generating RAG answer: {e}")
+            return None
 
 def get_rag_service():
     """Factory function to get RAG service instance - only creates when needed"""
