@@ -96,7 +96,15 @@ def create_app(config_name=None):
         rag_dependencies_available = False
     
     # Check OpenAI
-    openai_available = bool(app.config.get('OPENAI_API_KEY'))
+    openai_key_from_config = app.config.get('OPENAI_API_KEY')
+    openai_key_from_env = os.environ.get('OPENAI_API_KEY')
+    app.logger.info(f"🔍 OpenAI API Key Debug:")
+    app.logger.info(f"   From config: {'SET' if openai_key_from_config else 'NOT SET'}")
+    app.logger.info(f"   From env: {'SET' if openai_key_from_env else 'NOT SET'}")
+    app.logger.info(f"   Config value: {openai_key_from_config[:10] + '...' if openai_key_from_config else 'None'}")
+    app.logger.info(f"   Env value: {openai_key_from_env[:10] + '...' if openai_key_from_env else 'None'}")
+    
+    openai_available = bool(openai_key_from_config or openai_key_from_env)
     if openai_available:
         app.logger.info("✅ OpenAI API key configured")
     else:
