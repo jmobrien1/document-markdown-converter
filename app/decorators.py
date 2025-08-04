@@ -1,7 +1,7 @@
 from functools import wraps
 from flask_login import current_user
 from flask import abort, request, jsonify, g
-from app.models import User
+from app.models import User, db
 
 
 def admin_required(f):
@@ -14,25 +14,28 @@ def admin_required(f):
 
 
 def api_key_required(f):
-    """Decorator to require valid API key and Pro access."""
+    """
+    Hybrid authentication decorator that accepts either:
+    1. X-API-Key header (for external API usage)
+    2. Session-based authentication (for frontend usage)
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Allow CORS preflight requests
-        if request.method == 'OPTIONS':
-            return f(*args, **kwargs)
-
+        # Try API key authentication first
         api_key = request.headers.get('X-API-Key')
-        if not api_key:
-            return jsonify({'error': 'API key is missing'}), 401
-
-        user = User.query.filter_by(api_key=api_key).first()
-        if not user:
-            return jsonify({'error': 'Invalid API key'}), 401
-
-        # Check if user has Pro access (either premium or on trial)
-        if not user.has_pro_access:
-            return jsonify({'error': 'Pro access required. Please upgrade to Pro or check your trial status.'}), 403
-
-        g.current_user = user
-        return f(*args, **kwargs)
+        if api_key:
+            user = User.query.filter_by(api_key=api_key).first()
+            if user and user.has_pro_access:
+                g.current_user = user
+                return f(*args, **kwargs)
+            else:
+                return jsonify({'error': 'Invalid or expired API key'}), 401
+        
+        # Fallback to session-based authentication
+        if current_user.is_authenticated and current_user.has_pro_access:
+            g.current_user = current_user
+            return f(*args, **kwargs)
+        else:
+            return jsonify({'error': 'Authentication required. Please log in or provide a valid API key.'}), 401
+    
     return decorated_function 
