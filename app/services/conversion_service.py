@@ -323,24 +323,25 @@ class ConversionService:
                 # Process document for RAG (citation-backed Q&A)
                 current_app.logger.info("11. Starting RAG processing...")
                 try:
-                    from app.services.rag_service import get_rag_service
-                    rag_service = get_rag_service()
+                    # from app.services.rag_service import get_rag_service
+                    # rag_service = get_rag_service()
                     
                     # Get document text for RAG processing
                     document_text = self._get_document_text_for_rag(conversion)
-                    if document_text and rag_service and rag_service.is_available():
-                        # Chunk the text and store chunks
-                        chunks = rag_service.chunk_text(document_text)
-                        if chunks:
-                            rag_success = rag_service.store_document_chunks(conversion.id, chunks)
-                            if rag_success:
-                                current_app.logger.info("11. RAG processing completed ✓")
-                            else:
-                                current_app.logger.warning("11. RAG processing failed, but conversion continues")
-                        else:
-                            current_app.logger.warning("11. No chunks created for RAG processing")
-                    else:
-                        current_app.logger.warning("11. No document text available or RAG service unavailable")
+                    # if document_text and rag_service and rag_service.is_available():
+                    #     # Chunk the text and store chunks
+                    #     chunks = rag_service.chunk_text(document_text)
+                    #     if chunks:
+                    #         rag_success = rag_service.store_document_chunks(conversion.id, chunks)
+                    #         if rag_success:
+                    #             current_app.logger.info("11. RAG processing completed ✓")
+                    #         else:
+                    #             current_app.logger.warning("11. RAG processing failed, but conversion continues")
+                    #     else:
+                    #         current_app.logger.warning("11. No chunks created for RAG processing")
+                    # else:
+                    #     current_app.logger.warning("11. No document text available or RAG service unavailable")
+                    current_app.logger.info("11. RAG processing disabled for now")
                 except Exception as rag_error:
                     current_app.logger.warning(f"11. RAG processing error (non-critical): {rag_error}")
                 

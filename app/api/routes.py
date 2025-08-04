@@ -159,15 +159,16 @@ def health_check():
         
         # Check RAG service status
         try:
-            from app.services.rag_service import get_rag_service
-            rag_service = get_rag_service()
-            if rag_service:
-                rag_available = rag_service.is_available()
-                health_status['services']['rag_service'] = 'healthy' if rag_available else 'unavailable'
-                if not rag_available:
-                    health_status['status'] = 'degraded'
-            else:
-                health_status['services']['rag_service'] = 'disabled'
+            # from app.services.rag_service import get_rag_service
+            # rag_service = get_rag_service()
+            # if rag_service:
+            #     rag_available = rag_service.is_available()
+            #     health_status['services']['rag_service'] = 'healthy' if rag_available else 'unavailable'
+            #     if not rag_available:
+            #         health_status['status'] = 'degraded'
+            # else:
+            #     health_status['services']['rag_service'] = 'disabled'
+            health_status['services']['rag_service'] = 'disabled' # Commented out RAG service
         except Exception as e:
             health_status['services']['rag_service'] = 'error'
             health_status['status'] = 'degraded'
@@ -497,12 +498,12 @@ def rag_query(job_id):
             return jsonify({'error': 'Conversion must be completed before querying'}), 400
 
         # Import RAG service only when needed
-        from app.services.rag_service import get_rag_service
-        rag_service = get_rag_service()
+        # from app.services.rag_service import get_rag_service
+        # rag_service = get_rag_service()
         
         # Check if RAG service is available
-        if not rag_service or not rag_service.is_available():
-            return jsonify({'error': 'RAG service is not available. Please try again later.'}), 503
+        # if not rag_service or not rag_service.is_available():
+        #     return jsonify({'error': 'RAG service is not available. Please try again later.'}), 503
 
         # Get document text for processing
         document_text = conversion.extracted_text
@@ -510,42 +511,42 @@ def rag_query(job_id):
             return jsonify({'error': 'No document text available for querying'}), 400
 
         # Process document through RAG pipeline
-        chunks = rag_service.chunk_text(document_text)
-        if not chunks:
-            return jsonify({'error': 'Failed to process document text'}), 500
+        # chunks = rag_service.chunk_text(document_text)
+        # if not chunks:
+        #     return jsonify({'error': 'Failed to process document text'}), 500
 
         # Store chunks in database
-        if not rag_service.store_document_chunks(conversion.id, chunks):
-            return jsonify({'error': 'Failed to store document chunks'}), 500
+        # if not rag_service.store_document_chunks(conversion.id, chunks):
+        #     return jsonify({'error': 'Failed to store document chunks'}), 500
 
         # Search for relevant chunks
-        relevant_chunks = rag_service.search_similar_chunks(question, top_k=5)
-        if not relevant_chunks:
-            return jsonify({'error': 'No relevant information found in document'}), 404
+        # relevant_chunks = rag_service.search_similar_chunks(question, top_k=5)
+        # if not relevant_chunks:
+        #     return jsonify({'error': 'No relevant information found in document'}), 404
 
         # Generate answer using LLM
-        answer = generate_rag_answer(question, relevant_chunks)
+        answer = generate_rag_answer(question, []) # Commented out RAG service
         if not answer:
             return jsonify({'error': 'Failed to generate answer'}), 500
 
         # Format citations
         citations = []
-        for chunk in relevant_chunks:
-            citations.append({
-                'chunk_id': chunk['chunk_id'],
-                'text': chunk['chunk_text'][:150] + '...',
-                'score': chunk['similarity_score']
-            })
+        # for chunk in relevant_chunks:
+        #     citations.append({
+        #         'chunk_id': chunk['chunk_id'],
+        #         'text': chunk['chunk_text'][:150] + '...',
+        #         'score': chunk['similarity_score']
+        #     })
 
         # Save query for analytics
-        rag_service.save_query(question, relevant_chunks, user.id)
+        # rag_service.save_query(question, relevant_chunks, user.id)
 
         return jsonify({
             'job_id': job_id,
             'question': question,
             'answer': answer,
             'citations': citations,
-            'relevant_chunks': relevant_chunks
+            'relevant_chunks': [] # Commented out RAG service
         }), 200
 
     except Exception as e:
@@ -641,17 +642,17 @@ def get_document_text(conversion):
 def get_metrics():
     """Get application metrics including RAG service metrics"""
     try:
-        from app.services.rag_service import get_rag_service
-        rag_service = get_rag_service()
+        # from app.services.rag_service import get_rag_service
+        # rag_service = get_rag_service()
         
-        if rag_service:
-            rag_metrics = rag_service.get_metrics()
-        else:
-            rag_metrics = {
-                'is_available': False,
-                'is_enabled': False,
-                'error': 'RAG service disabled'
-            }
+        # if rag_service:
+        #     rag_metrics = rag_service.get_metrics()
+        # else:
+        rag_metrics = {
+            'is_available': False,
+            'is_enabled': False,
+            'error': 'RAG service disabled'
+        }
             
         metrics = {
             'timestamp': time.time(),
