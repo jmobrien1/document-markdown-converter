@@ -105,7 +105,8 @@ def create_app(config_name=None):
     # Check database
     try:
         with app.app_context():
-            db.session.execute('SELECT 1')
+            from sqlalchemy import text
+            db.session.execute(text('SELECT 1'))
         app.logger.info("✅ Database connection available")
     except Exception as e:
         app.logger.warning(f"⚠️ Database connection failed: {e}")
