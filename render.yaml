@@ -11,9 +11,10 @@ services:
     name: mdraft-app
     env: python
     plan: starter
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
     buildCommand: |
-      pip install -r requirements.txt
-      python install_ml_deps.py
+      docker build --build-arg ENABLE_RAG=true -f Dockerfile.render -t mdraft-app .
     startCommand: gunicorn run:app
     envVars:
       - key: FLASK_ENV
@@ -62,9 +63,10 @@ services:
     name: mdraft-worker
     env: python
     plan: starter
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
     buildCommand: |
-      pip install -r requirements-worker.txt
-      python install_ml_deps.py
+      docker build --build-arg ENABLE_RAG=true -f Dockerfile.render -t mdraft-worker .
     startCommand: celery -A celery_worker.celery worker --loglevel=info
     envVars:
       - key: FLASK_ENV

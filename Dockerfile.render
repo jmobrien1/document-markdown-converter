@@ -14,5 +14,17 @@ RUN apt-get update && apt-get install -y build-essential
 # Upgrade pip to get the latest wheel support
 RUN pip install --upgrade pip setuptools wheel
 
+# Install core dependencies first
+RUN pip install -r requirements-web.txt
+
+# Install ML dependencies conditionally based on build argument
+ARG ENABLE_RAG=false
+RUN if [ "$ENABLE_RAG" = "true" ]; then \
+        echo "Installing ML dependencies..."; \
+        pip install -r requirements-ml.txt; \
+    else \
+        echo "Skipping ML dependencies (ENABLE_RAG=false)"; \
+    fi
+
 # Copy the rest of your application code into the container
 COPY . . 
