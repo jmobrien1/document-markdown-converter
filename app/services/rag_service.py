@@ -328,16 +328,6 @@ class RAGService:
         # Try lazy initialization
         return self._lazy_init()
 
-# Create global instance only if RAG is enabled
-if RAG_ENABLED:
-    try:
-        rag_service = RAGService()
-    except Exception as e:
-        logger.error(f"Failed to create RAG service: {e}")
-        rag_service = None
-else:
-    rag_service = None
-
 def get_rag_service():
-    """Get RAG service instance - returns None if disabled"""
-    return rag_service 
+    """Factory function to get RAG service instance - only creates when needed"""
+    return RAGService() 
