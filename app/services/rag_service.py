@@ -401,13 +401,20 @@ class RAGService:
             # Combine relevant chunks for context
             context = "\n\n".join([chunk['chunk_text'] for chunk in relevant_chunks])
             
-            # Generate answer using OpenAI
-            if not current_app.config.get('OPENAI_API_KEY'):
-                logger.error("OpenAI API key not configured")
+            # Get OpenAI API key from environment (not Flask config)
+            openai_api_key = os.environ.get('OPENAI_API_KEY')
+            if not openai_api_key:
+                logger.error("OpenAI API key not found in environment variables")
+                # Debug: show what environment variables we do have
+                env_keys = [k for k in os.environ.keys() if 'API' in k or 'OPENAI' in k]
+                logger.error(f"Available API-related env vars: {env_keys}")
                 return None
             
+            logger.info(f"✅ OpenAI key loaded: {openai_api_key[:10]}...")
+            
+            # Use OpenAI client with environment variable
             import openai
-            openai.api_key = current_app.config['OPENAI_API_KEY']
+            client = openai.OpenAI(api_key=openai_api_key)
             
             prompt = f"""Based on the following document context, answer the question.
 
@@ -418,7 +425,7 @@ Question: {question}
 
 Please provide a clear and accurate answer based only on the information in the document context."""
 
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that answers questions based on document content. Only use information from the provided document context."},
