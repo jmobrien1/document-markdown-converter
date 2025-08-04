@@ -1839,9 +1839,9 @@
                             const response = await fetch(`/api/v1/conversion/${jobId}/summarize`, {
                                 method: 'POST',
                                 headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-API-Key': 'test-api-key' // For development
+                                    'Content-Type': 'application/json'
                                 },
+                                credentials: 'include', // Include session cookies
                                 body: JSON.stringify({ length: length })
                             });
                             
@@ -1895,9 +1895,9 @@
                             const response = await fetch(`/api/v1/conversion/${jobId}/query`, {
                                 method: 'POST',
                                 headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-API-Key': 'test-api-key' // For development
+                                    'Content-Type': 'application/json'
                                 },
+                                credentials: 'include', // Include session cookies
                                 body: JSON.stringify({ question: question })
                             });
                             
