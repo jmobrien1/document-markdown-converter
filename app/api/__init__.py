@@ -1,5 +1,8 @@
-from .routes import api
-from app.decorators import api_key_required
+# Lazy import to avoid circular dependencies
+def get_api_blueprint():
+    from .routes import api
+    return api
 
 # Re-export for backward compatibility
-__all__ = ['api', 'api_key_required'] 
+from app.decorators import api_key_required
+__all__ = ['get_api_blueprint', 'api_key_required'] 

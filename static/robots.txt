@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Disallow API endpoints for security
+Disallow: /api/
+Disallow: /admin/
+Disallow: /auth/
+
+# Allow main pages
+Allow: /
+Allow: /uploads/ 
