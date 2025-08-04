@@ -44,6 +44,9 @@ services:
         sync: false
       - key: MAIL_PASSWORD
         sync: false
+      # OpenAI API for LLM features
+      - key: OPENAI_API_KEY
+        sync: false
       # RAG Feature Environment Variables
       - key: ENABLE_RAG
         value: true
@@ -91,6 +94,9 @@ services:
       - key: MAIL_USERNAME
         sync: false
       - key: MAIL_PASSWORD
+        sync: false
+      # OpenAI API for LLM features
+      - key: OPENAI_API_KEY
         sync: false
       # RAG Feature Environment Variables
       - key: ENABLE_RAG
