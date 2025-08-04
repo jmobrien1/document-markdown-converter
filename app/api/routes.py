@@ -523,8 +523,10 @@ def rag_query(job_id):
         if not relevant_chunks:
             return jsonify({'error': 'No relevant information found in document'}), 404
 
-        # Generate answer using LLM (simplified for now)
-        answer = f"Based on the document, here's what I found: {relevant_chunks[0]['chunk_text'][:200]}..."
+        # Generate answer using LLM
+        answer = generate_rag_answer(question, relevant_chunks)
+        if not answer:
+            return jsonify({'error': 'Failed to generate answer'}), 500
 
         # Format citations
         citations = []
@@ -549,6 +551,63 @@ def rag_query(job_id):
     except Exception as e:
         current_app.logger.error(f"RAG query API error: {e}")
         return jsonify({'error': 'Internal server error'}), 500
+
+def generate_rag_answer(question, relevant_chunks):
+    """Generate answer using GPT-4 based on relevant document chunks."""
+    try:
+        # Use OpenAI API for RAG Q&A
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            current_app.logger.error("OpenAI API key not configured for RAG Q&A")
+            return None
+        
+        # Prepare context from relevant chunks
+        context = "\n\n".join([chunk['chunk_text'] for chunk in relevant_chunks])
+        
+        # Construct RAG prompt
+        prompt = f"""Based on the following document excerpts, please answer the user's question. 
+        If the information is not available in the provided excerpts, say so clearly.
+        
+        Document excerpts:
+        {context}
+        
+        Question: {question}
+        
+        Please provide a clear, accurate answer based only on the information in the document excerpts."""
+        
+        # Make API call to OpenAI
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        data = {
+            'model': 'gpt-4',
+            'messages': [
+                {'role': 'system', 'content': 'You are a helpful assistant that answers questions based on provided document excerpts. Always cite specific parts of the text when possible.'},
+                {'role': 'user', 'content': prompt}
+            ],
+            'max_tokens': 1000,
+            'temperature': 0.3
+        }
+        
+        response = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result['choices'][0]['message']['content'].strip()
+        else:
+            current_app.logger.error(f"OpenAI API error for RAG Q&A: {response.status_code} - {response.text}")
+            return None
+            
+    except Exception as e:
+        current_app.logger.error(f"Error calling LLM API for RAG Q&A: {e}")
+        return None
 
 def get_document_text(conversion):
     """Retrieve the document text content for RAG query."""
