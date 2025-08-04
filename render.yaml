@@ -13,7 +13,7 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
-    buildCommand: docker build -f Dockerfile.render -t mdraft-app .
+    buildCommand: docker build -f Dockerfile.render -t mdraft-app . --no-cache
     startCommand: gunicorn run:app
     envVars:
       - key: FLASK_ENV
@@ -64,7 +64,7 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
-    buildCommand: docker build -f Dockerfile.render -t mdraft-worker .
+    buildCommand: docker build -f Dockerfile.render -t mdraft-worker . --no-cache
     startCommand: celery -A celery_worker.celery worker --loglevel=info
     envVars:
       - key: FLASK_ENV
