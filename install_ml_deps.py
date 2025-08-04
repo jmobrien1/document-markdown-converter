@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script to install ML dependencies when RAG is enabled
-Enhanced version with better error handling and logging
+Updated to use consolidated requirements.txt
 """
 import os
 import subprocess
@@ -29,26 +29,22 @@ def install_ml_dependencies():
     
     print("✅ RAG is enabled (ENABLE_RAG=true). Installing ML dependencies...")
     
-    # Check if requirements-ml.txt exists
-    if not os.path.exists('requirements-ml.txt'):
-        print("❌ requirements-ml.txt not found. Creating it...")
-        create_ml_requirements()
-    
-    # Verify requirements-ml.txt exists and has content
-    if not os.path.exists('requirements-ml.txt'):
-        print("❌ Failed to create requirements-ml.txt")
+    # Check if requirements.txt exists
+    if not os.path.exists('requirements.txt'):
+        print("❌ requirements.txt not found.")
         return False
     
-    with open('requirements-ml.txt', 'r') as f:
+    # Verify requirements.txt exists and has content
+    with open('requirements.txt', 'r') as f:
         content = f.read()
-        print(f"📋 requirements-ml.txt content ({len(content)} chars):")
+        print(f"📋 requirements.txt content ({len(content)} chars):")
         print(content)
     
     try:
-        print("📦 Installing ML dependencies from requirements-ml.txt...")
+        print("📦 Installing all dependencies from requirements.txt...")
         
         # Use subprocess with explicit python path
-        cmd = [sys.executable, '-m', 'pip', 'install', '-r', 'requirements-ml.txt', '--verbose']
+        cmd = [sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt', '--verbose']
         print(f"🚀 Running command: {' '.join(cmd)}")
         
         # Run with timeout and capture output
@@ -70,13 +66,13 @@ def install_ml_dependencies():
             print(result.stderr)
         
         if result.returncode == 0:
-            print("✅ ML dependencies installed successfully!")
+            print("✅ All dependencies installed successfully!")
             
             # Verify key packages are installed
             verify_installations()
             return True
         else:
-            print(f"❌ Failed to install ML dependencies (exit code: {result.returncode})")
+            print(f"❌ Failed to install dependencies (exit code: {result.returncode})")
             print("🔄 RAG service will be disabled due to missing dependencies.")
             return False
             
@@ -84,14 +80,14 @@ def install_ml_dependencies():
         print("❌ Installation timed out after 5 minutes")
         return False
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install ML dependencies: {e}")
+        print(f"❌ Failed to install dependencies: {e}")
         print("🔄 RAG service will be disabled due to missing dependencies.")
         return False
     except FileNotFoundError:
-        print("❌ requirements-ml.txt not found. RAG service will be disabled.")
+        print("❌ requirements.txt not found. RAG service will be disabled.")
         return False
     except Exception as e:
-        print(f"❌ Unexpected error installing ML dependencies: {e}")
+        print(f"❌ Unexpected error installing dependencies: {e}")
         print("🔄 RAG service will be disabled due to missing dependencies.")
         traceback.print_exc()
         return False
@@ -115,28 +111,6 @@ def verify_installations():
             print(f"✅ {package} - OK")
         except ImportError:
             print(f"❌ {package} - FAILED")
-
-def create_ml_requirements():
-    """Create requirements-ml.txt if it doesn't exist"""
-    ml_requirements = """# ML/RAG Pipeline Dependencies - Only install when ENABLE_RAG=true
-tiktoken==0.5.2
-sentence-transformers==2.2.2
-numpy==1.26.4
-scikit-learn==1.3.2
-torch==2.1.2
-transformers==4.36.2
-huggingface-hub==0.20.3
-
-# Vector similarity search alternative (lighter weight)
-annoy==1.17.3
-"""
-    
-    try:
-        with open('requirements-ml.txt', 'w') as f:
-            f.write(ml_requirements)
-        print("✅ Created requirements-ml.txt")
-    except Exception as e:
-        print(f"❌ Failed to create requirements-ml.txt: {e}")
 
 if __name__ == '__main__':
     print("🚀 Starting ML Dependencies Installation")
