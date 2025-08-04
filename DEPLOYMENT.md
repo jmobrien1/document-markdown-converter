@@ -1,67 +1,93 @@
 # Deployment Guide
 
-## Environment Variables for Production
+## Environment Variables
 
-### Core Application
+### Main Application (Web Service)
+
 ```bash
-# Flask Configuration
+# Core Flask
 FLASK_ENV=production
-SECRET_KEY=your-secure-secret-key-here
-LOG_LEVEL=INFO
+SECRET_KEY=your-secret-key
 
 # Database
-DATABASE_URL=postgresql://user:password@host:port/database
+DATABASE_URL=postgresql://username:password@host:port/database
 
-# Redis/Celery
-CELERY_BROKER_URL=redis://host:port/0
-CELERY_RESULT_BACKEND=redis://host:port/0
-REDIS_URL=redis://host:port/0
-```
+# Celery and Redis
+CELERY_BROKER_URL=redis://username:password@host:port
+CELERY_RESULT_BACKEND=redis://username:password@host:port
 
-### Google Cloud Services
-```bash
-# Google Cloud Storage
+# Google Cloud
+GOOGLE_APPLICATION_CREDENTIALS={"type":"service_account",...}
+GOOGLE_CLOUD_PROJECT=your-project-id
 GCS_BUCKET_NAME=your-bucket-name
-GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account.json
-
-# Google Document AI
 DOCAI_PROCESSOR_ID=your-processor-id
-```
+DOCAI_PROCESSOR_REGION=us
 
-### Payment Processing
-```bash
-# Stripe
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_PUBLISHABLE_KEY=pk_live_...
-```
-
-### Email Configuration
-```bash
-# Email (optional)
-MAIL_SERVER=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USE_TLS=true
-MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-app-password
-```
-
-### RAG Service Configuration
-```bash
-# RAG Service (optional - can be disabled)
+# RAG Service (Optional)
 ENABLE_RAG=true
 RAG_MODEL=all-MiniLM-L6-v2
 RAG_MAX_TOKENS=500
 RAG_CHUNK_OVERLAP=50
+
+# Stripe
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+STRIPE_PRICE_ID=price_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Email
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_DEFAULT_SENDER=your-email@gmail.com
 ```
 
-## Vector Search Library
+### Celery Worker Environment Variables
 
-The application uses **Annoy** (Approximate Nearest Neighbors Oh Yeah) for vector similarity search instead of FAISS. This choice was made because:
+**The Celery worker needs ALL the same environment variables as the main application:**
 
-- **Deployment-friendly**: Annoy has fewer build dependencies and works better on platforms like Render
-- **Lighter weight**: Smaller memory footprint and faster installation
-- **Good performance**: Provides excellent approximate nearest neighbor search for RAG applications
-- **No SWIG dependency**: Avoids the SWIG build issues that commonly occur with FAISS
+```bash
+# Database (Required for worker to access database)
+DATABASE_URL=postgresql://username:password@host:port/database
+
+# Celery and Redis (Required for worker to connect)
+CELERY_BROKER_URL=redis://username:password@host:port
+CELERY_RESULT_BACKEND=redis://username:password@host:port
+
+# Google Cloud (Required for file processing)
+GOOGLE_APPLICATION_CREDENTIALS={"type":"service_account",...}
+GOOGLE_CLOUD_PROJECT=your-project-id
+GCS_BUCKET_NAME=your-bucket-name
+DOCAI_PROCESSOR_ID=your-processor-id
+DOCAI_PROCESSOR_REGION=us
+
+# RAG Service (Required if ENABLE_RAG=true)
+ENABLE_RAG=true
+RAG_MODEL=all-MiniLM-L6-v2
+RAG_MAX_TOKENS=500
+RAG_CHUNK_OVERLAP=50
+
+# Stripe (Required for payment processing)
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+STRIPE_PRICE_ID=price_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Email (Required for notifications)
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_DEFAULT_SENDER=your-email@gmail.com
+
+# Flask (Required for app context)
+FLASK_ENV=production
+SECRET_KEY=your-secret-key
+```
+
+**Important Notes:**
+- The Celery worker needs access to the database to process conversions
+- The worker needs Google Cloud credentials to upload/download files
+- If RAG is enabled, the worker needs RAG environment variables
+- The worker needs Stripe credentials for payment processing
+- Email credentials are needed for user notifications
 
 ## Verification Steps
 
@@ -70,102 +96,56 @@ The application uses **Annoy** (Approximate Nearest Neighbors Oh Yeah) for vecto
 curl https://your-app.onrender.com/api/v1/health
 ```
 
-Expected response:
-```json
-{
-  "status": "healthy",
-  "timestamp": 1234567890.123,
-  "version": "1.0.0",
-  "services": {
-    "database": "healthy",
-    "celery": "healthy",
-    "rag_service": "healthy"
-  }
-}
-```
+### 2. Test Core Functionality
+- Upload a document
+- Check conversion status
+- Download results
 
-### 2. Metrics Check
+### 3. Test RAG Features (if enabled)
 ```bash
-curl -H "X-API-Key: your-api-key" https://your-app.onrender.com/api/v1/metrics
+# Test RAG query
+curl -X POST https://your-app.onrender.com/api/v1/conversion/{job_id}/query \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is this document about?"}'
 ```
 
-Expected response:
-```json
-{
-  "timestamp": 1234567890.123,
-  "rag_service": {
-    "initializations": 1,
-    "import_errors": 0,
-    "init_errors": 0,
-    "queries_processed": 0,
-    "chunks_created": 0,
-    "embeddings_generated": 0,
-    "is_available": true,
-    "is_enabled": true,
-    "model_name": "all-MiniLM-L6-v2",
-    "last_health_check": 1234567890.123
-  },
-  "database": {
-    "connections": "healthy"
-  }
-}
+### 4. Check Metrics
+```bash
+curl https://your-app.onrender.com/api/v1/metrics \
+  -H "X-API-Key: your-api-key"
 ```
-
-### 3. Core Functionality Test
-1. Upload a document
-2. Verify conversion completes
-3. Check PDF viewer works
-4. Test export functionality
-
-### 4. RAG Functionality Test (if enabled)
-1. Complete a document conversion
-2. Ask a question about the document
-3. Verify answer is generated with citations
 
 ## Troubleshooting
 
-### Application Won't Start
-- Check logs for `ModuleNotFoundError`
-- Verify all required environment variables are set
-- Ensure database is accessible
+### Common Issues
 
-### RAG Service Issues
-- Check `ENABLE_RAG` environment variable
-- Verify ML dependencies are installed
-- Check logs for import errors
-- Service will fallback to text search if ML unavailable
+1. **RAG Service Not Available**
+   - Check `ENABLE_RAG=true` in both web and worker environments
+   - Verify ML dependencies are installed
+   - Check logs for import errors
 
-### Database Issues
-- Verify `DATABASE_URL` is correct
-- Check database migrations have been run
-- Ensure database is accessible from Render
+2. **Database Connection Issues**
+   - Verify `DATABASE_URL` in both environments
+   - Check database is accessible from Render
 
-### Celery Issues
-- Verify Redis connection
-- Check Celery worker is running
-- Ensure `CELERY_BROKER_URL` is set correctly
+3. **Google Cloud Issues**
+   - Verify `GOOGLE_APPLICATION_CREDENTIALS` JSON is valid
+   - Check service account has proper permissions
+   - Verify bucket exists and is accessible
 
-### Vector Search Issues
-- Annoy should install without issues on most platforms
-- If Annoy fails, the system will fallback to text search
-- Check logs for any Annoy-specific errors
+4. **Celery Worker Issues**
+   - Check Redis connection in both environments
+   - Verify worker has all required environment variables
+   - Check worker logs for import errors
 
-## Monitoring
+### Log Analysis
 
-### Health Endpoints
-- `/api/v1/health` - Overall application health
-- `/api/v1/metrics` - Detailed service metrics
-
-### Log Levels
-- `DEBUG` - Development (verbose)
-- `INFO` - Production (recommended)
-- `WARNING` - Minimal logging
-- `ERROR` - Errors only
-
-### Key Metrics to Monitor
-- RAG service availability
-- Database connection health
-- Celery worker status
-- Error rates
-- Response times
-- Vector search performance 
+```bash
+# Check web service logs
+# Check worker logs
+# Look for specific error messages:
+# - "ModuleNotFoundError" → Missing dependencies
+# - "Connection refused" → Database/Redis issues
+# - "Permission denied" → Google Cloud credential issues
+``` 

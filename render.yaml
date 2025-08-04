@@ -11,7 +11,9 @@ services:
     name: mdraft-app
     env: python
     plan: starter
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install -r requirements.txt
+      python install_ml_deps.py
     startCommand: gunicorn run:app
     envVars:
       - key: FLASK_ENV
@@ -43,25 +45,23 @@ services:
       - key: MAIL_PASSWORD
         sync: false
       # RAG Feature Environment Variables
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: VECTOR_STORAGE_PATH
-        value: /opt/render/project/src/vector_storage
-      - key: SENTENCE_TRANSFORMER_MODEL
+      - key: ENABLE_RAG
+        value: true
+      - key: RAG_MODEL
         value: all-MiniLM-L6-v2
-      - key: CHUNK_SIZE
-        value: 256
-      - key: CHUNK_OVERLAP
-        value: 64
-      - key: TOP_K_CHUNKS
-        value: 5
+      - key: RAG_MAX_TOKENS
+        value: 500
+      - key: RAG_CHUNK_OVERLAP
+        value: 50
 
   # The Celery background worker
   - type: worker
     name: mdraft-worker
     env: python
     plan: starter
-    buildCommand: pip install -r requirements-worker.txt
+    buildCommand: |
+      pip install -r requirements-worker.txt
+      python install_ml_deps.py
     startCommand: celery -A celery_worker.celery worker --loglevel=info
     envVars:
       - key: FLASK_ENV
@@ -93,18 +93,14 @@ services:
       - key: MAIL_PASSWORD
         sync: false
       # RAG Feature Environment Variables
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: VECTOR_STORAGE_PATH
-        value: /opt/render/project/src/vector_storage
-      - key: SENTENCE_TRANSFORMER_MODEL
+      - key: ENABLE_RAG
+        value: true
+      - key: RAG_MODEL
         value: all-MiniLM-L6-v2
-      - key: CHUNK_SIZE
-        value: 256
-      - key: CHUNK_OVERLAP
-        value: 64
-      - key: TOP_K_CHUNKS
-        value: 5
+      - key: RAG_MAX_TOKENS
+        value: 500
+      - key: RAG_CHUNK_OVERLAP
+        value: 50
 
   # Cron job for expiring trials
   - type: cron

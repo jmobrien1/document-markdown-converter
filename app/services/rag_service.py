@@ -35,12 +35,10 @@ class RAGService:
         
         logger.info(f"RAG Service initialized - Enabled: {self.enabled}, Model: {self.model_name}")
         
-        # Only initialize if enabled
-        if self.enabled:
-            self._initialize_dependencies()
+        # DO NOT initialize anything here - wait until first use
     
-    def _initialize_dependencies(self):
-        """Initialize heavy dependencies only if RAG is enabled"""
+    def _lazy_init(self):
+        """Initialize heavy dependencies only when needed"""
         if self._initialized:
             return True
             
@@ -49,7 +47,7 @@ class RAGService:
             return False
             
         try:
-            # Import heavy dependencies only when enabled
+            # Import heavy dependencies only when needed
             import tiktoken
             from annoy import AnnoyIndex
             from sentence_transformers import SentenceTransformer
@@ -126,7 +124,8 @@ class RAGService:
         max_tokens = max_tokens or self.max_tokens
         overlap = overlap or self.chunk_overlap
         
-        if not self._initialized:
+        # Try lazy initialization
+        if not self._lazy_init():
             # Fallback to simple character-based chunking
             chunk_size = max_tokens * 4
             chunks = []
@@ -159,7 +158,11 @@ class RAGService:
     
     def generate_embedding(self, text: str) -> Optional[np.ndarray]:
         """Generate embedding for text"""
-        if not self.enabled or not self._initialized:
+        if not self.enabled:
+            return None
+            
+        # Try lazy initialization
+        if not self._lazy_init():
             return None
             
         try:
@@ -182,11 +185,14 @@ class RAGService:
             chunk_objects = []
             embeddings_to_add = []
             
+            # Try lazy initialization for embeddings
+            can_generate_embeddings = self._lazy_init()
+            
             for i, chunk_text in enumerate(chunks):
                 embedding = None
                 embedding_bytes = None
                 
-                if self._initialized:
+                if can_generate_embeddings:
                     embedding = self.generate_embedding(chunk_text)
                     if embedding is not None:
                         embedding_bytes = embedding.tobytes()
@@ -203,7 +209,7 @@ class RAGService:
             db.session.bulk_save_objects(chunk_objects)
             db.session.commit()
             
-            if embeddings_to_add and self._initialized:
+            if embeddings_to_add and can_generate_embeddings:
                 start_index = len(self._embeddings_list)
                 for i, embedding in enumerate(embeddings_to_add):
                     self._annoy_index.add_item(start_index + i, embedding.tolist())
@@ -227,30 +233,36 @@ class RAGService:
         if not self.enabled:
             logger.warning("RAG service is disabled - falling back to text search")
             return self._fallback_text_search(query, top_k)
-        
-        if not self._initialized:
+            
+        # Try lazy initialization
+        if not self._lazy_init():
+            logger.warning("RAG service not available - falling back to text search")
             return self._fallback_text_search(query, top_k)
-        
+            
         try:
             query_embedding = self.generate_embedding(query)
             if query_embedding is None:
                 return self._fallback_text_search(query, top_k)
             
-            indices = self._annoy_index.get_nns_by_vector(query_embedding.tolist(), top_k, include_distances=True)
-            chunk_indices, distances = indices
+            # Search Annoy index
+            query_vector = query_embedding.tolist()
+            indices = self._annoy_index.get_nns_by_vector(query_vector, top_k, include_distances=True)
             
+            # Get corresponding chunks from database
             results = []
             chunks = RAGChunk.query.filter(RAGChunk.embedding.isnot(None)).all()
             
-            for i, (idx, distance) in enumerate(zip(chunk_indices, distances)):
+            for i, (idx, distance) in enumerate(zip(indices[0], indices[1])):
                 if idx < len(chunks):
                     chunk = chunks[idx]
-                    similarity_score = 1.0 - (distance / np.sqrt(len(query_embedding)))
+                    # Convert distance to similarity score (1 - distance)
+                    similarity_score = 1.0 - (distance / 2.0)  # Normalize to 0-1
+                    
                     results.append({
                         'chunk_id': chunk.id,
                         'document_id': chunk.document_id,
                         'chunk_text': chunk.chunk_text,
-                        'similarity_score': float(similarity_score),
+                        'similarity_score': similarity_score,
                         'chunk_index': chunk.chunk_index
                     })
             
@@ -310,8 +322,11 @@ class RAGService:
     
     def is_available(self) -> bool:
         """Check if RAG service is fully available"""
-        self._last_health_check = time.time()
-        return self.enabled and self._initialized
+        if not self.enabled:
+            return False
+            
+        # Try lazy initialization
+        return self._lazy_init()
 
 # Create global instance only if RAG is enabled
 if RAG_ENABLED:
