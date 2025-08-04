@@ -16,8 +16,8 @@ def admin_required(f):
 def api_key_required(f):
     """
     Hybrid authentication decorator that accepts either:
-    1. X-API-Key header (for external API usage)
-    2. Session-based authentication (for frontend usage)
+    1. X-API-Key header (for external API usage) - requires has_pro_access
+    2. Session-based authentication (for frontend usage) - allows any authenticated user
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -32,7 +32,7 @@ def api_key_required(f):
                 return jsonify({'error': 'Invalid or expired API key'}), 401
         
         # Fallback to session-based authentication
-        if current_user.is_authenticated and current_user.has_pro_access:
+        if current_user.is_authenticated:
             g.current_user = current_user
             return f(*args, **kwargs)
         else:
