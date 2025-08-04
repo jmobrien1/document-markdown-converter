@@ -39,6 +39,43 @@ class RAGService:
         
         # DO NOT initialize anything here - wait until first use
     
+    def _check_dependencies(self):
+        """Enhanced dependency checking with detailed diagnostics"""
+        missing_deps = []
+        import_errors = {}
+        
+        try:
+            import tiktoken
+            logger.info(f"tiktoken available: version {getattr(tiktoken, '__version__', 'unknown')}")
+        except ImportError as e:
+            missing_deps.append('tiktoken')
+            import_errors['tiktoken'] = str(e)
+            logger.error(f"tiktoken import failed: {e}")
+        
+        try:
+            from annoy import AnnoyIndex
+            logger.info("annoy available")
+        except ImportError as e:
+            missing_deps.append('annoy')
+            import_errors['annoy'] = str(e)
+            logger.error(f"annoy import failed: {e}")
+        
+        try:
+            from sentence_transformers import SentenceTransformer
+            logger.info("sentence_transformers available")
+        except ImportError as e:
+            missing_deps.append('sentence_transformers')
+            import_errors['sentence_transformers'] = str(e)
+            logger.error(f"sentence_transformers import failed: {e}")
+        
+        # Check if we have enough dependencies to run
+        if len(missing_deps) == 0:
+            logger.info("All RAG dependencies available")
+            return True
+        else:
+            logger.warning(f"Missing RAG dependencies: {missing_deps}")
+            return False
+
     def _lazy_init(self):
         """Initialize heavy dependencies only when needed"""
         if self._initialized:
@@ -46,6 +83,11 @@ class RAGService:
             
         if not self.enabled:
             logger.info("RAG service is disabled via ENABLE_RAG environment variable")
+            return False
+            
+        # First check if dependencies are available
+        if not self._check_dependencies():
+            self._dependencies_available = False
             return False
             
         try:

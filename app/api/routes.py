@@ -57,7 +57,8 @@ def health_check():
         
         # Check database connection
         try:
-            db.session.execute('SELECT 1')
+            from sqlalchemy import text
+            db.session.execute(text('SELECT 1'))
             health_status['services']['database'] = {'status': 'connected'}
         except Exception as e:
             health_status['services']['database'] = {'status': 'error', 'error': str(e)}
@@ -321,3 +322,63 @@ def get_metrics():
     except Exception as e:
         current_app.logger.error(f"Error getting metrics: {e}")
         return jsonify({'error': 'Failed to get metrics'}), 500 
+
+@api.route('/debug/dependencies', methods=['GET'])
+def debug_dependencies():
+    """Diagnostic endpoint to check dependency availability in production"""
+    import sys
+    import os
+    
+    diagnostics = {
+        'python_version': sys.version,
+        'python_path': sys.path[:3],  # First 3 paths
+        'environment': os.environ.get('FLASK_ENV', 'unknown'),
+        'dependencies': {}
+    }
+    
+    # Check each dependency individually
+    dependencies_to_check = [
+        'tiktoken', 'faiss', 'sentence_transformers', 
+        'transformers', 'openai', 'numpy', 'torch'
+    ]
+    
+    for dep in dependencies_to_check:
+        try:
+            module = __import__(dep)
+            diagnostics['dependencies'][dep] = {
+                'available': True,
+                'version': getattr(module, '__version__', 'unknown'),
+                'location': getattr(module, '__file__', 'unknown')
+            }
+        except ImportError as e:
+            diagnostics['dependencies'][dep] = {
+                'available': False,
+                'error': str(e)
+            }
+    
+    return jsonify(diagnostics)
+
+@api.route('/debug/packages', methods=['GET'])
+def debug_packages():
+    """Show installed packages in production"""
+    import subprocess
+    import sys
+    
+    try:
+        result = subprocess.run([sys.executable, '-m', 'pip', 'list'], 
+                              capture_output=True, text=True)
+        packages = result.stdout
+        
+        # Look for our specific packages
+        relevant_packages = []
+        for line in packages.split('\n'):
+            if any(pkg in line.lower() for pkg in ['tiktoken', 'faiss', 'transformers', 'sentence']):
+                relevant_packages.append(line.strip())
+        
+        return jsonify({
+            'pip_list_success': result.returncode == 0,
+            'relevant_packages': relevant_packages,
+            'all_packages_count': len(packages.split('\n'))
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}) 
