@@ -159,14 +159,14 @@ services:
           property: connectionString
       - fromGroup: mdraft-secrets
 
-  # Health check cron job
+  # Health check cron job - reduced frequency to prevent Redis connection exhaustion
   - type: cron
     name: redis-health-check
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python -c "import redis; r = redis.Redis.from_url('${{services.redis-mdraft.envVars.REDIS_URL}}'); print('Redis connection:', r.ping())"
-    schedule: "0 */2 * * *"  # Every 2 hours instead of every hour
+    schedule: "0 */4 * * *"  # Every 4 hours instead of every 2 hours
     envVars:
       - key: FLASK_APP
         value: run.py

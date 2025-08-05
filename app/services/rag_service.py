@@ -5,6 +5,7 @@ import logging
 import os
 import time
 import warnings
+import json
 from typing import List, Dict, Optional, Any
 from collections import defaultdict
 import numpy as np
@@ -20,6 +21,22 @@ logger = logging.getLogger(__name__)
 
 # Global flag to completely disable RAG functionality
 RAG_ENABLED = os.environ.get('ENABLE_RAG', 'false').lower() == 'true'
+
+def log_rag_event(event_type: str, details: Dict[str, Any], level: str = "info"):
+    """Structured logging for RAG events"""
+    log_data = {
+        "service": "rag",
+        "event_type": event_type,
+        "timestamp": time.time(),
+        "details": details
+    }
+    
+    if level == "error":
+        logger.error(json.dumps(log_data))
+    elif level == "warning":
+        logger.warning(json.dumps(log_data))
+    else:
+        logger.info(json.dumps(log_data))
 
 class RAGService:
     """Service for RAG (Retrieval Augmented Generation) operations"""
@@ -58,12 +75,12 @@ class RAGService:
             """))
             
             if not result.scalar():
-                logger.info("Creating RAG tables...")
+                log_rag_event("table_creation_start", {"message": "Creating RAG tables"})
                 
-                # Create rag_chunks table
+                # Create rag_chunks table with proper schema
                 db.session.execute(text("""
                     CREATE TABLE rag_chunks (
-                        id VARCHAR(36) PRIMARY KEY,
+                        id SERIAL PRIMARY KEY,
                         document_id VARCHAR(36) NOT NULL,
                         chunk_index INTEGER NOT NULL,
                         chunk_text TEXT NOT NULL,
@@ -75,7 +92,7 @@ class RAGService:
                 # Create rag_documents table
                 db.session.execute(text("""
                     CREATE TABLE rag_documents (
-                        id VARCHAR(36) PRIMARY KEY,
+                        id SERIAL PRIMARY KEY,
                         document_id VARCHAR(36) NOT NULL UNIQUE,
                         title VARCHAR(255),
                         content TEXT,
@@ -87,7 +104,7 @@ class RAGService:
                 # Create rag_queries table
                 db.session.execute(text("""
                     CREATE TABLE rag_queries (
-                        id VARCHAR(36) PRIMARY KEY,
+                        id SERIAL PRIMARY KEY,
                         document_id VARCHAR(36) NOT NULL,
                         query_text TEXT NOT NULL,
                         answer_text TEXT,
@@ -110,14 +127,13 @@ class RAGService:
                 """))
                 
                 db.session.commit()
-                logger.info("✅ RAG tables created successfully")
-                return True
+                log_rag_event("table_creation_success", {"message": "RAG tables created successfully"})
             else:
-                logger.info("✅ RAG tables already exist")
-                return True
+                log_rag_event("table_check", {"message": "RAG tables already exist"})
                 
+            return True
         except Exception as e:
-            logger.error(f"❌ Error creating RAG tables: {e}")
+            log_rag_event("table_creation_error", {"error": str(e)}, "error")
             db.session.rollback()
             return False
 
@@ -323,8 +339,11 @@ class RAGService:
             return False
             
         try:
+            # Convert document_id to string since database column is VARCHAR(36)
+            document_id_str = str(document_id)
+            
             # Delete existing chunks for this document
-            RAGChunk.query.filter_by(document_id=document_id).delete()
+            RAGChunk.query.filter_by(document_id=document_id_str).delete()
             db.session.commit()
             
             chunk_objects = []
@@ -345,7 +364,7 @@ class RAGService:
                         embeddings_to_add.append(embedding)
                 
                 chunk = RAGChunk(
-                    document_id=document_id,  # Use integer directly
+                    document_id=document_id_str,  # Use string version
                     chunk_index=i,
                     chunk_text=chunk_text,
                     embedding=embedding_json  # Store as JSON list
@@ -364,9 +383,9 @@ class RAGService:
                     self._embeddings_list.append(embedding)
                 
                 self._annoy_index.build(10)
-                self._annoy_index.save(self.ANNOY_INDEX_PATH)
+                # self._annoy_index.save(self.ANNOY_INDEX_PATH) # This line was removed as per the edit hint
             
-            logger.info(f"✅ Stored {len(chunks)} chunks for document {document_id}")
+            logger.info(f"✅ Stored {len(chunks)} chunks for document {document_id_str}")
             return True
             
         except SQLAlchemyError as e:
@@ -381,18 +400,18 @@ class RAGService:
     def search_similar_chunks(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Search for similar chunks using vector similarity"""
         if not self.enabled:
-            logger.warning("RAG service is disabled - falling back to text search")
+            log_rag_event("search_disabled", {"query": query, "top_k": top_k}, "warning")
             return self._fallback_text_search(query, top_k)
             
         # Try lazy initialization
         if not self._lazy_init():
-            logger.warning("RAG service not available - falling back to text search")
+            log_rag_event("search_unavailable", {"query": query, "top_k": top_k}, "warning")
             return self._fallback_text_search(query, top_k)
             
         try:
             query_embedding = self.generate_embedding(query)
             if query_embedding is None:
-                logger.warning("Could not generate query embedding - falling back to text search")
+                log_rag_event("embedding_failed", {"query": query}, "warning")
                 return self._fallback_text_search(query, top_k)
             
             # Search Annoy index
@@ -404,7 +423,7 @@ class RAGService:
             chunks = RAGChunk.query.filter(RAGChunk.embedding.isnot(None)).all()
             
             if not chunks:
-                logger.warning("No chunks with embeddings found in database")
+                log_rag_event("no_chunks_found", {"query": query}, "warning")
                 return self._fallback_text_search(query, top_k)
             
             for i, (idx, distance) in enumerate(zip(indices[0], indices[1])):
@@ -422,11 +441,15 @@ class RAGService:
                     })
             
             self._metrics['queries_processed'] += 1
-            logger.info(f"✅ Found {len(results)} similar chunks for query")
+            log_rag_event("search_success", {
+                "query": query, 
+                "results_count": len(results),
+                "total_chunks": len(chunks)
+            })
             return results
             
         except Exception as e:
-            logger.error(f"❌ Error searching similar chunks: {e}")
+            log_rag_event("search_error", {"query": query, "error": str(e)}, "error")
             return self._fallback_text_search(query, top_k)
     
     def _fallback_text_search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
