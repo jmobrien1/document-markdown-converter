@@ -313,7 +313,9 @@ class RAGService:
             return False
             
         try:
-            RAGChunk.query.filter_by(document_id=document_id).delete()
+            # Convert document_id to string since database column is VARCHAR(36)
+            document_id_str = str(document_id)
+            RAGChunk.query.filter_by(document_id=document_id_str).delete()
             
             chunk_objects = []
             embeddings_to_add = []
@@ -332,7 +334,7 @@ class RAGService:
                         embeddings_to_add.append(embedding)
                 
                 chunk = RAGChunk(
-                    document_id=document_id,
+                    document_id=document_id_str,  # Use string version
                     chunk_index=i,
                     chunk_text=chunk_text,
                     embedding=embedding_bytes
