@@ -593,14 +593,14 @@ class RAGChunk(db.Model):
     document_id = db.Column(db.Integer, db.ForeignKey('conversions.id'), nullable=False)  # Changed from conversion_id
     chunk_index = db.Column(db.Integer, nullable=False)  # Changed from chunk_id
     chunk_text = db.Column(db.Text, nullable=False)  # Changed from text
-    embedding = db.Column(db.LargeBinary, nullable=True)  # Store embedding as bytes
+    embedding = db.Column(db.JSON, nullable=True)  # Changed from LargeBinary to JSON for easier debugging
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationship
     conversion = db.relationship('Conversion', backref=db.backref('rag_chunks', lazy=True))
 
     def __repr__(self):
-        return f'<RAGChunk {self.chunk_index} for conversion {self.document_id}>'
+        return f'<RAGChunk {self.id}: doc={self.document_id}, idx={self.chunk_index}>'
 
 
 class RAGQuery(db.Model):

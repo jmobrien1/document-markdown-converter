@@ -4,12 +4,17 @@ RAG Service with complete isolation - can be disabled entirely via environment v
 import logging
 import os
 import time
+import warnings
 from typing import List, Dict, Optional, Any
 from collections import defaultdict
 import numpy as np
 from sqlalchemy.exc import SQLAlchemyError
 from app.models import RAGChunk, RAGQuery, db
 from flask import current_app
+
+# Suppress PyTorch deprecation warnings
+warnings.filterwarnings("ignore", message=".*encoder_attention_mask.*", category=UserWarning)
+warnings.filterwarnings("ignore", message=".*ARC4.*", category=DeprecationWarning)
 
 logger = logging.getLogger(__name__)
 
@@ -318,9 +323,9 @@ class RAGService:
             return False
             
         try:
-            # Convert document_id to string since database column is VARCHAR(36)
-            document_id_str = str(document_id)
-            RAGChunk.query.filter_by(document_id=document_id_str).delete()
+            # Delete existing chunks for this document
+            RAGChunk.query.filter_by(document_id=document_id).delete()
+            db.session.commit()
             
             chunk_objects = []
             embeddings_to_add = []
@@ -340,33 +345,37 @@ class RAGService:
                         embeddings_to_add.append(embedding)
                 
                 chunk = RAGChunk(
-                    document_id=document_id_str,  # Use string version
+                    document_id=document_id,  # Use integer directly
                     chunk_index=i,
                     chunk_text=chunk_text,
-                    embedding=embedding_json  # Use JSON format instead of bytes
+                    embedding=embedding_json  # Store as JSON list
                 )
                 chunk_objects.append(chunk)
             
+            # Use bulk_save_objects for better performance
             db.session.bulk_save_objects(chunk_objects)
             db.session.commit()
             
+            # Add embeddings to Annoy index if available
             if embeddings_to_add and can_generate_embeddings:
                 start_index = len(self._embeddings_list)
                 for i, embedding in enumerate(embeddings_to_add):
-                    self._annoy_index.add_item(start_index + i, embedding.tolist())
+                    self._annoy_index.add_item(start_index + i, embedding)
                     self._embeddings_list.append(embedding)
                 
                 self._annoy_index.build(10)
+                self._annoy_index.save(self.ANNOY_INDEX_PATH)
             
-            logger.info(f"Stored {len(chunks)} chunks for document {document_id}")
+            logger.info(f"✅ Stored {len(chunks)} chunks for document {document_id}")
             return True
             
         except SQLAlchemyError as e:
-            logger.error(f"Database error storing chunks: {e}")
+            logger.error(f"❌ Database error storing chunks: {e}")
             db.session.rollback()
             return False
         except Exception as e:
-            logger.error(f"Error storing document chunks: {e}")
+            logger.error(f"❌ Error storing document chunks: {e}")
+            db.session.rollback()
             return False
     
     def search_similar_chunks(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
@@ -383,6 +392,7 @@ class RAGService:
         try:
             query_embedding = self.generate_embedding(query)
             if query_embedding is None:
+                logger.warning("Could not generate query embedding - falling back to text search")
                 return self._fallback_text_search(query, top_k)
             
             # Search Annoy index
@@ -392,6 +402,10 @@ class RAGService:
             # Get corresponding chunks from database
             results = []
             chunks = RAGChunk.query.filter(RAGChunk.embedding.isnot(None)).all()
+            
+            if not chunks:
+                logger.warning("No chunks with embeddings found in database")
+                return self._fallback_text_search(query, top_k)
             
             for i, (idx, distance) in enumerate(zip(indices[0], indices[1])):
                 if idx < len(chunks):
@@ -408,10 +422,11 @@ class RAGService:
                     })
             
             self._metrics['queries_processed'] += 1
+            logger.info(f"✅ Found {len(results)} similar chunks for query")
             return results
             
         except Exception as e:
-            logger.error(f"Error in vector search: {e}")
+            logger.error(f"❌ Error searching similar chunks: {e}")
             return self._fallback_text_search(query, top_k)
     
     def _fallback_text_search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
