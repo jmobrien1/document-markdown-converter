@@ -39,6 +39,83 @@ class RAGService:
         
         # DO NOT initialize anything here - wait until first use
     
+    def _create_rag_tables_if_needed(self):
+        """Create RAG tables if they don't exist - more robust than external script"""
+        try:
+            from sqlalchemy import text
+            
+            # Check if rag_chunks table exists
+            result = db.session.execute(text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'rag_chunks'
+                );
+            """))
+            
+            if not result.scalar():
+                logger.info("Creating RAG tables...")
+                
+                # Create rag_chunks table
+                db.session.execute(text("""
+                    CREATE TABLE rag_chunks (
+                        id VARCHAR(36) PRIMARY KEY,
+                        document_id VARCHAR(36) NOT NULL,
+                        chunk_index INTEGER NOT NULL,
+                        chunk_text TEXT NOT NULL,
+                        embedding JSON,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """))
+                
+                # Create rag_documents table
+                db.session.execute(text("""
+                    CREATE TABLE rag_documents (
+                        id VARCHAR(36) PRIMARY KEY,
+                        document_id VARCHAR(36) NOT NULL UNIQUE,
+                        title VARCHAR(255),
+                        content TEXT,
+                        embedding JSON,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """))
+                
+                # Create rag_queries table
+                db.session.execute(text("""
+                    CREATE TABLE rag_queries (
+                        id VARCHAR(36) PRIMARY KEY,
+                        document_id VARCHAR(36) NOT NULL,
+                        query_text TEXT NOT NULL,
+                        answer_text TEXT,
+                        relevant_chunks JSON,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """))
+                
+                # Create indexes
+                db.session.execute(text("""
+                    CREATE INDEX idx_rag_chunks_document_id ON rag_chunks(document_id);
+                """))
+                
+                db.session.execute(text("""
+                    CREATE INDEX idx_rag_documents_document_id ON rag_documents(document_id);
+                """))
+                
+                db.session.execute(text("""
+                    CREATE INDEX idx_rag_queries_document_id ON rag_queries(document_id);
+                """))
+                
+                db.session.commit()
+                logger.info("✅ RAG tables created successfully")
+                return True
+            else:
+                logger.info("✅ RAG tables already exist")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Error creating RAG tables: {e}")
+            db.session.rollback()
+            return False
+
     def _check_dependencies(self):
         """Enhanced dependency checking with detailed diagnostics"""
         missing_deps = []
@@ -99,6 +176,11 @@ class RAGService:
             # Test if imports work
             logger.info("RAG dependencies imported successfully")
             self._dependencies_available = True
+            
+            # Create RAG tables if they don't exist
+            if not self._create_rag_tables_if_needed():
+                logger.error("Failed to create RAG tables")
+                return False
             
             # Initialize components
             self._tiktoken_encoder = tiktoken.encoding_for_model("gpt-3.5-turbo")

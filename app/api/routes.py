@@ -338,7 +338,7 @@ def debug_dependencies():
     
     # Check each dependency individually
     dependencies_to_check = [
-        'tiktoken', 'faiss', 'sentence_transformers', 
+        'tiktoken', 'annoy', 'sentence_transformers', 
         'transformers', 'openai', 'numpy', 'torch'
     ]
     
@@ -372,7 +372,7 @@ def debug_packages():
         # Look for our specific packages
         relevant_packages = []
         for line in packages.split('\n'):
-            if any(pkg in line.lower() for pkg in ['tiktoken', 'faiss', 'transformers', 'sentence']):
+            if any(pkg in line.lower() for pkg in ['tiktoken', 'annoy', 'transformers', 'sentence']):
                 relevant_packages.append(line.strip())
         
         return jsonify({
