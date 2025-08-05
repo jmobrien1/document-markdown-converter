@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.models import RAGChunk, RAGQuery, db
 from flask import current_app
 from sentence_transformers import SentenceTransformer
+import tiktoken
 
 # Suppress PyTorch deprecation warnings
 warnings.filterwarnings("ignore", message=".*encoder_attention_mask.*", category=UserWarning)
