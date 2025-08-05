@@ -793,6 +793,37 @@ def generate_financial_analysis_task(self, conversion_id):
             print(f"=== [FINANCIAL ANALYSIS TASK] Got text content, length: {len(text_content)}")
             print(f"=== [FINANCIAL ANALYSIS TASK] First 200 chars: {text_content[:200]}")
             
+            # FIXED: Validate text content is not empty or just metadata
+            if not text_content or len(text_content.strip()) < 50:
+                error_msg = f"Text content too short or empty (length: {len(text_content)})"
+                print(f"=== [FINANCIAL ANALYSIS TASK] ERROR: {error_msg}")
+                raise ValueError(error_msg)
+            
+            # Check for metadata-only content
+            content_lower = text_content.lower()
+            metadata_indicators = ['document:', 'type:', 'status:', 'completed', 'filename:', 'size:', 'pages:']
+            is_metadata = any(indicator in content_lower for indicator in metadata_indicators) and len(text_content) < 500
+            
+            if is_metadata:
+                error_msg = f"Text content appears to be metadata only: {text_content[:200]}..."
+                print(f"=== [FINANCIAL ANALYSIS TASK] ERROR: {error_msg}")
+                raise ValueError(error_msg)
+            
+            # FIXED: Add structured JSON logging
+            import json
+            log_event = {
+                "service": "financial_analysis",
+                "event_type": "text_extraction_success",
+                "timestamp": time.time(),
+                "details": {
+                    "conversion_id": conversion_id,
+                    "text_length": len(text_content),
+                    "text_preview": text_content[:200],
+                    "filename": conversion.original_filename
+                }
+            }
+            print(f"=== [FINANCIAL ANALYSIS TASK] LOG: {json.dumps(log_event)}")
+            
             # Construct the high-rigor prompt for LLM
             prompt = _construct_financial_analysis_prompt(text_content)
             
@@ -874,10 +905,36 @@ def _get_document_text_for_financial_analysis(conversion):
             print("GCS_BUCKET_NAME not configured, trying fallback method")
             return _create_fallback_text(conversion)
         
-        # Initialize GCS client
+        # FIXED: Use environment variable directly for GCS authentication
+        credentials_json = current_app.config.get('GCS_CREDENTIALS_JSON')
+        if not credentials_json:
+            print("GCS_CREDENTIALS_JSON not configured, trying fallback method")
+            return _create_fallback_text(conversion)
+        
+        # Initialize GCS client with environment variable
         try:
-            storage_client = storage.Client()
-            bucket = storage_client.bucket(bucket_name)
+            # Set environment variable for Google Cloud libraries
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS_JSON'] = credentials_json
+            
+            # Create temporary credentials file for this task only
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_creds:
+                temp_creds.write(credentials_json)
+                temp_creds.flush()
+                credentials_path = temp_creds.name
+            
+            # Set environment variable for this task
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+            
+            try:
+                storage_client = storage.Client()
+                bucket = storage_client.bucket(bucket_name)
+            finally:
+                # Clean up temporary credentials file
+                try:
+                    os.unlink(credentials_path)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not clean up temporary credentials file: {cleanup_error}")
+                    
         except Exception as e:
             print(f"Failed to initialize GCS client: {e}")
             return _create_fallback_text(conversion)
@@ -897,23 +954,38 @@ def _get_document_text_for_financial_analysis(conversion):
                 blob.download_to_filename(temp_pdf.name)
                 temp_pdf_path = temp_pdf.name
             
-            # FIXED: Extract text using pypdf
+            # FIXED: Extract text using pypdf with proper validation
             try:
                 from pypdf import PdfReader
                 
                 reader = PdfReader(temp_pdf_path)
                 text_content = ""
                 
+                # Validate PDF has pages
+                if len(reader.pages) == 0:
+                    print("PDF has no pages")
+                    return _create_fallback_text(conversion)
+                
                 for page_num, page in enumerate(reader.pages):
                     page_text = page.extract_text()
-                    if page_text:
+                    if page_text and page_text.strip():
                         text_content += f"\n--- Page {page_num + 1} ---\n"
-                        text_content += page_text
+                        text_content += page_text.strip()
                 
                 # Clean up temp file
                 os.unlink(temp_pdf_path)
                 
+                # FIXED: Validate extracted content is not just metadata
                 if text_content.strip():
+                    # Check if content looks like metadata (short, contains common metadata patterns)
+                    content_lower = text_content.lower()
+                    metadata_indicators = ['document:', 'type:', 'status:', 'completed', 'filename:', 'size:', 'pages:']
+                    is_metadata = any(indicator in content_lower for indicator in metadata_indicators) and len(text_content) < 500
+                    
+                    if is_metadata:
+                        print(f"WARNING: Extracted content appears to be metadata only: {text_content[:200]}...")
+                        return _create_fallback_text(conversion)
+                    
                     print(f"Successfully extracted {len(text_content)} characters from PDF")
                     return text_content.strip()
                 else:
