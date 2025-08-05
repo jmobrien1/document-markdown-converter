@@ -77,11 +77,11 @@ class RAGService:
             if not result.scalar():
                 log_rag_event("table_creation_start", {"message": "Creating RAG tables"})
                 
-                # Create rag_chunks table with proper schema
+                # Create rag_chunks table with proper schema matching models.py
                 db.session.execute(text("""
                     CREATE TABLE rag_chunks (
                         id SERIAL PRIMARY KEY,
-                        document_id VARCHAR(36) NOT NULL,
+                        document_id INTEGER NOT NULL,
                         chunk_index INTEGER NOT NULL,
                         chunk_text TEXT NOT NULL,
                         embedding JSON,
@@ -93,10 +93,9 @@ class RAGService:
                 db.session.execute(text("""
                     CREATE TABLE rag_documents (
                         id SERIAL PRIMARY KEY,
-                        document_id VARCHAR(36) NOT NULL UNIQUE,
-                        title VARCHAR(255),
+                        document_id INTEGER NOT NULL,
+                        title TEXT,
                         content TEXT,
-                        embedding JSON,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
                 """))
@@ -105,33 +104,20 @@ class RAGService:
                 db.session.execute(text("""
                     CREATE TABLE rag_queries (
                         id SERIAL PRIMARY KEY,
-                        document_id VARCHAR(36) NOT NULL,
                         query_text TEXT NOT NULL,
-                        answer_text TEXT,
-                        relevant_chunks JSON,
+                        response_text TEXT,
+                        document_id INTEGER,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
                 """))
                 
-                # Create indexes
-                db.session.execute(text("""
-                    CREATE INDEX idx_rag_chunks_document_id ON rag_chunks(document_id);
-                """))
-                
-                db.session.execute(text("""
-                    CREATE INDEX idx_rag_documents_document_id ON rag_documents(document_id);
-                """))
-                
-                db.session.execute(text("""
-                    CREATE INDEX idx_rag_queries_document_id ON rag_queries(document_id);
-                """))
-                
                 db.session.commit()
                 log_rag_event("table_creation_success", {"message": "RAG tables created successfully"})
+                return True
             else:
-                log_rag_event("table_check", {"message": "RAG tables already exist"})
+                log_rag_event("table_exists", {"message": "RAG tables already exist"})
+                return True
                 
-            return True
         except Exception as e:
             log_rag_event("table_creation_error", {"error": str(e)}, "error")
             db.session.rollback()
@@ -335,15 +321,12 @@ class RAGService:
     def store_document_chunks(self, document_id: int, chunks: List[str]) -> bool:
         """Store document chunks with embeddings"""
         if not self.enabled:
-            logger.warning("RAG service is disabled - not storing chunks")
+            log_rag_event("store_disabled", {"document_id": document_id, "chunk_count": len(chunks)}, "warning")
             return False
             
         try:
-            # Convert document_id to string since database column is VARCHAR(36)
-            document_id_str = str(document_id)
-            
             # Delete existing chunks for this document
-            RAGChunk.query.filter_by(document_id=document_id_str).delete()
+            RAGChunk.query.filter_by(document_id=document_id).delete()
             db.session.commit()
             
             chunk_objects = []
@@ -364,7 +347,7 @@ class RAGService:
                         embeddings_to_add.append(embedding)
                 
                 chunk = RAGChunk(
-                    document_id=document_id_str,  # Use string version
+                    document_id=document_id,  # Use integer directly
                     chunk_index=i,
                     chunk_text=chunk_text,
                     embedding=embedding_json  # Store as JSON list
@@ -383,17 +366,21 @@ class RAGService:
                     self._embeddings_list.append(embedding)
                 
                 self._annoy_index.build(10)
-                # self._annoy_index.save(self.ANNOY_INDEX_PATH) # This line was removed as per the edit hint
+                self._annoy_index.save(self.ANNOY_INDEX_PATH)
             
-            logger.info(f"✅ Stored {len(chunks)} chunks for document {document_id_str}")
+            log_rag_event("store_success", {
+                "document_id": document_id, 
+                "chunk_count": len(chunks),
+                "embeddings_generated": len(embeddings_to_add)
+            })
             return True
             
         except SQLAlchemyError as e:
-            logger.error(f"❌ Database error storing chunks: {e}")
+            log_rag_event("store_database_error", {"error": str(e), "document_id": document_id}, "error")
             db.session.rollback()
             return False
         except Exception as e:
-            logger.error(f"❌ Error storing document chunks: {e}")
+            log_rag_event("store_error", {"error": str(e), "document_id": document_id}, "error")
             db.session.rollback()
             return False
     
