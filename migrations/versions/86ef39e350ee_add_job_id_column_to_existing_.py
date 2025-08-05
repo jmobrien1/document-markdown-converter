@@ -21,9 +21,17 @@ def upgrade():
     with op.batch_alter_table('users', schema=None) as batch_op:
         batch_op.drop_column('is_active')
     
-    # Add job_id column to conversions table
-    with op.batch_alter_table('conversions', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('job_id', sa.String(length=64), nullable=True))
+    # Add job_id column to conversions table (idempotent)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('conversions')]
+    
+    if 'job_id' not in columns:
+        with op.batch_alter_table('conversions', schema=None) as batch_op:
+            batch_op.add_column(sa.Column('job_id', sa.String(length=64), nullable=True))
+        print("✅ Added job_id column to conversions table")
+    else:
+        print("ℹ️  job_id column already exists, skipping...")
     # ### end Alembic commands ###
 
 
