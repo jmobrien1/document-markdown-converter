@@ -536,10 +536,6 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
         except Exception as inner_error:
             print(f"--- [Celery Task] Inner operation failed: {inner_error}")
             raise inner_error
-            
-        except Exception as gcs_error:
-            print(f"--- [Celery Task] GCS operation failed: {gcs_error}")
-            raise gcs_error
         finally:
             # Clean up temporary files
             if 'temp_file_path' in locals() and temp_file_path and os.path.exists(temp_file_path):
@@ -556,6 +552,10 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                     print(f"--- [Celery Task] Cleaned up temporary credentials file: {credentials_path}")
                 except Exception as e:
                     print(f"--- [Celery Task] Warning: Could not clean up temporary credentials file {credentials_path}: {e}")
+    
+    except Exception as outer_error:
+        print(f"--- [Celery Task] Outer operation failed: {outer_error}")
+        raise outer_error
 
 
 @get_celery().task
