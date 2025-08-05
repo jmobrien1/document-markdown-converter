@@ -533,6 +533,10 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                 'filename': original_filename
             }
             
+        except Exception as inner_error:
+            print(f"--- [Celery Task] Inner operation failed: {inner_error}")
+            raise inner_error
+            
         except Exception as gcs_error:
             print(f"--- [Celery Task] GCS operation failed: {gcs_error}")
             raise gcs_error
