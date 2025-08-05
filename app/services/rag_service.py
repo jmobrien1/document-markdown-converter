@@ -235,7 +235,12 @@ class RAGService:
             if chunks:
                 embeddings = []
                 for chunk in chunks:
-                    embedding = np.frombuffer(chunk.embedding, dtype=np.float32)
+                    # Handle JSON format embeddings (list of floats)
+                    if isinstance(chunk.embedding, list):
+                        embedding = np.array(chunk.embedding, dtype=np.float32)
+                    else:
+                        # Fallback for old binary format
+                        embedding = np.frombuffer(chunk.embedding, dtype=np.float32)
                     embeddings.append(embedding)
                 
                 if embeddings:
@@ -325,19 +330,20 @@ class RAGService:
             
             for i, chunk_text in enumerate(chunks):
                 embedding = None
-                embedding_bytes = None
+                embedding_json = None
                 
                 if can_generate_embeddings:
                     embedding = self.generate_embedding(chunk_text)
                     if embedding is not None:
-                        embedding_bytes = embedding.tobytes()
+                        # Convert numpy array to JSON-serializable list
+                        embedding_json = embedding.tolist()
                         embeddings_to_add.append(embedding)
                 
                 chunk = RAGChunk(
                     document_id=document_id_str,  # Use string version
                     chunk_index=i,
                     chunk_text=chunk_text,
-                    embedding=embedding_bytes
+                    embedding=embedding_json  # Use JSON format instead of bytes
                 )
                 chunk_objects.append(chunk)
             
