@@ -589,15 +589,15 @@ class RAGChunk(db.Model):
     """Model for storing document chunks for RAG."""
     __tablename__ = 'rag_chunks'
 
-    id = db.Column(db.Integer, primary_key=True)
-    document_id = db.Column(db.Integer, nullable=False)  # Integer to match table creation
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    document_id = db.Column(db.Integer, db.ForeignKey('conversions.id'), nullable=False)
     chunk_index = db.Column(db.Integer, nullable=False)
     chunk_text = db.Column(db.Text, nullable=False)
     embedding = db.Column(db.JSON, nullable=True)  # JSON for easier debugging and consistency
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationship - removed foreign key constraint since document_id is now String
-    # conversion = db.relationship('Conversion', backref=db.backref('rag_chunks', lazy=True))
+    # Relationship
+    conversion = db.relationship('Conversion', backref=db.backref('rag_chunks', lazy=True))
 
     def __repr__(self):
         return f'<RAGChunk {self.id}: doc={self.document_id}, idx={self.chunk_index}>'

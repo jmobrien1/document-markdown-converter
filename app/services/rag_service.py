@@ -61,68 +61,6 @@ class RAGService:
         
         # DO NOT initialize anything here - wait until first use
     
-    def _create_rag_tables_if_needed(self):
-        """Create RAG tables if they don't exist - more robust than external script"""
-        try:
-            from sqlalchemy import text
-            
-            # Check if rag_chunks table exists
-            result = db.session.execute(text("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'rag_chunks'
-                );
-            """))
-            
-            if not result.scalar():
-                log_rag_event("table_creation_start", {"message": "Creating RAG tables"})
-                
-                # Create rag_chunks table with proper schema matching models.py
-                db.session.execute(text("""
-                    CREATE TABLE rag_chunks (
-                        id SERIAL PRIMARY KEY,
-                        document_id INTEGER NOT NULL,
-                        chunk_index INTEGER NOT NULL,
-                        chunk_text TEXT NOT NULL,
-                        embedding JSON,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                """))
-                
-                # Create rag_documents table
-                db.session.execute(text("""
-                    CREATE TABLE rag_documents (
-                        id SERIAL PRIMARY KEY,
-                        document_id INTEGER NOT NULL,
-                        title TEXT,
-                        content TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                """))
-                
-                # Create rag_queries table
-                db.session.execute(text("""
-                    CREATE TABLE rag_queries (
-                        id SERIAL PRIMARY KEY,
-                        query_text TEXT NOT NULL,
-                        response_text TEXT,
-                        document_id INTEGER,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                """))
-                
-                db.session.commit()
-                log_rag_event("table_creation_success", {"message": "RAG tables created successfully"})
-                return True
-            else:
-                log_rag_event("table_exists", {"message": "RAG tables already exist"})
-                return True
-                
-        except Exception as e:
-            log_rag_event("table_creation_error", {"error": str(e)}, "error")
-            db.session.rollback()
-            return False
-
     def _check_dependencies(self):
         """Enhanced dependency checking with detailed diagnostics"""
         missing_deps = []
@@ -160,60 +98,48 @@ class RAGService:
             logger.warning(f"Missing RAG dependencies: {missing_deps}")
             return False
 
-    def _lazy_init(self):
-        """Initialize heavy dependencies only when needed"""
+    def _lazy_init(self) -> bool:
+        """Lazy initialization of RAG components"""
         if self._initialized:
             return True
             
         if not self.enabled:
-            logger.info("RAG service is disabled via ENABLE_RAG environment variable")
-            return False
-            
-        # First check if dependencies are available
-        if not self._check_dependencies():
-            self._dependencies_available = False
+            log_rag_event("lazy_init_disabled", {"message": "RAG service is disabled"})
             return False
             
         try:
-            # Import heavy dependencies only when needed
-            import tiktoken
-            from annoy import AnnoyIndex
-            from sentence_transformers import SentenceTransformer
-            
-            # Test if imports work
-            logger.info("RAG dependencies imported successfully")
-            self._dependencies_available = True
-            
-            # Create RAG tables if they don't exist
-            if not self._create_rag_tables_if_needed():
-                logger.error("Failed to create RAG tables")
+            # Check if required environment variables are set
+            if not os.environ.get('OPENAI_API_KEY'):
+                log_rag_event("lazy_init_no_openai", {"message": "OpenAI API key not configured"})
                 return False
+                
+            # Initialize sentence transformer model
+            model_name = os.environ.get('RAG_MODEL', 'all-MiniLM-L6-v2')
+            log_rag_event("lazy_init_model", {"model_name": model_name})
             
-            # Initialize components
-            self._tiktoken_encoder = tiktoken.encoding_for_model("gpt-3.5-turbo")
-            self._sentence_transformer = SentenceTransformer(self.model_name)
+            self._model = SentenceTransformer(model_name)
+            self._tokenizer = tiktoken.get_encoding("cl100k_base")
             
             # Initialize Annoy index
-            dimension = 384  # all-MiniLM-L6-v2 embedding dimension
-            self._annoy_index = AnnoyIndex(dimension, 'angular')
+            self._annoy_index = AnnoyIndex(self._model.get_sentence_embedding_dimension(), 'angular')
+            self._embeddings_list = []
             
-            # Load existing embeddings if any
-            self._load_existing_embeddings()
+            # Load existing index if available
+            if os.path.exists(self.ANNOY_INDEX_PATH):
+                try:
+                    self._annoy_index.load(self.ANNOY_INDEX_PATH)
+                    self._embeddings_list = self._load_existing_embeddings()
+                    log_rag_event("lazy_init_index_loaded", {"index_path": self.ANNOY_INDEX_PATH})
+                except Exception as e:
+                    log_rag_event("lazy_init_index_load_error", {"error": str(e)}, "warning")
+                    # Continue without existing index
             
             self._initialized = True
-            self._metrics['initializations'] += 1
-            logger.info("RAG service initialized successfully")
+            log_rag_event("lazy_init_success", {"message": "RAG service initialized successfully"})
             return True
             
-        except ImportError as e:
-            logger.error(f"Failed to import RAG dependencies: {e}")
-            self._metrics['import_errors'] += 1
-            self._dependencies_available = False
-            return False
         except Exception as e:
-            logger.error(f"Failed to initialize RAG service: {e}")
-            self._metrics['init_errors'] += 1
-            self._dependencies_available = False
+            log_rag_event("lazy_init_error", {"error": str(e)}, "error")
             return False
     
     def get_metrics(self) -> Dict[str, Any]:
@@ -325,9 +251,10 @@ class RAGService:
             return False
             
         try:
-            # Delete existing chunks for this document
-            RAGChunk.query.filter_by(document_id=document_id).delete()
+            # Delete existing chunks for this document (use Integer directly)
+            deleted_count = RAGChunk.query.filter_by(document_id=document_id).delete()
             db.session.commit()
+            log_rag_event("store_delete_existing", {"document_id": document_id, "deleted_count": deleted_count})
             
             chunk_objects = []
             embeddings_to_add = []
