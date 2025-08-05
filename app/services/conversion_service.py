@@ -303,16 +303,34 @@ class ConversionService:
             # Start conversion task
             current_app.logger.info("10. Starting Celery task...")
             try:
-                task = convert_file_task.delay(
-                    bucket_name,
-                    blob_name,
-                    filename,
-                    use_pro_converter,
-                    conversion.id,
-                    page_count,
-                    credentials_json
-                )
-                current_app.logger.info(f"10. Celery task queued: {task.id} ✓")
+                # Add Redis connection retry logic
+                max_retries = 3
+                retry_delay = 1  # seconds
+                
+                for attempt in range(max_retries):
+                    try:
+                        task = convert_file_task.delay(
+                            bucket_name,
+                            blob_name,
+                            filename,
+                            use_pro_converter,
+                            conversion.id,
+                            page_count,
+                            credentials_json
+                        )
+                        current_app.logger.info(f"10. Celery task queued: {task.id} ✓")
+                        break  # Success, exit retry loop
+                        
+                    except Exception as retry_error:
+                        if "max number of clients reached" in str(retry_error) and attempt < max_retries - 1:
+                            current_app.logger.warning(f"Redis connection limit reached, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
+                            import time
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                            continue
+                        else:
+                            # Either not a connection error or max retries reached
+                            raise retry_error
                 
                 # --- CRITICAL FIX: Save the Celery job_id to the database record ---
                 conversion.job_id = task.id

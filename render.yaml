@@ -2,7 +2,7 @@ services:
   # A Redis instance for our Celery queue
   - type: redis
     name: redis-mdraft
-    plan: free
+    plan: starter
     ipAllowList: [] # Allow all, or specify IPs if needed
     maxmemoryPolicy: allkeys-lru
 

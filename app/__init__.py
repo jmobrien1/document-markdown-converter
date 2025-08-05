@@ -32,6 +32,16 @@ def make_celery(app):
         result_serializer='json',
         timezone='UTC',
         enable_utc=True,
+        # Redis connection pooling to prevent connection limit issues
+        broker_connection_retry_on_startup=True,
+        broker_connection_max_retries=10,
+        broker_connection_retry=True,
+        broker_pool_limit=10,
+        broker_heartbeat=10,
+        result_expires=3600,  # 1 hour
+        task_acks_late=True,
+        worker_prefetch_multiplier=1,
+        worker_max_tasks_per_child=1000,
     )
     
     class ContextTask(celery.Task):
