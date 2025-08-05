@@ -13,8 +13,8 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
-    # Force new deployment with migration heads fix - 2025-08-04
-    buildCommand: docker build --no-cache --pull -f Dockerfile.render -t mdraft-app . --build-arg TIMESTAMP=$(date +%s)
+    # Force complete cache invalidation - 2025-08-05
+    buildCommand: docker build --no-cache --pull --force-rm -f Dockerfile.render -t mdraft-app . --build-arg TIMESTAMP=$(date +%s) --build-arg CACHE_BUSTER=$(openssl rand -hex 16)
     startCommand: flask db merge heads && flask db upgrade && gunicorn run:app
     envVars:
       - key: FLASK_ENV
@@ -65,7 +65,7 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
-    buildCommand: docker build -f Dockerfile.render -t mdraft-worker . --no-cache
+    buildCommand: docker build --no-cache --pull --force-rm -f Dockerfile.render -t mdraft-worker . --build-arg TIMESTAMP=$(date +%s) --build-arg CACHE_BUSTER=$(openssl rand -hex 16)
     startCommand: celery -A celery_worker.celery worker --loglevel=info
     envVars:
       - key: FLASK_ENV
