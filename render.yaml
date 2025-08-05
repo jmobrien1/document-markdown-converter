@@ -14,7 +14,7 @@ services:
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
     buildCommand: docker build --no-cache --pull -f Dockerfile.render -t mdraft-app .
-    startCommand: flask db upgrade && gunicorn run:app
+    startCommand: flask db merge heads && flask db upgrade && gunicorn run:app
     envVars:
       - key: FLASK_ENV
         value: production
