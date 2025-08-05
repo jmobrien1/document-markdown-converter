@@ -13,8 +13,8 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
-    buildCommand: docker build --no-cache --pull -f Dockerfile.render -t mdraft-app .
-    # Force new deployment with migration heads fix
+    # Force new deployment with migration heads fix - 2025-08-04
+    buildCommand: docker build --no-cache --pull -f Dockerfile.render -t mdraft-app . --build-arg TIMESTAMP=$(date +%s)
     startCommand: flask db merge heads && flask db upgrade && gunicorn run:app
     envVars:
       - key: FLASK_ENV
