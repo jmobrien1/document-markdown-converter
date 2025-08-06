@@ -117,11 +117,18 @@ def create_app(config_name=None):
     rag_dependencies_available = True
     try:
         import tiktoken
-        import sentence_transformers
-        from annoy import AnnoyIndex
-        app.logger.info("✅ RAG dependencies available")
+        # Conditional import to avoid NumPy/PyTorch issues
+        if os.environ.get('DISABLE_ML_IMPORTS', 'false').lower() != 'true':
+            import sentence_transformers
+            from annoy import AnnoyIndex
+            app.logger.info("✅ RAG dependencies available")
+        else:
+            app.logger.info("✅ RAG dependencies disabled via environment variable")
     except ImportError as e:
         app.logger.warning(f"⚠️ RAG dependencies not available: {e}")
+        rag_dependencies_available = False
+    except Exception as e:
+        app.logger.warning(f"⚠️ RAG dependencies failed to load: {e}")
         rag_dependencies_available = False
     
     # Check OpenAI

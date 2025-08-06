@@ -69,6 +69,13 @@ class Config:
     # Fix for CPendingDeprecationWarning - explicitly set the new configuration
     CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
     
+    # Upstash Redis optimization settings
+    CELERY_BROKER_POOL_LIMIT = 5  # Reduced for Upstash connection limits
+    CELERY_BROKER_HEARTBEAT = 30  # Increased heartbeat interval
+    CELERY_RESULT_EXPIRES = 1800  # 30 minutes - reduced for Upstash
+    CELERY_WORKER_MAX_TASKS_PER_CHILD = 500  # Reduced for Upstash
+    CELERY_BROKER_CONNECTION_MAX_RETRIES = 20  # Increased retries for Upstash
+    
     # For cron jobs, ensure we have proper Redis configuration
     if not os.environ.get('CELERY_BROKER_URL') and os.environ.get('RENDER'):
         # We're on Render but no Redis URL is set - this is an error
