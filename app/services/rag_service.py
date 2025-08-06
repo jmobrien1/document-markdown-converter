@@ -15,6 +15,7 @@ from flask import current_app
 from sentence_transformers import SentenceTransformer
 import tiktoken
 from annoy import AnnoyIndex
+import tempfile
 
 # Suppress PyTorch deprecation warnings
 warnings.filterwarnings("ignore", message=".*encoder_attention_mask.*", category=UserWarning)
@@ -59,6 +60,43 @@ class RAGService:
         self.model_name = os.environ.get('RAG_MODEL', 'all-MiniLM-L6-v2')
         self.max_tokens = int(os.environ.get('RAG_MAX_TOKENS', '500'))
         self.chunk_overlap = int(os.environ.get('RAG_CHUNK_OVERLAP', '50'))
+        
+        # Initialize ANNOY_INDEX_PATH from configuration
+        try:
+            if current_app:
+                # Get from Flask app configuration
+                self.ANNOY_INDEX_PATH = current_app.config.get('ANNOY_INDEX_PATH')
+                if not self.ANNOY_INDEX_PATH:
+                    # Fallback to environment variable
+                    self.ANNOY_INDEX_PATH = os.environ.get('ANNOY_INDEX_PATH')
+                    if not self.ANNOY_INDEX_PATH:
+                        # Default path
+                        self.ANNOY_INDEX_PATH = '/var/data/annoy_indices/index.ann'
+            else:
+                # No Flask app context, use environment variable or default
+                self.ANNOY_INDEX_PATH = os.environ.get('ANNOY_INDEX_PATH', '/var/data/annoy_indices/index.ann')
+            
+            # Ensure the directory exists
+            index_dir = os.path.dirname(self.ANNOY_INDEX_PATH)
+            if not os.path.exists(index_dir):
+                try:
+                    os.makedirs(index_dir, exist_ok=True)
+                    logger.info(f"Created Annoy index directory: {index_dir}")
+                except Exception as e:
+                    logger.error(f"Failed to create Annoy index directory {index_dir}: {e}")
+                    # Fallback to a writable location
+                    self.ANNOY_INDEX_PATH = os.path.join(tempfile.gettempdir(), 'annoy_indices', 'index.ann')
+                    fallback_dir = os.path.dirname(self.ANNOY_INDEX_PATH)
+                    os.makedirs(fallback_dir, exist_ok=True)
+                    logger.info(f"Using fallback Annoy index path: {self.ANNOY_INDEX_PATH}")
+            
+            logger.info(f"Annoy index path configured: {self.ANNOY_INDEX_PATH}")
+            
+        except Exception as e:
+            logger.error(f"Failed to configure ANNOY_INDEX_PATH: {e}")
+            # Critical error - disable RAG service
+            self.enabled = False
+            self.ANNOY_INDEX_PATH = None
         
         logger.info(f"RAG Service initialized - Enabled: {self.enabled}, Model: {self.model_name}")
         
@@ -106,6 +144,11 @@ class RAGService:
         if not self.enabled:
             log_rag_event("lazy_init_disabled", {"message": "RAG service is disabled"})
             return False
+        
+        # Check if ANNOY_INDEX_PATH is properly configured
+        if not hasattr(self, 'ANNOY_INDEX_PATH') or not self.ANNOY_INDEX_PATH:
+            log_rag_event("lazy_init_no_index_path", {"message": "ANNOY_INDEX_PATH not configured"}, "error")
+            return False
             
         try:
             # Check if required environment variables are set
@@ -133,6 +176,8 @@ class RAGService:
                 except Exception as e:
                     log_rag_event("lazy_init_index_load_error", {"error": str(e)}, "warning")
                     # Continue without existing index
+            else:
+                log_rag_event("lazy_init_no_existing_index", {"index_path": self.ANNOY_INDEX_PATH})
             
             self._initialized = True
             log_rag_event("lazy_init_success", {"message": "RAG service initialized successfully"})
@@ -293,7 +338,16 @@ class RAGService:
                     self._embeddings_list.append(embedding)
                 
                 self._annoy_index.build(10)
-                self._annoy_index.save(self.ANNOY_INDEX_PATH)
+                
+                # Save index with proper error handling
+                try:
+                    if hasattr(self, 'ANNOY_INDEX_PATH') and self.ANNOY_INDEX_PATH:
+                        self._annoy_index.save(self.ANNOY_INDEX_PATH)
+                        log_rag_event("index_saved", {"index_path": self.ANNOY_INDEX_PATH})
+                    else:
+                        log_rag_event("index_save_skipped", {"reason": "ANNOY_INDEX_PATH not configured"}, "warning")
+                except Exception as e:
+                    log_rag_event("index_save_error", {"error": str(e)}, "error")
             
             log_rag_event("store_success", {
                 "document_id": document_id, 

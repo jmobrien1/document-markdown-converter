@@ -205,6 +205,9 @@ class Config:
     RAG_MAX_TOKENS = int(os.environ.get('RAG_MAX_TOKENS', '500'))
     RAG_CHUNK_OVERLAP = int(os.environ.get('RAG_CHUNK_OVERLAP', '50'))
     
+    # RAG Index Persistence Configuration
+    ANNOY_INDEX_PATH = os.environ.get('ANNOY_INDEX_PATH', '/var/data/annoy_indices/index.ann')
+    
     # Logging
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
     
