@@ -303,6 +303,16 @@ class ConversionService:
             # Start conversion task
             current_app.logger.info("10. Starting Celery task...")
             try:
+                # Check Redis connection health before dispatching
+                try:
+                    from celery import current_app as celery_app
+                    # Test Redis connection
+                    celery_app.control.inspect().active()
+                    current_app.logger.info("10. Redis connection healthy ✓")
+                except Exception as redis_error:
+                    current_app.logger.warning(f"10. Redis connection check failed: {redis_error}")
+                    # Continue anyway - Celery will handle reconnection
+                
                 # Add Redis connection retry logic
                 max_retries = 3
                 retry_delay = 1  # seconds
@@ -316,7 +326,8 @@ class ConversionService:
                             use_pro_converter,
                             conversion.id,
                             page_count,
-                            credentials_json
+                            credentials_json,
+                            user.id if user else None
                         )
                         current_app.logger.info(f"10. Celery task queued: {task.id} ✓")
                         break  # Success, exit retry loop

@@ -300,7 +300,7 @@ class DocumentAIProcessor:
             raise Exception(f"Document AI batch processing failed: {str(e)}")
 
 @get_celery().task(bind=True)
-def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None, credentials_json=None):
+def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None, credentials_json=None, user_id=None):
     """
     Convert uploaded file to Markdown using Celery background task.
     Enhanced with comprehensive security scanning, accurate page counting, and robust error handling.
@@ -311,6 +311,18 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
         # Initialize result variables
         markdown_content = None
         structured_json_content = None
+        
+        # Fetch user object if user_id is provided
+        user = None
+        if user_id and MODELS_AVAILABLE:
+            try:
+                user = User.query.get(user_id)
+                if not user:
+                    print(f"--- [Celery Task] ERROR: User with ID {user_id} not found in database")
+                    # Continue with anonymous conversion
+            except Exception as e:
+                print(f"--- [Celery Task] ERROR: Failed to fetch user {user_id}: {e}")
+                # Continue with anonymous conversion
         
         # Validate credentials in worker process
         if not credentials_json:
@@ -398,25 +410,60 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
             
             # Process the file
             if use_pro_converter:
-                # Check user has Pro access
-                if conversion_id and MODELS_AVAILABLE:
-                    conversion = Conversion.query.get(conversion_id)
-                    if conversion and conversion.user_id:
-                        user = User.query.get(conversion.user_id)
-                        
-                        if not user or not user.is_premium:
+                # Check user has Pro access using the correct method
+                if user:
+                    try:
+                        if not user.is_pro_user():
                             # Update conversion record with failure
-                            conversion.status = 'failed'
-                            conversion.error_message = 'Pro access required for this conversion'
-                            conversion.completed_at = datetime.now(timezone.utc)
-                            conversion.processing_time = time.time() - start_time
-                            db.session.commit()
+                            if conversion_id and MODELS_AVAILABLE:
+                                conversion = Conversion.query.get(conversion_id)
+                                if conversion:
+                                    conversion.status = 'failed'
+                                    conversion.error_message = 'Pro access required for this conversion'
+                                    conversion.completed_at = datetime.now(timezone.utc)
+                                    conversion.processing_time = time.time() - start_time
+                                    db.session.commit()
                             
                             return {
                                 'status': 'FAILURE',
                                 'error': 'Pro access required for this conversion',
                                 'filename': original_filename
                             }
+                    except AttributeError as e:
+                        print(f"--- [Celery Task] ERROR: User object missing required method: {e}")
+                        # Fallback to checking has_pro_access property
+                        if not getattr(user, 'has_pro_access', False):
+                            # Update conversion record with failure
+                            if conversion_id and MODELS_AVAILABLE:
+                                conversion = Conversion.query.get(conversion_id)
+                                if conversion:
+                                    conversion.status = 'failed'
+                                    conversion.error_message = 'Pro access required for this conversion'
+                                    conversion.completed_at = datetime.now(timezone.utc)
+                                    conversion.processing_time = time.time() - start_time
+                                    db.session.commit()
+                            
+                            return {
+                                'status': 'FAILURE',
+                                'error': 'Pro access required for this conversion',
+                                'filename': original_filename
+                            }
+                else:
+                    # No user provided, reject Pro conversion
+                    if conversion_id and MODELS_AVAILABLE:
+                        conversion = Conversion.query.get(conversion_id)
+                        if conversion:
+                            conversion.status = 'failed'
+                            conversion.error_message = 'Pro access required for this conversion'
+                            conversion.completed_at = datetime.now(timezone.utc)
+                            conversion.processing_time = time.time() - start_time
+                            db.session.commit()
+                    
+                    return {
+                        'status': 'FAILURE',
+                        'error': 'Pro access required for this conversion',
+                        'filename': original_filename
+                    }
                 
                 # Use Pro converter (Document AI)
                 print("--- [Celery Task] Starting PRO conversion path (Document AI).")
@@ -504,71 +551,87 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         import traceback
                         print(f"--- [Celery Task] Full traceback: {traceback.format_exc()}")
                     
-                    # Track Pro usage if this was a Pro conversion
-                    if use_pro_converter and conversion.user_id:
-                        user = User.query.get(conversion.user_id)
-                        if user:
-                            # Use the accurate page count passed to the task
-                            if page_count is None:
-                                # This should not happen in production, but handle gracefully
-                                file_extension = os.path.splitext(original_filename)[1].lower()
-                                pages_processed = get_accurate_pdf_page_count(temp_file_path) if file_extension == '.pdf' else 1
-                            else:
-                                pages_processed = page_count
+                    # Update user usage if this was a Pro conversion
+                    if use_pro_converter and user:
+                        try:
+                            # Calculate pages processed
+                            pages_processed = page_count if page_count else 1
                             
-                            # Only set pages_processed if the column exists
-                            try:
-                                conversion.pages_processed = pages_processed
-                                # Update user's monthly usage
-                                current_usage = getattr(user, 'pro_pages_processed_current_month', 0)
-                                user.pro_pages_processed_current_month = current_usage + pages_processed
-                                print(f"--- [Celery Task] Updated usage: {current_usage} + {pages_processed} = {current_usage + pages_processed}")
-                            except Exception as e:
-                                print(f"--- [Celery Task] Warning: Could not update pages_processed: {e}")
+                            # Get current usage
+                            current_usage = getattr(user, 'pro_pages_processed_current_month', 0) or 0
+                            
+                            # Update usage
+                            user.pro_pages_processed_current_month = current_usage + pages_processed
+                            db.session.commit()
+                            
+                            print(f"--- [Celery Task] Updated user {user.id} usage: {current_usage} + {pages_processed} = {user.pro_pages_processed_current_month}")
+                        except Exception as usage_error:
+                            print(f"--- [Celery Task] Warning: Failed to update user usage: {usage_error}")
                     
                     db.session.commit()
+                    
+                    print(f"--- [Celery Task] Conversion {conversion_id} completed successfully")
             
-            # Clean up temporary file
-            if temp_file_path and os.path.exists(temp_file_path):
+            # Clean up temporary files
+            try:
                 os.unlink(temp_file_path)
-                print("--- [Celery Task] Temporary file cleaned up.")
-            
-            # Clean up temporary credentials file
-            if credentials_path and os.path.exists(credentials_path):
                 os.unlink(credentials_path)
-                print("--- [Celery Task] Temporary credentials cleaned up.")
+                print("--- [Celery Task] Temporary files cleaned up successfully")
+            except Exception as cleanup_error:
+                print(f"--- [Celery Task] Warning: Failed to clean up temporary files: {cleanup_error}")
             
-            print("--- [Celery Task] SUCCESS: Conversion completed successfully.")
-            
+            # Return success
             return {
                 'status': 'SUCCESS',
-                'markdown': markdown_content,
+                'markdown_content': markdown_content,
+                'structured_json_content': structured_json_content,
+                'filename': original_filename,
+                'processing_time': time.time() - start_time
+            }
+            
+        except Exception as e:
+            print(f"--- [Celery Task] ERROR: {e}")
+            import traceback
+            print(f"--- [Celery Task] Full traceback: {traceback.format_exc()}")
+            
+            # Update conversion record with failure
+            if conversion_id and MODELS_AVAILABLE:
+                try:
+                    conversion = Conversion.query.get(conversion_id)
+                    if conversion:
+                        conversion.status = 'failed'
+                        conversion.error_message = str(e)
+                        conversion.completed_at = datetime.now(timezone.utc)
+                        conversion.processing_time = time.time() - start_time
+                        db.session.commit()
+                except Exception as db_error:
+                    print(f"--- [Celery Task] ERROR: Failed to update conversion record: {db_error}")
+            
+            # Clean up temporary files
+            try:
+                if 'temp_file_path' in locals():
+                    os.unlink(temp_file_path)
+                if 'credentials_path' in locals():
+                    os.unlink(credentials_path)
+            except Exception as cleanup_error:
+                print(f"--- [Celery Task] Warning: Failed to clean up temporary files: {cleanup_error}")
+            
+            return {
+                'status': 'FAILURE',
+                'error': str(e),
                 'filename': original_filename
             }
             
-        except Exception as inner_error:
-            print(f"--- [Celery Task] Inner operation failed: {inner_error}")
-            raise inner_error
-        finally:
-            # Clean up temporary files
-            if 'temp_file_path' in locals() and temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                    print(f"--- [Celery Task] Cleaned up temporary file: {temp_file_path}")
-                except Exception as e:
-                    print(f"--- [Celery Task] Warning: Could not clean up temporary file {temp_file_path}: {e}")
-            
-            # Clean up temporary credentials file
-            if 'credentials_path' in locals() and credentials_path and os.path.exists(credentials_path):
-                try:
-                    os.unlink(credentials_path)
-                    print(f"--- [Celery Task] Cleaned up temporary credentials file: {credentials_path}")
-                except Exception as e:
-                    print(f"--- [Celery Task] Warning: Could not clean up temporary credentials file {credentials_path}: {e}")
-    
     except Exception as outer_error:
-        print(f"--- [Celery Task] Outer operation failed: {outer_error}")
-        raise outer_error
+        print(f"--- [Celery Task] CRITICAL ERROR: {outer_error}")
+        import traceback
+        print(f"--- [Celery Task] Full traceback: {traceback.format_exc()}")
+        
+        return {
+            'status': 'FAILURE',
+            'error': str(outer_error),
+            'filename': original_filename
+        }
 
 
 @get_celery().task
@@ -876,7 +939,7 @@ def _get_document_text_for_financial_analysis(conversion):
             if task_result.ready() and task_result.successful():
                 result = task_result.result
                 if isinstance(result, dict) and result.get('status') == 'SUCCESS':
-                    markdown_content = result.get('markdown', '')
+                    markdown_content = result.get('markdown_content', '')
                     if markdown_content:
                         print(f"Using markdown content from Celery task result for financial analysis")
                         return markdown_content
