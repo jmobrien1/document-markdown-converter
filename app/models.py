@@ -180,6 +180,34 @@ class User(db.Model):
         """Check if user can access Pro features."""
         return self.has_pro_access
 
+    def is_pro_user(self):
+        """Check if user is a Pro user (method version for backward compatibility)."""
+        try:
+            # Check if user is on trial and trial hasn't expired
+            if self.on_trial and self.trial_end_date:
+                # Ensure timezone-aware comparison
+                current_time = datetime.now(timezone.utc)
+                trial_end = self.trial_end_date
+                if trial_end.tzinfo is None:
+                    # If trial_end_date is timezone-naive, assume UTC
+                    trial_end = trial_end.replace(tzinfo=timezone.utc)
+                if current_time < trial_end:
+                    return True
+            
+            # Check if user has active subscription
+            if self.is_premium or self.current_tier in ['pro', 'enterprise']:
+                return True
+            
+            # Check subscription status
+            if self.subscription_status in ['active', 'trialing']:
+                return True
+            
+            return False
+        except Exception as e:
+            # If any error occurs (e.g., missing columns), default to False
+            print(f"Error in is_pro_user: {e}")
+            return False
+
     def start_trial(self, tier='pro', days=7):
         """Start a trial period for the user."""
         self.on_trial = True
