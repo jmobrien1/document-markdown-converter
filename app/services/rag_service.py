@@ -14,6 +14,7 @@ from app.models import RAGChunk, RAGQuery, db
 from flask import current_app
 from sentence_transformers import SentenceTransformer
 import tiktoken
+from annoy import AnnoyIndex
 
 # Suppress PyTorch deprecation warnings
 warnings.filterwarnings("ignore", message=".*encoder_attention_mask.*", category=UserWarning)
@@ -69,7 +70,6 @@ class RAGService:
         import_errors = {}
         
         try:
-            import tiktoken
             logger.info(f"tiktoken available: version {getattr(tiktoken, '__version__', 'unknown')}")
         except ImportError as e:
             missing_deps.append('tiktoken')
@@ -77,7 +77,6 @@ class RAGService:
             logger.error(f"tiktoken import failed: {e}")
         
         try:
-            from annoy import AnnoyIndex
             logger.info("annoy available")
         except ImportError as e:
             missing_deps.append('annoy')
@@ -85,7 +84,6 @@ class RAGService:
             logger.error(f"annoy import failed: {e}")
         
         try:
-            from sentence_transformers import SentenceTransformer
             logger.info("sentence_transformers available")
         except ImportError as e:
             missing_deps.append('sentence_transformers')
