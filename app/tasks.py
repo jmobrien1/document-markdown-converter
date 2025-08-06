@@ -1,9 +1,10 @@
-# app/tasks.py
-# Complete file with Document AI batch processing and fixed text extraction
-
+"""
+Celery tasks for document conversion and processing.
+"""
 import os
 import time
 import tempfile
+import logging
 import json
 import uuid
 import subprocess
@@ -15,9 +16,42 @@ from markitdown import MarkItDown
 from celery import current_task
 from datetime import datetime, timezone
 
-# Import the properly configured celery instance
-# We'll import this lazily to avoid circular imports
-celery = None
+# Custom exception for conversion errors
+class ConversionError(Exception):
+    """Custom exception for document conversion errors"""
+    pass
+
+# Global flags for dependency availability
+FLASK_AVAILABLE = True
+MODELS_AVAILABLE = True
+
+try:
+    from flask import current_app
+    FLASK_AVAILABLE = True
+except ImportError:
+    FLASK_AVAILABLE = False
+    current_app = None
+
+try:
+    from app import db
+    from app.models import Conversion, User, Batch, ConversionJob
+    from app.services.extraction_service import ExtractionService
+    MODELS_AVAILABLE = True
+except ImportError:
+    MODELS_AVAILABLE = False
+    db = None
+    Conversion = None
+    User = None
+    Batch = None
+    ConversionJob = None
+    ExtractionService = None
+
+try:
+    from app.email import send_conversion_complete_email
+    EMAIL_AVAILABLE = True
+except ImportError:
+    EMAIL_AVAILABLE = False
+    send_conversion_complete_email = None
 
 # Conditional imports for Flask components
 try:
@@ -158,7 +192,7 @@ def process_with_docai(credentials_path, project_id, location, processor_id, fil
         str: Extracted text content from the document.
 
     Raises:
-        Exception: If the Document AI API call fails.
+        ConversionError: If the Document AI API call fails or returns invalid response.
     """
     print("--- [Celery Task] Inside process_with_docai helper function.")
     opts = {"api_endpoint": f"{location}-documentai.googleapis.com"}
@@ -182,13 +216,62 @@ def process_with_docai(credentials_path, project_id, location, processor_id, fil
         
         request = documentai.ProcessRequest(name=processor_name, raw_document=raw_document)
         result = client.process_document(request=request)
+        
+        # Defensive validation of the result
+        if result is None:
+            print("--- [Celery Task] CRITICAL ERROR: Document AI returned None result")
+            raise ConversionError("Document AI returned None result")
+        
+        # Validate result type
+        if not hasattr(result, 'document'):
+            print(f"--- [Celery Task] CRITICAL ERROR: Document AI result has no 'document' attribute. Result type: {type(result)}")
+            print(f"--- [Celery Task] Result content: {result}")
+            raise ConversionError(f"Document AI result has no 'document' attribute. Result type: {type(result)}")
+        
         document = result.document
         
-        return document.text
+        # Defensive validation of the document object
+        if document is None:
+            print("--- [Celery Task] CRITICAL ERROR: Document AI returned None document")
+            raise ConversionError("Document AI returned None document")
         
+        # Check if document is a string or bool (error indicators)
+        if isinstance(document, str):
+            print(f"--- [Celery Task] CRITICAL ERROR: Document AI returned string instead of document object: {document}")
+            raise ConversionError(f"Document AI returned string instead of document object: {document}")
+        
+        if isinstance(document, bool):
+            print(f"--- [Celery Task] CRITICAL ERROR: Document AI returned boolean instead of document object: {document}")
+            raise ConversionError(f"Document AI returned boolean instead of document object: {document}")
+        
+        # Validate document has text attribute
+        if not hasattr(document, 'text'):
+            print(f"--- [Celery Task] CRITICAL ERROR: Document object has no 'text' attribute. Document type: {type(document)}")
+            print(f"--- [Celery Task] Document attributes: {dir(document)}")
+            raise ConversionError(f"Document object has no 'text' attribute. Document type: {type(document)}")
+        
+        # Extract and validate text content
+        text_content = document.text
+        
+        if text_content is None:
+            print("--- [Celery Task] WARNING: Document AI returned None text content")
+            text_content = ""
+        
+        if not isinstance(text_content, str):
+            print(f"--- [Celery Task] CRITICAL ERROR: Document AI text content is not a string. Type: {type(text_content)}")
+            print(f"--- [Celery Task] Text content: {text_content}")
+            raise ConversionError(f"Document AI text content is not a string. Type: {type(text_content)}")
+        
+        print(f"--- [Celery Task] Document AI processing successful. Text length: {len(text_content)}")
+        return text_content
+        
+    except ConversionError:
+        # Re-raise our custom exceptions
+        raise
     except Exception as e:
         print(f"--- [Celery Task] Document AI API error: {str(e)}")
-        raise e
+        print(f"--- [Celery Task] Error type: {type(e)}")
+        raise ConversionError(f"Document AI API error: {str(e)}")
 
 class DocumentAIProcessor:
     def __init__(self, credentials_path, project_id, location, processor_id):
@@ -202,6 +285,9 @@ class DocumentAIProcessor:
     def process_with_docai_batch(self, input_gcs_uri, output_gcs_uri):
         """
         Process document using Google Document AI batch processing with comprehensive error handling.
+        
+        Returns:
+            DocumentAIResult: A wrapper object with text attribute containing the extracted text.
         """
         try:
             from google.cloud import documentai
@@ -241,7 +327,53 @@ class DocumentAIProcessor:
                 # Wait for operation to complete with timeout
                 result = operation.result(timeout=300)  # 5 minute timeout
                 current_app.logger.info(f"Batch processing completed successfully for {input_gcs_uri}")
-                return True
+                
+                # For batch processing, we need to read the result from GCS
+                # Since batch processing writes to GCS, we'll create a wrapper object
+                # that simulates the document.text interface
+                class DocumentAIResult:
+                    def __init__(self, gcs_uri):
+                        self.gcs_uri = gcs_uri
+                        self._text = None
+                    
+                    @property
+                    def text(self):
+                        if self._text is None:
+                            # Read the result from GCS
+                            try:
+                                # Parse GCS URI to get bucket and blob
+                                if self.gcs_uri.startswith('gs://'):
+                                    path_parts = self.gcs_uri[5:].split('/', 1)
+                                    if len(path_parts) == 2:
+                                        bucket_name, blob_name = path_parts
+                                        
+                                        # Create storage client
+                                        storage_client = storage.Client()
+                                        bucket = storage_client.bucket(bucket_name)
+                                        blob = bucket.blob(blob_name)
+                                        
+                                        # Download and parse the result
+                                        content = blob.download_as_text()
+                                        
+                                        # Parse JSON response
+                                        import json
+                                        result_data = json.loads(content)
+                                        
+                                        # Extract text from the batch processing result
+                                        if 'document' in result_data:
+                                            self._text = result_data['document'].get('text', '')
+                                        else:
+                                            self._text = content  # Fallback to raw content
+                                    else:
+                                        self._text = f"Error parsing GCS URI: {self.gcs_uri}"
+                                else:
+                                    self._text = f"Invalid GCS URI format: {self.gcs_uri}"
+                            except Exception as e:
+                                self._text = f"Error reading batch processing result: {str(e)}"
+                        
+                        return self._text
+                
+                return DocumentAIResult(output_gcs_uri)
                 
             except Exception as batch_error:
                 current_app.logger.error(f"Batch processing failed for {input_gcs_uri}: {batch_error}")
@@ -290,14 +422,17 @@ class DocumentAIProcessor:
                 except Exception as logging_error:
                     current_app.logger.error(f"Error while extracting detailed error information: {logging_error}")
                 
-                # Remove flawed fallback logic - let the real error surface
-                raise batch_error
+                # Raise a ConversionError instead of the raw exception
+                raise ConversionError(f"Document AI batch processing failed: {str(batch_error)}")
                     
         except ImportError:
-            raise Exception("Google Cloud Document AI library not available")
+            raise ConversionError("Google Cloud Document AI library not available")
+        except ConversionError:
+            # Re-raise our custom exceptions
+            raise
         except Exception as e:
             current_app.logger.error(f"Document AI batch processing error for {input_gcs_uri}: {e}")
-            raise Exception(f"Document AI batch processing failed: {str(e)}")
+            raise ConversionError(f"Document AI batch processing failed: {str(e)}")
 
 @get_celery().task(bind=True)
 def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None, credentials_json=None, user_id=None):
@@ -485,11 +620,11 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                 try:
                     document = process_with_docai(credentials_path, project_id, location, processor_id, temp_file_path, mime_type)
                     
-                    # Extract text content
-                    markdown_content = document.text
+                    # Extract text content - document is now a string
+                    markdown_content = document
                     
                     print("--- [Celery Task] Synchronous processing completed successfully")
-                except Exception as docai_error:
+                except ConversionError as docai_error:
                     print(f"--- [Celery Task] Document AI processing failed: {docai_error}")
                     
                     # Try batch processing as fallback
@@ -503,11 +638,11 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         processor = DocumentAIProcessor(credentials_path, project_id, location, processor_id)
                         document = processor.process_with_docai_batch(input_gcs_uri, output_gcs_uri)
                         
-                        # Extract text content
+                        # Extract text content - document is now a DocumentAIResult object
                         markdown_content = document.text
                         
                         print("--- [Celery Task] Batch processing completed successfully")
-                    except Exception as batch_error:
+                    except ConversionError as batch_error:
                         print(f"--- [Celery Task] Batch processing also failed: {batch_error}")
                         raise batch_error
             else:
@@ -893,8 +1028,18 @@ def index_document_for_rag_task(self, conversion_id):
             
             # Get document text for RAG indexing
             text_content = _get_document_text_for_financial_analysis(conversion)
+            
+            # Validate text content before RAG processing
             if not text_content:
                 print(f"--- [Celery Task] No text content available for RAG indexing conversion {conversion_id}")
+                return
+                
+            if not isinstance(text_content, str):
+                print(f"--- [Celery Task] Invalid text content type for RAG indexing conversion {conversion_id}: {type(text_content)}")
+                return
+                
+            if not text_content.strip():
+                print(f"--- [Celery Task] Empty text content for RAG indexing conversion {conversion_id}")
                 return
             
             # Import RAG service

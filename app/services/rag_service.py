@@ -237,6 +237,19 @@ class RAGService:
         if not self.enabled:
             return []
             
+        # Validate input text
+        if not text:
+            logger.warning("chunk_text called with empty text")
+            return []
+            
+        if not isinstance(text, str):
+            logger.warning(f"chunk_text called with non-string input: {type(text)}")
+            return []
+            
+        if not text.strip():
+            logger.warning("chunk_text called with whitespace-only text")
+            return []
+            
         max_tokens = max_tokens or self.max_tokens
         overlap = overlap or self.chunk_overlap
         
@@ -269,12 +282,27 @@ class RAGService:
         except Exception as e:
             logger.error(f"Error in chunk_text: {e}")
             fallback_chunks = [text[i:i+2000] for i in range(0, len(text), 1500)]
-            self._metrics['chunks_created'] += len(fallback_chunks)
-            return fallback_chunks
+            # Filter out empty chunks from fallback
+            valid_fallback_chunks = [chunk.strip() for chunk in fallback_chunks if chunk.strip()]
+            self._metrics['chunks_created'] += len(valid_fallback_chunks)
+            return valid_fallback_chunks
     
     def generate_embedding(self, text: str) -> Optional[np.ndarray]:
         """Generate embedding for text"""
         if not self.enabled:
+            return None
+            
+        # Validate input text
+        if not text:
+            logger.warning("generate_embedding called with empty text")
+            return None
+            
+        if not isinstance(text, str):
+            logger.warning(f"generate_embedding called with non-string input: {type(text)}")
+            return None
+            
+        if not text.strip():
+            logger.warning("generate_embedding called with whitespace-only text")
             return None
             
         # Try lazy initialization
@@ -296,6 +324,34 @@ class RAGService:
             return False
             
         try:
+            # Validate input chunks - sanitize the data pipeline
+            if not chunks:
+                log_rag_event("store_no_chunks", {"document_id": document_id}, "warning")
+                return True  # Success but no chunks to process
+            
+            # Filter and clean chunks: remove None values and empty strings
+            raw_chunk_count = len(chunks)
+            valid_chunks = []
+            
+            for chunk in chunks:
+                # Validate each chunk is a string and not empty after stripping
+                if isinstance(chunk, str) and chunk.strip():
+                    valid_chunks.append(chunk.strip())
+                elif chunk is None:
+                    logger.warning(f"Skipping None chunk for document {document_id}")
+                elif not isinstance(chunk, str):
+                    logger.warning(f"Skipping non-string chunk for document {document_id}: {type(chunk)}")
+                elif not chunk.strip():
+                    logger.warning(f"Skipping empty chunk for document {document_id}")
+            
+            # Log sanitization results
+            logger.info(f"RAG chunk sanitization: {raw_chunk_count} raw chunks -> {len(valid_chunks)} valid chunks for document {document_id}")
+            
+            # If no valid chunks found, return early
+            if not valid_chunks:
+                log_rag_event("store_no_valid_chunks", {"document_id": document_id, "raw_count": raw_chunk_count}, "warning")
+                return True  # Success but no valid chunks to process
+            
             # Delete existing chunks for this document (use Integer directly)
             deleted_count = RAGChunk.query.filter_by(document_id=document_id).delete()
             db.session.commit()
@@ -307,16 +363,20 @@ class RAGService:
             # Try lazy initialization for embeddings
             can_generate_embeddings = self._lazy_init()
             
-            for i, chunk_text in enumerate(chunks):
+            for i, chunk_text in enumerate(valid_chunks):
                 embedding = None
                 embedding_json = None
                 
                 if can_generate_embeddings:
-                    embedding = self.generate_embedding(chunk_text)
-                    if embedding is not None:
-                        # Convert numpy array to JSON-serializable list
-                        embedding_json = embedding.tolist()
-                        embeddings_to_add.append(embedding)
+                    # Additional validation before calling embedding model
+                    if chunk_text and isinstance(chunk_text, str) and chunk_text.strip():
+                        embedding = self.generate_embedding(chunk_text)
+                        if embedding is not None:
+                            # Convert numpy array to JSON-serializable list
+                            embedding_json = embedding.tolist()
+                            embeddings_to_add.append(embedding)
+                    else:
+                        logger.warning(f"Skipping invalid chunk text for embedding: {type(chunk_text)} - {chunk_text[:100] if chunk_text else 'None'}")
                 
                 chunk = RAGChunk(
                     document_id=document_id,  # Use integer directly
@@ -351,7 +411,8 @@ class RAGService:
             
             log_rag_event("store_success", {
                 "document_id": document_id, 
-                "chunk_count": len(chunks),
+                "raw_chunk_count": raw_chunk_count,
+                "valid_chunk_count": len(valid_chunks),
                 "embeddings_generated": len(embeddings_to_add)
             })
             return True
