@@ -404,7 +404,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                     if conversion and conversion.user_id:
                         user = User.query.get(conversion.user_id)
                         
-                        if not user or not user.is_pro_user():
+                        if not user or not user.is_premium:
                             # Update conversion record with failure
                             conversion.status = 'failed'
                             conversion.error_message = 'Pro access required for this conversion'
@@ -488,6 +488,19 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
                         print(f"--- [Celery Task] Task ID: {task_result.id}")
                     except Exception as fa_error:
                         print(f"--- [Celery Task] Warning: Failed to trigger financial analysis generation: {fa_error}")
+                        import traceback
+                        print(f"--- [Celery Task] Full traceback: {traceback.format_exc()}")
+                    
+                    # Trigger RAG indexing after successful conversion
+                    try:
+                        print(f"--- [Celery Task] About to trigger RAG indexing for conversion {conversion_id}")
+                        from app.tasks import index_document_for_rag_task
+                        print(f"--- [Celery Task] Successfully imported index_document_for_rag_task")
+                        rag_task_result = index_document_for_rag_task.delay(conversion_id)
+                        print(f"--- [Celery Task] Triggered RAG indexing for conversion {conversion_id}")
+                        print(f"--- [Celery Task] RAG Task ID: {rag_task_result.id}")
+                    except Exception as rag_error:
+                        print(f"--- [Celery Task] Warning: Failed to trigger RAG indexing: {rag_error}")
                         import traceback
                         print(f"--- [Celery Task] Full traceback: {traceback.format_exc()}")
                     
@@ -760,115 +773,87 @@ def extract_data_task(self, conversion_id):
 
 @get_celery().task(bind=True)
 def generate_financial_analysis_task(self, conversion_id):
-    """
-    Generate structured financial analysis from document text using LLM.
-    
-    Args:
-        conversion_id (int): The ID of the conversion to generate financial analysis for
-    """
+    """Generate financial analysis from converted document."""
     try:
         with current_app.app_context():
-            print(f"=== [FINANCIAL ANALYSIS TASK] Starting financial analysis for conversion {conversion_id}")
-            
-            # Retrieve the Conversion object by its ID
             conversion = Conversion.query.get(conversion_id)
             if not conversion:
-                print(f"=== [FINANCIAL ANALYSIS TASK] ERROR: Conversion with ID {conversion_id} not found")
-                raise ValueError(f"Conversion with ID {conversion_id} not found")
+                print(f"--- [Celery Task] Conversion {conversion_id} not found")
+                return
             
-            print(f"=== [FINANCIAL ANALYSIS TASK] Found conversion: {conversion.original_filename}, status: {conversion.status}")
-            
-            # Check if conversion is completed
             if conversion.status != 'completed':
-                print(f"=== [FINANCIAL ANALYSIS TASK] ERROR: Conversion {conversion_id} is not completed (status: {conversion.status})")
-                raise ValueError(f"Conversion {conversion_id} is not completed (status: {conversion.status})")
+                print(f"--- [Celery Task] Conversion {conversion_id} not completed, status: {conversion.status}")
+                return
             
-            # Read the document's plain text content from its result file
-            print(f"=== [FINANCIAL ANALYSIS TASK] Getting document text for financial analysis...")
+            # Get document text for analysis
             text_content = _get_document_text_for_financial_analysis(conversion)
             if not text_content:
-                print(f"=== [FINANCIAL ANALYSIS TASK] ERROR: No text content available for financial analysis")
-                raise ValueError("No text content available for financial analysis")
+                print(f"--- [Celery Task] No text content available for conversion {conversion_id}")
+                return
             
-            print(f"=== [FINANCIAL ANALYSIS TASK] Got text content, length: {len(text_content)}")
-            print(f"=== [FINANCIAL ANALYSIS TASK] First 200 chars: {text_content[:200]}")
-            
-            # FIXED: Validate text content is not empty or just metadata
-            if not text_content or len(text_content.strip()) < 50:
-                error_msg = f"Text content too short or empty (length: {len(text_content)})"
-                print(f"=== [FINANCIAL ANALYSIS TASK] ERROR: {error_msg}")
-                raise ValueError(error_msg)
-            
-            # Check for metadata-only content
-            content_lower = text_content.lower()
-            metadata_indicators = ['document:', 'type:', 'status:', 'completed', 'filename:', 'size:', 'pages:']
-            is_metadata = any(indicator in content_lower for indicator in metadata_indicators) and len(text_content) < 500
-            
-            if is_metadata:
-                error_msg = f"Text content appears to be metadata only: {text_content[:200]}..."
-                print(f"=== [FINANCIAL ANALYSIS TASK] ERROR: {error_msg}")
-                raise ValueError(error_msg)
-            
-            # FIXED: Add structured JSON logging
-            import json
-            log_event = {
-                "service": "financial_analysis",
-                "event_type": "text_extraction_success",
-                "timestamp": time.time(),
-                "details": {
-                    "conversion_id": conversion_id,
-                    "text_length": len(text_content),
-                    "text_preview": text_content[:200],
-                    "filename": conversion.original_filename
-                }
-            }
-            print(f"=== [FINANCIAL ANALYSIS TASK] LOG: {json.dumps(log_event)}")
-            
-            # Construct the high-rigor prompt for LLM
+            # Construct prompt for financial analysis
             prompt = _construct_financial_analysis_prompt(text_content)
             
-            # Make a call to the LLM and receive structured JSON response
-            print(f"=== [FINANCIAL ANALYSIS TASK] Calling LLM for financial analysis...")
-            llm_response = _call_llm_for_financial_analysis(prompt)
+            # Call LLM for analysis
+            analysis_result = _call_llm_for_financial_analysis(prompt)
             
-            # Validate the response using Pydantic schema
-            print(f"=== [FINANCIAL ANALYSIS TASK] Validating LLM response with Pydantic...")
-            from app.schemas.financial_ledger import FinancialReport
-            
-            try:
-                validated_data = FinancialReport.model_validate_json(llm_response)
-                financial_report = validated_data.model_dump()
-            except Exception as validation_error:
-                print(f"=== [FINANCIAL ANALYSIS TASK] VALIDATION ERROR: {validation_error}")
-                raise ValueError(f"LLM response failed Pydantic validation: {validation_error}")
-            
-            # Persist the validated JSON by updating the structured_data column
-            print(f"=== [FINANCIAL ANALYSIS TASK] Saving validated financial analysis to database...")
-            conversion.structured_data = financial_report
-            db.session.commit()
-            
-            print(f"=== [FINANCIAL ANALYSIS TASK] SUCCESS: Generated financial analysis for conversion {conversion_id}")
-            print(f"=== [FINANCIAL ANALYSIS TASK] Entries: {len(financial_report.get('entries', []))}")
-            print(f"=== [FINANCIAL ANALYSIS TASK] Winner: {financial_report.get('biggest_winner', 'N/A')}")
-            print(f"=== [FINANCIAL ANALYSIS TASK] Loser: {financial_report.get('biggest_loser', 'N/A')}")
-            
-            return {
-                'status': 'success',
-                'conversion_id': conversion_id,
-                'financial_report': financial_report
-            }
-            
+            if analysis_result:
+                # Store the analysis result
+                conversion.structured_data = {
+                    'financial_analysis': analysis_result,
+                    'generated_at': datetime.now(timezone.utc).isoformat()
+                }
+                db.session.commit()
+                print(f"--- [Celery Task] Financial analysis completed for conversion {conversion_id}")
+            else:
+                print(f"--- [Celery Task] Failed to generate financial analysis for conversion {conversion_id}")
+                
     except Exception as e:
-        print(f"=== [FINANCIAL ANALYSIS TASK] ERROR: {str(e)}")
-        # Update conversion with error status
-        if conversion:
-            conversion.structured_data = {"error": str(e)}
-            db.session.commit()
-        return {
-            'status': 'error',
-            'conversion_id': conversion_id,
-            'error': str(e)
-        }
+        print(f"--- [Celery Task] Error in financial analysis task: {e}")
+        import traceback
+        print(f"--- [Celery Task] Full traceback: {traceback.format_exc()}")
+
+
+@get_celery().task(bind=True)
+def index_document_for_rag_task(self, conversion_id):
+    """Index document for RAG (Retrieval Augmented Generation) after successful conversion."""
+    try:
+        with current_app.app_context():
+            conversion = Conversion.query.get(conversion_id)
+            if not conversion:
+                print(f"--- [Celery Task] Conversion {conversion_id} not found for RAG indexing")
+                return
+            
+            if conversion.status != 'completed':
+                print(f"--- [Celery Task] Conversion {conversion_id} not completed, status: {conversion.status}")
+                return
+            
+            # Get document text for RAG indexing
+            text_content = _get_document_text_for_financial_analysis(conversion)
+            if not text_content:
+                print(f"--- [Celery Task] No text content available for RAG indexing conversion {conversion_id}")
+                return
+            
+            # Import RAG service
+            from app.services.rag_service import get_rag_service
+            rag_service = get_rag_service()
+            
+            if not rag_service.is_available():
+                print(f"--- [Celery Task] RAG service not available for conversion {conversion_id}")
+                return
+            
+            # Store document chunks for RAG
+            success = rag_service.store_document_chunks(conversion_id, [text_content])
+            
+            if success:
+                print(f"--- [Celery Task] RAG indexing completed for conversion {conversion_id}")
+            else:
+                print(f"--- [Celery Task] Failed to index document for RAG conversion {conversion_id}")
+                
+    except Exception as e:
+        print(f"--- [Celery Task] Error in RAG indexing task: {e}")
+        import traceback
+        print(f"--- [Celery Task] Full traceback: {traceback.format_exc()}")
 
 
 def _get_document_text_for_financial_analysis(conversion):
