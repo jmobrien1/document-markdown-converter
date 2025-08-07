@@ -89,12 +89,6 @@ def create_app(config_name=None):
         "pool_timeout": 30,
         "pool_size": 5,
         "max_overflow": 5,
-        "connect_args": {        # psycopg2/libpq TCP keepalives
-            "keepalives": 1,
-            "keepalives_idle": 60,
-            "keepalives_interval": 30,
-            "keepalives_count": 5,
-        },
     }
     
     # Initialize extensions with app
