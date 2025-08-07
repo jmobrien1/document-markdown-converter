@@ -1,33 +1,18 @@
-# Use Render's official Ubuntu-based Python image which includes build tools
-# Updated to Python 3.13 to match Render's environment
+# Use Render's official Ubuntu-based Python image
 FROM render/python:3.13
 
-# Cache-busting build arguments
-ARG TIMESTAMP
-ARG CACHE_BUSTER
-
-# Set the working directory inside the container
+# Set the working directory
 WORKDIR /app
 
-# Copy the consolidated requirements file
+# Copy only the requirements file first to leverage Docker layer caching
 COPY requirements.txt ./
 
-# Install system dependencies that might be needed for building packages
-RUN apt-get update && apt-get install -y build-essential gcc g++
+# Install system dependencies
+RUN apt-get update && apt-get install -y build-essential
 
-# Upgrade pip to get the latest wheel support
-RUN pip install --upgrade pip setuptools wheel
+# Upgrade pip and install Python dependencies
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt --no-cache-dir
 
-# Install all dependencies from consolidated requirements file
-RUN pip install -r requirements.txt --no-cache-dir --verbose
-
-# Verify critical ML packages are installed
-RUN python -c "import tiktoken; print('✅ tiktoken installed:', tiktoken.__version__)" && \
-    python -c "import sentence_transformers; print('✅ sentence_transformers installed')" && \
-    python -c "import transformers; print('✅ transformers installed')" && \
-    python -c "import torch; print('✅ torch installed:', torch.__version__)" && \
-    python -c "from annoy import AnnoyIndex; print('✅ annoy installed')" && \
-    python -c "import openai; print('✅ openai installed')"
-
-# Copy the rest of your application code into the container
+# Now copy the rest of the application code
 COPY . . 

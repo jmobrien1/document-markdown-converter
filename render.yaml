@@ -13,11 +13,11 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
-    # Force complete cache invalidation - 2025-08-05
-    buildCommand: docker build --no-cache --pull --force-rm -f Dockerfile.render -t mdraft-app . --build-arg TIMESTAMP=$(date +%s) --build-arg CACHE_BUSTER=$(openssl rand -hex 16)
+    # Optimized build command with deploy script preparation
+    buildCommand: pip install -r requirements.txt && chmod +x deploy.sh
     startCommand: ./deploy.sh
     healthCheckPath: /healthz
-    initialDelaySeconds: 30
+    initialDelaySeconds: 45
     envVars:
       - key: FLASK_ENV
         value: production
