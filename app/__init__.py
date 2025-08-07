@@ -69,6 +69,19 @@ def create_app(config_name=None):
     migrate.init_app(app, db)
     mail.init_app(app)
     
+    # Configure SQLAlchemy for better connection handling
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_size': 10,
+        'pool_timeout': 20,
+        'pool_recycle': 300,
+        'pool_pre_ping': True,
+        'max_overflow': 20,
+        'connect_args': {
+            'connect_timeout': 10,
+            'application_name': 'mdraft_app'
+        }
+    }
+    
     # Configure Celery BEFORE registering blueprints
     make_celery(app)
     

@@ -28,6 +28,26 @@ from ..services.conversion_engine import ConversionEngine
 from .. import db
 from . import main
 
+def get_db_session():
+    """Get a fresh database session with error handling."""
+    try:
+        # Test connection
+        db.session.execute('SELECT 1')
+        db.session.commit()
+        return db.session
+    except Exception as e:
+        current_app.logger.error(f"Database connection failed: {e}")
+        # Try to rollback and get a new session
+        try:
+            db.session.rollback()
+            db.session.close()
+            db.session.execute('SELECT 1')
+            db.session.commit()
+            return db.session
+        except Exception as e2:
+            current_app.logger.error(f"Database recovery failed: {e2}")
+            raise
+
 # File signature definitions for magic number validation
 FILE_SIGNATURES = {
     # PDF files
@@ -268,6 +288,14 @@ def test_form():
 
 @main.route('/convert', methods=['GET', 'POST'])
 def convert():
+    """Handle file conversion with robust error handling."""
+    try:
+        # Test database connection first
+        db.session.execute('SELECT 1')
+        db.session.commit()
+    except Exception as e:
+        current_app.logger.error(f"Database connection error: {e}")
+        return jsonify({'error': 'Database connection failed. Please try again.'}), 503
     """
     Handles file upload and conversion.
     GET: Returns method info for debugging

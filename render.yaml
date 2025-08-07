@@ -70,7 +70,7 @@ services:
     branch: clean-migrations
     # Direct Python deployment (no Docker)
     buildCommand: pip install -r requirements.txt
-    startCommand: celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4 --without-gossip --without-mingle
+    startCommand: celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=2 --without-gossip --without-mingle --time-limit=600 --soft-time-limit=300
     envVars:
       - key: FLASK_ENV
         value: production

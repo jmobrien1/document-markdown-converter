@@ -56,6 +56,14 @@ else
     fi
 fi
 
-# Start the Gunicorn server
-echo "Starting Gunicorn server..."
-exec gunicorn run:app --bind 0.0.0.0:$PORT 
+# Start the Gunicorn server with optimized settings
+echo "Starting Gunicorn server with optimized settings..."
+exec gunicorn run:app \
+  --bind 0.0.0.0:$PORT \
+  --workers=2 \
+  --timeout=300 \
+  --keep-alive=5 \
+  --max-requests=1000 \
+  --max-requests-jitter=100 \
+  --preload \
+  --worker-class=sync 
