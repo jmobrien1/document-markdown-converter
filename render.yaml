@@ -15,7 +15,7 @@ services:
     dockerContext: .
     # Force complete cache invalidation - 2025-08-05
     buildCommand: docker build --no-cache --pull --force-rm -f Dockerfile.render -t mdraft-app . --build-arg TIMESTAMP=$(date +%s) --build-arg CACHE_BUSTER=$(openssl rand -hex 16)
-    startCommand: mkdir -p /var/data/annoy_indices && chmod -R 777 /var/data/annoy_indices && flask db upgrade && gunicorn run:app
+    startCommand: flask db upgrade && gunicorn run:app
     envVars:
       - key: FLASK_ENV
         value: production
@@ -57,9 +57,9 @@ services:
         value: 500
       - key: RAG_CHUNK_OVERLAP
         value: 50
-      # RAG Index Persistence Configuration
+      # RAG Index Persistence Configuration - Use writable temp directory
       - key: ANNOY_INDEX_PATH
-        value: /var/data/annoy_indices/index.ann
+        value: /tmp/annoy_indices/index.ann
 
   # The Celery background worker
   - type: worker
@@ -69,7 +69,7 @@ services:
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
     buildCommand: docker build --no-cache --pull --force-rm -f Dockerfile.render -t mdraft-worker . --build-arg TIMESTAMP=$(date +%s) --build-arg CACHE_BUSTER=$(openssl rand -hex 16)
-    startCommand: mkdir -p /var/data/annoy_indices && chmod -R 777 /var/data/annoy_indices && celery -A celery_worker.celery worker --loglevel=info
+    startCommand: celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4 --without-gossip --without-mingle
     envVars:
       - key: FLASK_ENV
         value: production
@@ -111,9 +111,9 @@ services:
         value: 500
       - key: RAG_CHUNK_OVERLAP
         value: 50
-      # RAG Index Persistence Configuration
+      # RAG Index Persistence Configuration - Use writable temp directory
       - key: ANNOY_INDEX_PATH
-        value: /var/data/annoy_indices/index.ann
+        value: /tmp/annoy_indices/index.ann
 
   # Cron job for expiring trials
   - type: cron
