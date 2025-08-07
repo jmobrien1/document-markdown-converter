@@ -205,6 +205,3 @@ def create_app(config_name=None):
     
     app.logger.info("🚀 Application startup complete")
     return app
-
-# Create Flask app instance
-app = create_app()
