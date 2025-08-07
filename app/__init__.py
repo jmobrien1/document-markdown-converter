@@ -9,11 +9,26 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_mail import Mail
 import bcrypt
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 # Initialize extensions
 db = SQLAlchemy()
 migrate = Migrate()
 mail = Mail()
+
+def _ensure_sslmode(uri: str) -> str:
+    # Add sslmode=require if it's Postgres and not set
+    if not uri or not uri.startswith(("postgresql://", "postgresql+psycopg2://")):
+        return uri
+    parsed = urlparse(uri)
+    qs = parse_qs(parsed.query)
+    if "sslmode" not in qs:
+        qs["sslmode"] = ["require"]
+        new_query = urlencode(qs, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
+    return uri
 
 # Initialize Celery at module level to avoid circular imports
 from celery import Celery
@@ -63,24 +78,29 @@ def create_app(config_name=None):
     from config import config
     app.config.from_object(config[config_name])
     config[config_name].init_app(app)
+
+    # ✅ SQLAlchemy 2.x + cloud Postgres hardening (add BEFORE db.init_app)
+    app.config.setdefault("SQLALCHEMY_TRACK_MODIFICATIONS", False)
+    app.config["SQLALCHEMY_DATABASE_URI"] = _ensure_sslmode(app.config.get("SQLALCHEMY_DATABASE_URI", ""))
+
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,   # validate before use; drops stale TLS conns
+        "pool_recycle": 300,     # recycle every 5m to avoid idle closes
+        "pool_timeout": 30,
+        "pool_size": 5,
+        "max_overflow": 5,
+        "connect_args": {        # psycopg2/libpq TCP keepalives
+            "keepalives": 1,
+            "keepalives_idle": 60,
+            "keepalives_interval": 30,
+            "keepalives_count": 5,
+        },
+    }
     
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
     mail.init_app(app)
-    
-    # Configure SQLAlchemy for better connection handling
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_size': 10,
-        'pool_timeout': 20,
-        'pool_recycle': 300,
-        'pool_pre_ping': True,
-        'max_overflow': 20,
-        'connect_args': {
-            'connect_timeout': 10,
-            'application_name': 'mdraft_app'
-        }
-    }
     
     # Configure Celery BEFORE registering blueprints
     make_celery(app)
@@ -95,7 +115,12 @@ def create_app(config_name=None):
     @login_manager.user_loader
     def load_user(user_id):
         from .models import User
-        return User.query.get(int(user_id))
+        try:
+            return db.session.get(User, int(user_id))  # SQLA 2.x style
+        except OperationalError:
+            db.session.rollback()
+            db.engine.dispose()  # drop stale pool, get fresh conn
+            return db.session.get(User, int(user_id))
     
     # Configure bcrypt
     try:
@@ -179,7 +204,6 @@ def create_app(config_name=None):
     try:
         with app.app_context():
             # Check if subscription columns exist using database-appropriate method
-            from sqlalchemy import text
             if db.engine.dialect.name == 'sqlite':
                 # Use SQLite-compatible PRAGMA table_info
                 result = db.session.execute(

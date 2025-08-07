@@ -14,6 +14,8 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 from app.tasks import convert_file_task
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 # Conditional Flask-Login import for web environment
 try:
@@ -28,11 +30,33 @@ from ..services.conversion_engine import ConversionEngine
 from .. import db
 from . import main
 
+def _db_ping():
+    """Ensure we have a live DB connection (SQLAlchemy 2.x safe)."""
+    try:
+        db.session.execute(text("SELECT 1"))
+        return True
+    except OperationalError as e:
+        current_app.logger.warning(f"DB ping OperationalError; recycling pool: {e}")
+        db.session.rollback()
+        db.engine.dispose()  # drop stale pool
+        db.session.execute(text("SELECT 1"))
+        return True
+
+def _retry_once(func, *args, **kwargs):
+    """Run func, retrying once on OperationalError after disposing the pool."""
+    try:
+        return func(*args, **kwargs)
+    except OperationalError as e:
+        current_app.logger.warning(f"OperationalError; retrying once: {e}")
+        db.session.rollback()
+        db.engine.dispose()
+        return func(*args, **kwargs)
+
 def get_db_session():
     """Get a fresh database session with error handling."""
     try:
         # Test connection
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         db.session.commit()
         return db.session
     except Exception as e:
@@ -41,7 +65,7 @@ def get_db_session():
         try:
             db.session.rollback()
             db.session.close()
-            db.session.execute('SELECT 1')
+            db.session.execute(text('SELECT 1'))
             db.session.commit()
             return db.session
         except Exception as e2:
@@ -264,22 +288,27 @@ def get_accurate_pdf_page_count(file_stream, filename):
 @main.route('/')
 def index():
     """Renders the main page with the file upload form."""
+    # Proactively ping DB so first request after deploy doesn't 500
+    _db_ping()
+
     # Get usage info for anonymous users
     if not current_user or not current_user.is_authenticated:
         session_id = session.get('session_id')
         if not session_id:
             session_id = str(uuid.uuid4())
             session['session_id'] = session_id
-        
-        usage = AnonymousUsage.get_or_create_session(session_id, request.remote_addr)
+
+        # ✅ retry once if the connection is stale
+        usage = _retry_once(AnonymousUsage.get_or_create_session, session_id, request.remote_addr)
+
         daily_limit = current_app.config.get('ANONYMOUS_DAILY_LIMIT', 5)
         remaining_conversions = max(0, daily_limit - usage.conversions_today)
     else:
         remaining_conversions = None  # Unlimited for logged-in users
-    
-    return render_template('index.html', 
-                         remaining_conversions=remaining_conversions,
-                         daily_limit=current_app.config.get('ANONYMOUS_DAILY_LIMIT', 5))
+
+    return render_template('index.html',
+                           remaining_conversions=remaining_conversions,
+                           daily_limit=current_app.config.get('ANONYMOUS_DAILY_LIMIT', 5))
 
 @main.route('/test-form')
 def test_form():
@@ -288,21 +317,12 @@ def test_form():
 
 @main.route('/convert', methods=['GET', 'POST'])
 def convert():
-    """Handle file conversion with robust error handling."""
-    try:
-        # Test database connection first
-        db.session.execute('SELECT 1')
-        db.session.commit()
-    except Exception as e:
-        current_app.logger.error(f"Database connection error: {e}")
-        return jsonify({'error': 'Database connection failed. Please try again.'}), 503
     """
     Handles file upload and conversion.
     GET: Returns method info for debugging
     POST: Processes file conversion using ConversionService
     """
     if request.method == 'GET':
-        # Handle GET requests for debugging
         return jsonify({
             'error': 'This endpoint requires a POST request with a file upload',
             'method': 'POST',
@@ -310,9 +330,11 @@ def convert():
             'optional_fields': ['pro_conversion'],
             'status': 'ready'
         }), 405
-    
-    # Handle POST requests using ConversionService
+
     try:
+        # ✅ Make sure DB pool is alive before anything else
+        _db_ping()
+
         current_app.logger.info("=== CONVERT REQUEST STARTED ===")
         
         if 'file' not in request.files:
@@ -1097,8 +1119,13 @@ def remove_team_member(team_id, user_id):
 
 @main.route('/healthz')
 def health_check():
-    """Simple health check endpoint for Render."""
-    return "OK", 200
+    """Simple health check that also verifies DB connectivity."""
+    try:
+        db.session.execute(text("SELECT 1"))
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        current_app.logger.error(f"Health check DB error: {e}")
+        return jsonify({"ok": False, "db": "down"}), 500
 
 @main.route('/robots.txt')
 def static_from_root():
