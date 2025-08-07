@@ -16,6 +16,9 @@ from markitdown import MarkItDown
 from celery import current_task
 from datetime import datetime, timezone
 
+# Import the celery instance from app
+from app import celery
+
 # Custom exception for conversion errors
 class ConversionError(Exception):
     """Custom exception for document conversion errors"""
@@ -83,14 +86,6 @@ try:
 except ImportError:
     EMAIL_AVAILABLE = False
     send_conversion_complete_email = None
-
-def get_celery():
-    """Get the celery instance, importing it lazily to avoid circular imports."""
-    global celery
-    if celery is None:
-        from app import celery as celery_instance
-        celery = celery_instance
-    return celery
 
 def scan_file_for_viruses(file_path):
     """
@@ -447,7 +442,7 @@ class DocumentAIProcessor:
             current_app.logger.error(f"Document AI batch processing error for {input_gcs_uri}: {e}")
             raise ConversionError(f"Document AI batch processing failed: {str(e)}")
 
-@get_celery().task(bind=True)
+@celery.task(bind=True)
 def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_converter=False, conversion_id=None, page_count=None, credentials_json=None, user_id=None):
     """
     Convert uploaded file to Markdown using Celery background task.
@@ -782,7 +777,7 @@ def convert_file_task(self, bucket_name, blob_name, original_filename, use_pro_c
         }
 
 
-@get_celery().task
+@celery.task
 def expire_trials():
     """Expire trials for users whose trial period has ended."""
     from datetime import datetime, timezone
@@ -828,7 +823,7 @@ def expire_trials():
             pass
 
 
-@get_celery().task
+@celery.task
 def reset_monthly_usage():
     """Reset monthly usage counters for all users."""
     from sqlalchemy import text
@@ -862,7 +857,7 @@ def reset_monthly_usage():
             pass
 
 
-@get_celery().task
+@celery.task
 def redis_health_check():
     """
     Simple health check task to keep Redis active.
@@ -883,7 +878,7 @@ def redis_health_check():
         }
 
 
-@get_celery().task(bind=True)
+@celery.task(bind=True)
 def process_batch_conversions(self, batch_id):
     """
     Process all conversion jobs in a batch.
@@ -950,7 +945,7 @@ def process_batch_conversions(self, batch_id):
             pass
 
 
-@get_celery().task(bind=True)
+@celery.task(bind=True)
 def extract_data_task(self, conversion_id):
     """
     Extract structured data from a document's text content.
@@ -982,7 +977,7 @@ def extract_data_task(self, conversion_id):
         }
 
 
-@get_celery().task(bind=True)
+@celery.task(bind=True)
 def generate_financial_analysis_task(self, conversion_id):
     """Generate financial analysis from converted document."""
     try:
@@ -1025,7 +1020,7 @@ def generate_financial_analysis_task(self, conversion_id):
         print(f"--- [Celery Task] Full traceback: {traceback.format_exc()}")
 
 
-@get_celery().task(bind=True)
+@celery.task(bind=True)
 def index_document_for_rag_task(self, conversion_id):
     """Index document for RAG (Retrieval Augmented Generation) after successful conversion."""
     try:

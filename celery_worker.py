@@ -11,9 +11,9 @@ import sys
 # Ensure the app directory is in the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import Flask app factory and Celery configuration
+# Import Flask app factory
 try:
-    from app import create_app, make_celery
+    from app import create_app
     print("Successfully imported Flask app factory")
 except ImportError as e:
     print(f"Error importing Flask app: {e}")
@@ -30,12 +30,12 @@ except Exception as e:
     print(f"Error creating Flask app: {e}")
     sys.exit(1)
 
-# Create and configure Celery with Flask app context
+# Import the configured Celery instance from the app package
 try:
-    celery = make_celery(flask_app)
-    print("Celery configured successfully")
+    from app import celery
+    print("Celery instance imported successfully")
 except Exception as e:
-    print(f"Error configuring Celery: {e}")
+    print(f"Error importing Celery instance: {e}")
     sys.exit(1)
 
 # Push application context so Celery tasks can access Flask extensions

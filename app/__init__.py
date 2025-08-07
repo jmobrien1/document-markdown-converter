@@ -22,7 +22,7 @@ from celery import Celery
 celery = Celery('mdraft', include=['app.tasks'])
 
 def make_celery(app):
-    """Create Celery instance and configure it with Flask app context."""
+    """Configure the existing Celery instance with Flask app context."""
     # Configure Celery with Flask app config using new format
     celery.conf.update(
         result_backend=app.config.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
@@ -90,6 +90,9 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     mail.init_app(app)
+    
+    # Configure Celery BEFORE registering blueprints
+    make_celery(app)
     
     # Initialize Flask-Login inside create_app to avoid circular dependency
     from flask_login import LoginManager
@@ -169,7 +172,7 @@ def create_app(config_name=None):
     
     app.logger.info("🎯 Dependency validation complete")
     
-    # Register blueprints
+    # Register blueprints AFTER Celery is configured
     from .auth import auth as auth_blueprint
     app.register_blueprint(auth_blueprint, url_prefix='/auth')
     app.logger.info("Auth blueprint registered successfully")
@@ -194,9 +197,6 @@ def create_app(config_name=None):
     from .main import main as main_blueprint
     app.register_blueprint(main_blueprint)
     app.logger.info("Main blueprint registered successfully")
-    
-    # Configure Celery with Flask app context
-    make_celery(app)
     
     # Check database migration status
     try:
@@ -228,11 +228,5 @@ def create_app(config_name=None):
     app.logger.info("🚀 Application startup complete")
     return app
 
-# Create celery instance for worker
-# Initialize celery at module level to avoid circular imports
-celery = Celery('mdraft', include=['app.tasks'])
-
-# Only create the Flask app when not running as a Celery worker
-if not os.environ.get('CELERY_WORKER_RUNNING'):
-    app = create_app()
-    make_celery(app)
+# Create Flask app instance
+app = create_app()
