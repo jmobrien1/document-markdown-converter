@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 from flask import (
-    render_template, request, jsonify, url_for, current_app, session, send_file, abort, flash, redirect, make_response
+    render_template, request, jsonify, url_for, current_app, session, send_file, abort, flash, redirect, make_response, send_from_directory
 )
 from werkzeug.utils import secure_filename
 from app.tasks import convert_file_task
@@ -1066,3 +1066,8 @@ def remove_team_member(team_id, user_id):
         flash('Error removing user from team', 'error')
     
     return redirect(url_for('main.manage_team', team_id=team_id))
+
+@main.route('/robots.txt')
+def static_from_root():
+    """Serve robots.txt from static folder."""
+    return send_from_directory(current_app.static_folder, 'robots.txt')
