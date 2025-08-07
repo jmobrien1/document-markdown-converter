@@ -11,9 +11,10 @@ services:
     name: mdraft-app
     env: python
     plan: starter
+    branch: clean-migrations
     # Direct Python deployment (no Docker)
     buildCommand: pip install -r requirements.txt && chmod +x deploy.sh
-    startCommand: flask db upgrade || true ; gunicorn run:app --bind 0.0.0.0:$PORT
+    startCommand: ./deploy.sh
     healthCheckPath: /healthz
     initialDelaySeconds: 45
     envVars:
@@ -66,6 +67,7 @@ services:
     name: mdraft-worker
     env: python
     plan: starter
+    branch: clean-migrations
     # Direct Python deployment (no Docker)
     buildCommand: pip install -r requirements.txt
     startCommand: celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4 --without-gossip --without-mingle
@@ -119,6 +121,7 @@ services:
     name: expire-trials
     env: python
     plan: free
+    branch: clean-migrations
     buildCommand: pip install -r requirements.txt
     startCommand: celery -A celery_worker.celery call app.tasks.expire_trials
     schedule: "0 0 * * *"  # Daily at midnight UTC
@@ -144,6 +147,7 @@ services:
     name: reset-monthly-usage
     env: python
     plan: free
+    branch: clean-migrations
     buildCommand: pip install -r requirements.txt
     startCommand: celery -A celery_worker.celery call app.tasks.reset_monthly_usage
     schedule: "0 0 1 * *"  # First day of every month at midnight UTC
@@ -169,6 +173,7 @@ services:
     name: redis-health-check
     env: python
     plan: free
+    branch: clean-migrations
     buildCommand: pip install -r requirements.txt
     startCommand: python -c "import redis; r = redis.Redis.from_url('${{services.redis-mdraft.envVars.REDIS_URL}}'); print('Redis connection:', r.ping())"
     schedule: "0 */4 * * *"  # Every 4 hours instead of every 2 hours
