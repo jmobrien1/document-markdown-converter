@@ -16,6 +16,8 @@ services:
     # Force complete cache invalidation - 2025-08-05
     buildCommand: docker build --no-cache --pull --force-rm -f Dockerfile.render -t mdraft-app . --build-arg TIMESTAMP=$(date +%s) --build-arg CACHE_BUSTER=$(openssl rand -hex 16)
     startCommand: flask db upgrade && gunicorn run:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    initialDelaySeconds: 30
     envVars:
       - key: FLASK_ENV
         value: production

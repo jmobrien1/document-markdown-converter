@@ -127,22 +127,8 @@ def create_app(config_name=None):
     else:
         app.logger.warning("⚠️ OpenAI API key not configured")
     
-    # Check database
-    try:
-        with app.app_context():
-            from sqlalchemy import text
-            db.session.execute(text('SELECT 1'))
-        app.logger.info("✅ Database connection available")
-    except Exception as e:
-        app.logger.warning(f"⚠️ Database connection failed: {e}")
-    
-    # Check Redis/Celery
-    try:
-        from celery import current_app as celery_app
-        celery_app.control.inspect().active()
-        app.logger.info("✅ Celery/Redis connection available")
-    except Exception as e:
-        app.logger.warning(f"⚠️ Celery/Redis connection failed: {e}")
+    # Note: Database and Redis/Celery connections are checked at runtime
+    # to avoid blocking application startup on cloud platforms
     
     # Store dependency status in app config
     app.config['RAG_DEPENDENCIES_AVAILABLE'] = rag_dependencies_available

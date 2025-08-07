@@ -1067,6 +1067,11 @@ def remove_team_member(team_id, user_id):
     
     return redirect(url_for('main.manage_team', team_id=team_id))
 
+@main.route('/healthz')
+def health_check():
+    """Simple health check endpoint for Render."""
+    return "OK", 200
+
 @main.route('/robots.txt')
 def static_from_root():
     """Serve robots.txt from static folder."""
