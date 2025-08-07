@@ -3,7 +3,29 @@
 
 echo "Starting robust deployment script..."
 
-# Attempt to upgrade the database with multiple fallback strategies
+# Step 1: Check Alembic history integrity
+echo "Checking Alembic migration history..."
+if ! flask db check; then
+    echo "ERROR: Alembic history check failed. Migration files are corrupted."
+    echo "Please run 'flask db check' locally to diagnose the issue."
+    exit 1
+fi
+
+# Step 2: Check for multiple heads
+echo "Checking for multiple migration heads..."
+HEADS_OUTPUT=$(flask db heads 2>&1)
+HEAD_COUNT=$(echo "$HEADS_OUTPUT" | grep -c "head")
+
+if [ "$HEAD_COUNT" -gt 1 ]; then
+    echo "ERROR: Multiple migration heads detected:"
+    echo "$HEADS_OUTPUT"
+    echo "Please run 'flask db merge heads' locally to resolve this issue."
+    exit 1
+fi
+
+echo "Migration history is clean. Proceeding with database upgrade..."
+
+# Step 3: Attempt to upgrade the database with multiple fallback strategies
 echo "Attempting database migration with fallback strategies..."
 
 # Strategy 1: Try normal upgrade
@@ -28,7 +50,8 @@ else
             if flask db stamp head; then
                 echo "Database stamped to current head."
             else
-                echo "WARNING: Even stamping failed, but continuing with server startup."
+                echo "ERROR: All migration strategies failed, but continuing with server startup."
+                echo "The application will start but database features may not work correctly."
             fi
         fi
     fi
