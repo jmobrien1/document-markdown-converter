@@ -11,11 +11,9 @@ services:
     name: mdraft-app
     env: python
     plan: starter
-    dockerfilePath: ./Dockerfile.render
-    dockerContext: .
-    # Optimized build command with deploy script preparation
+    # Direct Python deployment (no Docker)
     buildCommand: pip install -r requirements.txt && chmod +x deploy.sh
-    startCommand: ./deploy.sh
+    startCommand: flask db upgrade || true ; gunicorn run:app --bind 0.0.0.0:$PORT
     healthCheckPath: /healthz
     initialDelaySeconds: 45
     envVars:
@@ -68,9 +66,8 @@ services:
     name: mdraft-worker
     env: python
     plan: starter
-    dockerfilePath: ./Dockerfile.render
-    dockerContext: .
-    buildCommand: docker build --no-cache --pull --force-rm -f Dockerfile.render -t mdraft-worker . --build-arg TIMESTAMP=$(date +%s) --build-arg CACHE_BUSTER=$(openssl rand -hex 16)
+    # Direct Python deployment (no Docker)
+    buildCommand: pip install -r requirements.txt
     startCommand: celery -A celery_worker.celery worker --loglevel=info --pool=threads --concurrency=4 --without-gossip --without-mingle
     envVars:
       - key: FLASK_ENV
