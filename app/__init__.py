@@ -25,33 +25,20 @@ def make_celery(app):
     """Configure the existing Celery instance with Flask app context."""
     # Configure Celery with Flask app config using new format
     celery.conf.update(
-        result_backend=app.config.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
-        broker_url=app.config.get('CELERY_BROKER_URL', 'redis://localhost:6379/0'),
-        task_serializer='json',
-        accept_content=['json'],
-        result_serializer='json',
+        broker_url=app.config['CELERY_BROKER_URL'],
+        result_backend=app.config['CELERY_RESULT_BACKEND'],
+        broker_pool_limit=1,
+        broker_connection_max_retries=3,
+        broker_heartbeat=None,
+        worker_prefetch_multiplier=1,
+        worker_cancel_long_running_tasks_on_connection_loss=True,
+        task_acks_late=True,
+        result_expires=1800,
         timezone='UTC',
         enable_utc=True,
-        # Optimized for cloud Redis services (Render/Upstash)
-        broker_pool_limit=1,  # Critical: Single connection pool
-        broker_connection_max_retries=3,  # Prevent infinite retry loops
-        broker_heartbeat=None,  # Disable heartbeat to save connections
-        redis_backend_health_check_interval=None,  # Disable health checks
-        worker_prefetch_multiplier=1,  # Process one task at a time
-        worker_max_tasks_per_child=300,  # Restart worker after 300 tasks
-        task_acks_late=True,  # Acknowledge tasks after completion
-        result_expires=1800,  # 30 minutes - reduced from 1 hour
-        # Transport options for cloud Redis
         broker_transport_options={
-            'visibility_timeout': 18000,  # 5 hours - prevent premature redelivery
-            'socket_connect_timeout': 30,
-            'socket_timeout': 30,
-        },
-        result_backend_transport_options={
-            'visibility_timeout': 18000,  # 5 hours
-            'socket_connect_timeout': 30,
-            'socket_timeout': 30,
-        },
+            'visibility_timeout': 18000
+        }
     )
     
     class ContextTask(celery.Task):
