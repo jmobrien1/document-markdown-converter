@@ -32,34 +32,25 @@ def make_celery(app):
         result_serializer='json',
         timezone='UTC',
         enable_utc=True,
-        # Upstash Redis connection optimization to prevent connection limits
-        broker_connection_retry_on_startup=True,
-        broker_connection_max_retries=20,
-        broker_connection_retry=True,
-        broker_pool_limit=3,  # Reduced from 5 to prevent connection limits
-        broker_heartbeat=60,  # Increased heartbeat interval
+        # Optimized for cloud Redis services (Render/Upstash)
+        broker_pool_limit=1,  # Critical: Single connection pool
+        broker_connection_max_retries=3,  # Prevent infinite retry loops
+        broker_heartbeat=None,  # Disable heartbeat to save connections
+        redis_backend_health_check_interval=None,  # Disable health checks
+        worker_prefetch_multiplier=1,  # Process one task at a time
+        worker_max_tasks_per_child=300,  # Restart worker after 300 tasks
+        task_acks_late=True,  # Acknowledge tasks after completion
         result_expires=1800,  # 30 minutes - reduced from 1 hour
-        task_acks_late=True,
-        worker_prefetch_multiplier=1,
-        worker_max_tasks_per_child=300,  # Reduced from 500
-        # Additional Upstash-specific optimizations
+        # Transport options for cloud Redis
         broker_transport_options={
-            'visibility_timeout': 3600,  # 1 hour
-            'fanout_prefix': True,
-            'fanout_patterns': True,
+            'visibility_timeout': 18000,  # 5 hours - prevent premature redelivery
             'socket_connect_timeout': 30,
             'socket_timeout': 30,
         },
         result_backend_transport_options={
-            'visibility_timeout': 3600,
+            'visibility_timeout': 18000,  # 5 hours
             'socket_connect_timeout': 30,
             'socket_timeout': 30,
-        },
-        # Connection pool settings for Upstash
-        broker_connection_pool_settings={
-            'max_connections': 3,  # Reduced from 5
-            'retry_on_timeout': True,
-            'socket_keepalive': True,
         },
     )
     
