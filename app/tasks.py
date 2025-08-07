@@ -355,21 +355,34 @@ class DocumentAIProcessor:
                                         # Download and parse the result
                                         content = blob.download_as_text()
                                         
-                                        # Parse JSON response
+                                        # Parse JSON response with robust error handling
                                         import json
-                                        result_data = json.loads(content)
-                                        
-                                        # Extract text from the batch processing result
-                                        if 'document' in result_data:
-                                            self._text = result_data['document'].get('text', '')
-                                        else:
-                                            self._text = content  # Fallback to raw content
+                                        try:
+                                            result_data = json.loads(content)
+                                            
+                                            # Extract text from the batch processing result
+                                            if 'document' in result_data:
+                                                self._text = result_data['document'].get('text', '')
+                                            else:
+                                                self._text = content  # Fallback to raw content
+                                        except json.JSONDecodeError as json_error:
+                                            print(f"Warning: JSON Decode Error when parsing GCS content: {json_error}")
+                                            print(f"Raw content preview: {content[:200]}...")
+                                            # Fall back to using raw content as text
+                                            self._text = content
                                     else:
                                         self._text = f"Error parsing GCS URI: {self.gcs_uri}"
                                 else:
                                     self._text = f"Invalid GCS URI format: {self.gcs_uri}"
                             except Exception as e:
                                 self._text = f"Error reading batch processing result: {str(e)}"
+                            
+                            # Final validation: ensure self._text is a string
+                            if not isinstance(self._text, str):
+                                print(f"Critical Error: DocumentAIResult.text is not a string, type: {type(self._text)}")
+                                print(f"Value: {self._text}")
+                                # Convert to string representation as last resort
+                                self._text = str(self._text)
                         
                         return self._text
                 
